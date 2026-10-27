@@ -1,0 +1,16 @@
+[package]
+name = "vectorcraft-cutjob"
+description = "Machine-independent cutting model: a document's cutting settings, mats, and (later) the cut job"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde_json = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

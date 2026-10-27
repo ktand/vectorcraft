@@ -50,6 +50,8 @@ vectorcraft-metafile = { path = "crates/metafile" }
 vectorcraft-plugins = { path = "crates/plugins" }
 vectorcraft-affinity = { path = "crates/affinity" }
 vectorcraft-scriptcheck = { path = "crates/scriptcheck" }
+# Fork: the cutting workspace (docs/cutting/ARCHITECTURE.md).
+vectorcraft-cutjob = { path = "crates/cutjob" }
 
 # foundation
 kurbo = { version = "0.13", features = ["serde"] }

@@ -6149,6 +6149,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vectorcraft-cutjob"
+version = "0.17.0"
+dependencies = [
+ "proptest",
+ "serde_json",
+]
+
+[[package]]
 name = "vectorcraft-doc"
 version = "0.17.0"
 dependencies = [

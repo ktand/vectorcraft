@@ -99,7 +99,8 @@ Name clash: VectorCraft already has *Cutting tools* (Mirror & Cut, Line Cut, Rec
 ```json
 {
   "version": 1,
-  "mat": "silhouette.cameo.12x12",
+  "mat": "silhouette.12x12",
+  "customMatMm": [304.8, 304.8],
   "orientation": "portrait",
   "artboard": 0,
   "offsetMm": [0.0, 0.0],
@@ -113,8 +114,10 @@ Name clash: VectorCraft already has *Cutting tools* (Mirror & Cut, Line Cut, Rec
 }
 ```
 
-The settings are read leniently: a missing or damaged value means its default, and an unknown key is kept. A
-`version` newer than the fork knows is read for the keys it understands and left as it is otherwise. The native
+The settings are read leniently (`vectorcraft_cutjob::CuttingSettings::from_value`, which never fails): a
+missing, damaged or not-understood value means its default, a finite number out of range is clamped, and unknown
+keys are kept at every level (top, `operations`, each tool). A `version` newer than the fork knows is kept, and so
+is a mat id it doesn't know, laid out meanwhile on the default mat. The native
 format keeps `unknown` as it is, and older VectorCraft versions keep it when they save.
 
 `pluginData` was the alternative. It is documented as "the host never reads them", so a host feature
