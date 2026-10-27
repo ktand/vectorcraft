@@ -56,23 +56,24 @@ impl MatGeometry {
 /// [`MatGeometry::id`] of a custom mat.
 pub(crate) const CUSTOM: &str = "custom";
 
-/// Millimetres per inch.
-const IN: f64 = 25.4;
+/// 12 and 24 inches in millimetres, exactly (written out: `12.0 * 25.4` is 304.79999999999995).
+const IN_12: f64 = 304.8;
+const IN_24: f64 = 609.6;
 
 /// The built-in mats, the default first.
 pub static MAT_PRESETS: [MatGeometry; 2] = [
     MatGeometry {
         id: "silhouette.12x12",
         label: "Silhouette 12 × 12 in",
-        size_mm: [12.0 * IN, 12.0 * IN],
-        cut_area_mm: RectMm { x0: 0.0, y0: 0.0, x1: 12.0 * IN, y1: 12.0 * IN },
+        size_mm: [IN_12, IN_12],
+        cut_area_mm: RectMm { x0: 0.0, y0: 0.0, x1: IN_12, y1: IN_12 },
         approximate: true,
     },
     MatGeometry {
         id: "silhouette.12x24",
         label: "Silhouette 12 × 24 in",
-        size_mm: [12.0 * IN, 24.0 * IN],
-        cut_area_mm: RectMm { x0: 0.0, y0: 0.0, x1: 12.0 * IN, y1: 24.0 * IN },
+        size_mm: [IN_12, IN_24],
+        cut_area_mm: RectMm { x0: 0.0, y0: 0.0, x1: IN_12, y1: IN_24 },
         approximate: true,
     },
 ];

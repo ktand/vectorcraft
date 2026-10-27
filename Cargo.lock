@@ -6157,6 +6157,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "vectorcraft-cutting"
+version = "0.17.0"
+dependencies = [
+ "serde_json",
+ "vectorcraft-cutjob",
+ "vectorcraft-doc",
+ "vectorcraft-geom",
+]
+
+[[package]]
 name = "vectorcraft-doc"
 version = "0.17.0"
 dependencies = [
@@ -6212,6 +6222,8 @@ dependencies = [
  "vectorcraft-brush",
  "vectorcraft-cad",
  "vectorcraft-color",
+ "vectorcraft-cutjob",
+ "vectorcraft-cutting",
  "vectorcraft-doc",
  "vectorcraft-eps",
  "vectorcraft-format",

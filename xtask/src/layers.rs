@@ -65,6 +65,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("scriptcheck", Class::Standalone),
     // Fork: the cutting workspace (docs/cutting/ARCHITECTURE.md › 3).
     ("cutjob", Class::Standalone),
+    ("cutting", Class::Layer(3)),
 ];
 
 /// Explicit orderings *within* a layer (earlier may be used by later).

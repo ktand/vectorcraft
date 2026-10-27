@@ -1,0 +1,227 @@
+//! Fork: the cutting workspace's commands (`docs/cutting/ARCHITECTURE.md`).
+//!
+//! The document's cutting settings and each object's operation, read and written through
+//! `vectorcraft-cutting`: the settings live in the document's foreign data, an operation is a
+//! foreign attribute on the object, so both are saved, undone and copied like any other edit.
+//! Unlike a file, which is read leniently, a command's params are checked: a key it doesn't take
+//! or a value out of range is an error.
+
+use serde_json::{Map, Value, json};
+use vectorcraft_cutjob::{CuttingSettings, MAT_PRESETS, MatGeometry, Op};
+use vectorcraft_cutting::ops::{self, Source};
+
+use super::*;
+
+const SETTINGS_SET: &str = "cutting.settings.set";
+const OP_SET: &str = "cutting.op.set";
+
+pub fn specs() -> Vec<CommandSpec> {
+    vec![
+        cmd!(
+            query "cutting.settings.get",
+            "Cutting Settings",
+            [],
+            None,
+            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm}}, ordering}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat]}",
+            has_doc,
+            settings_get
+        ),
+        cmd!(
+            "cutting.settings.set",
+            "Set Cutting Settings",
+            [],
+            None,
+            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5}}, ordering?: insideFirst|document} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
+            has_doc,
+            settings_set
+        ),
+        cmd!(
+            "cutting.op.set",
+            "Set Cutting Operation",
+            [],
+            None,
+            "{ids?, op: cut|score|none|inherit} set the cutting operation of the selected objects (or ids: objects, groups or layers); inherit removes their own, so they take their nearest group's or layer's, else defaultOp; one undo step → {ids: those that changed}",
+            has_doc,
+            op_set
+        ),
+        cmd!(
+            query "cutting.op.get",
+            "Cutting Operation",
+            [],
+            None,
+            "{ids?} the cutting operation of each selected object (or ids) → {objects: [{id, op: cut|score|none, own: its own op or null, source: own|inherited|default, from?: id of the group or layer it inherits from}]}",
+            has_doc,
+            op_get
+        ),
+    ]
+}
+
+fn mat_json(m: &MatGeometry) -> Value {
+    let a = m.cut_area_mm;
+    json!({"id": m.id, "label": m.label, "sizeMm": m.size_mm, "cutAreaMm": [a.x0, a.y0, a.x1, a.y1], "approximate": m.approximate})
+}
+
+fn settings_json(s: &CuttingSettings) -> Value {
+    json!({"settings": s.to_value(), "mat": mat_json(&s.mat_geometry()), "mats": MAT_PRESETS.iter().map(mat_json).collect::<Vec<_>>()})
+}
+
+fn settings_get(s: &mut Session, _: &Value) -> Result<Value> {
+    Ok(settings_json(&vectorcraft_cutting::settings(&s.doc()?.doc)))
+}
+
+/// The keys `cutting.settings.set` takes at the top, in `operations` and in each tool's.
+const TOP_KEYS: [&str; 9] = ["mat", "customMatMm", "orientation", "artboard", "offsetMm", "defaultOp", "toleranceMm", "operations", "ordering"];
+const OP_KEYS: [&str; 2] = ["cut", "score"];
+const TOOL_KEYS: [&str; 4] = ["force", "speedMmS", "passes", "overcutMm"];
+
+/// `m`'s keys are all `allowed`; `at` names where `m` is, for the error.
+fn known_keys(m: &Map<String, Value>, allowed: &[&str], at: &str) -> Result<()> {
+    match m.keys().find(|k| !allowed.contains(&k.as_str())) {
+        Some(k) => Err(bad(SETTINGS_SET, format!("unknown key {at}{k}: takes {}", allowed.join(", ")))),
+        None => Ok(()),
+    }
+}
+
+/// `v` at `at` as an object.
+fn object_at<'a>(v: &'a Value, at: &str) -> Result<&'a Map<String, Value>> {
+    v.as_object().ok_or_else(|| bad(SETTINGS_SET, format!("{at} must be an object")))
+}
+
+/// The params' keys are the settings' (nested ones too).
+fn check_settings_keys(p: &Value) -> Result<()> {
+    let top = object_at(p, "params")?;
+    known_keys(top, &TOP_KEYS, "")?;
+    if let Some(ops) = top.get("operations") {
+        let ops = object_at(ops, "operations")?;
+        known_keys(ops, &OP_KEYS, "operations.")?;
+        for (op, tool) in ops {
+            let at = format!("operations.{op}");
+            known_keys(object_at(tool, &at)?, &TOOL_KEYS, &format!("{at}."))?;
+        }
+    }
+    Ok(())
+}
+
+/// `patch` laid over `target`, objects key by key.
+fn merge(target: &mut Value, patch: &Value) {
+    match (target, patch) {
+        (Value::Object(t), Value::Object(p)) => {
+            for (k, v) in p {
+                match t.get_mut(k) {
+                    Some(old) if old.is_object() && v.is_object() => merge(old, v),
+                    _ => {
+                        t.insert(k.clone(), v.clone());
+                    }
+                }
+            }
+        }
+        (t, p) => *t = p.clone(),
+    }
+}
+
+/// `a` and `b` are the same value, numbers compared as numbers (`1` is `1.0`).
+fn same(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => x.as_f64() == y.as_f64(),
+        (Value::Array(x), Value::Array(y)) => x.len() == y.len() && x.iter().zip(y).all(|(x, y)| same(x, y)),
+        _ => a == b,
+    }
+}
+
+/// Each value `given` names reads as given in the settings `got` (as their JSON): one that was
+/// clamped or read as its default was out of range or not valid.
+fn check_taken(given: &Map<String, Value>, got: &Value, at: &str) -> Result<()> {
+    for (k, v) in given {
+        let r = got.get(k).unwrap_or(&Value::Null);
+        if let Some(inner) = v.as_object() {
+            check_taken(inner, r, &format!("{at}{k}."))?;
+        } else if !same(v, r) {
+            return Err(bad(SETTINGS_SET, format!("{at}{k}: {v} is out of range or not valid")));
+        }
+    }
+    Ok(())
+}
+
+fn settings_set(s: &mut Session, p: &Value) -> Result<Value> {
+    check_settings_keys(p)?;
+    let given = object_at(p, "params")?;
+    let d = &s.doc()?.doc;
+    let current = vectorcraft_cutting::settings(d);
+    let mut merged = current.to_value();
+    merge(&mut merged, p);
+    let new = CuttingSettings::from_value(Some(&merged));
+    check_taken(given, &new.to_value(), "")?;
+    if given.contains_key("mat") && new.mat != "custom" && MatGeometry::preset(&new.mat).is_none() {
+        let ids: Vec<&str> = MAT_PRESETS.iter().map(|m| m.id).collect();
+        return Err(bad(SETTINGS_SET, format!("unknown mat {:?}: one of {}, or custom", new.mat, ids.join(", "))));
+    }
+    if given.contains_key("artboard") && index(u64::from(new.artboard)) >= d.artboards.len() {
+        return Err(bad(SETTINGS_SET, format!("no artboard {}: the document has {}", new.artboard, d.artboards.len())));
+    }
+    if new != current {
+        s.edit("Cutting Settings", |d, _| {
+            vectorcraft_cutting::set_settings(d, &new);
+            Ok(())
+        })?;
+    }
+    Ok(settings_json(&new))
+}
+
+/// The objects `p` names in `ids` (each checked; one inside another given one is dropped, as the
+/// selection drops it), else the selected ones.
+fn objects(s: &Session, p: &Value, cmd: &str) -> Result<Vec<NodeId>> {
+    let mut ids = checked_ids_or_selection(s, p, cmd)?;
+    let mut seen = std::collections::HashSet::new();
+    ids.retain(|id| seen.insert(*id));
+    Ok(ids)
+}
+
+fn op_set(s: &mut Session, p: &Value) -> Result<Value> {
+    let op = match str_param(p, "op") {
+        Some("inherit") => None,
+        Some(id) => Some(Op::parse(id).ok_or_else(|| bad(OP_SET, format!("op must be cut, score, none or inherit, not {id:?}")))?),
+        None => return Err(bad(OP_SET, "op is required: cut, score, none or inherit")),
+    };
+    let ids = objects(s, p, OP_SET)?;
+    if ids.is_empty() {
+        return Err(bad(OP_SET, "no objects: select some or give ids"));
+    }
+    let d = &s.doc()?.doc;
+    let changed: Vec<NodeId> = ids.into_iter().filter(|id| d.node(*id).is_some_and(|n| ops::would_change(n, op))).collect();
+    if !changed.is_empty() {
+        s.edit("Cutting Operation", |d, _| {
+            for id in &changed {
+                if let Some(n) = d.node_mut(*id) {
+                    ops::set_own_op(n, op);
+                }
+            }
+            Ok(())
+        })?;
+    }
+    Ok(json!({ "ids": changed.iter().map(|i| i.0).collect::<Vec<_>>() }))
+}
+
+fn op_get(s: &mut Session, p: &Value) -> Result<Value> {
+    let ids = objects(s, p, "cutting.op.get")?;
+    let d = &s.doc()?.doc;
+    let default = vectorcraft_cutting::settings(d).default_op;
+    let objects: Vec<Value> = ids
+        .into_iter()
+        .filter_map(|id| {
+            let r = ops::resolve(d, id, default)?;
+            let own = d.node(id).and_then(ops::own_op).map(Op::id);
+            let mut o = json!({"id": id.0, "op": r.op.id(), "own": own});
+            let (source, from) = match r.source {
+                Source::Own => ("own", None),
+                Source::Inherited(a) => ("inherited", Some(a.0)),
+                Source::Default => ("default", None),
+            };
+            o["source"] = json!(source);
+            if let Some(from) = from {
+                o["from"] = json!(from);
+            }
+            Some(o)
+        })
+        .collect();
+    Ok(json!({ "objects": objects }))
+}

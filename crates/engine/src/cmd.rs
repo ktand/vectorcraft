@@ -94,6 +94,8 @@ pub(crate) mod views;
 pub mod wand;
 pub mod webexport;
 mod xform;
+// Fork: the cutting workspace (docs/cutting/ARCHITECTURE.md).
+mod cutting;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -305,6 +307,8 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(perspgrid::specs());
         v.extend(shortcutset::specs());
         v.extend(importmatches::specs());
+        // Fork: the cutting workspace.
+        v.extend(cutting::specs());
         v
     })
 }

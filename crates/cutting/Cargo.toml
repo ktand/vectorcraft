@@ -1,0 +1,18 @@
+[package]
+name = "vectorcraft-cutting"
+description = "The cutting workspace's core: a document's cutting operations and settings, and (later) the cut job made from them"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+vectorcraft-doc = { workspace = true }
+vectorcraft-cutjob = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+vectorcraft-geom = { workspace = true }
