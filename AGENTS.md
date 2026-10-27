@@ -86,3 +86,15 @@ When a task lands, update in the same PR: the area row in `docs/target-app-parit
   GitHub profiles). Never hand-edit `contributors.json`.
 - Maintainers refresh the stats with `python3 ../../craftrules/scripts/contributors.py .` (it also
   re-verifies who wrote each `people.toml` entry; `--check` only verifies).
+
+## Fork: cutting workspace
+
+This repository is the `ktand/vectorcraft` fork. It adds a cutting workspace (preparing a document for cutting machines such as the Silhouette Cameo) and otherwise tracks `upstream` (`storytold/vectorcraft`). Everything above applies to the cutting work unchanged.
+
+- **Design and work list:** [`docs/cutting/ARCHITECTURE.md`](docs/cutting/ARCHITECTURE.md) and [`docs/cutting/IMPLEMENTATION_PLAN.md`](docs/cutting/IMPLEMENTATION_PLAN.md). Cutting tasks come from the plan (ids `C<phase>.<n>`, one per branch, PR and commit: `C2.3: per-object cut operation`), not from `docs/gaps.md`.
+- **Keep upstream mergeable.** Put cutting code in its own crates (`cutjob`, `cutting`, `cutter`, `cutter-*`) and new files. Touch upstream files only at the hook points listed in ARCHITECTURE §7, and add any new hook to that list. Store cutting data only in the slots the design names (ARCHITECTURE §4); add no fields to `vectorcraft-doc` and no sections to the native format.
+- **Progress lives in `docs/cutting/`.** Don't change upstream's parity and progress docs (`ROADMAP.md`, `docs/target-app-parity.md`, `docs/gaps.md`, the checklists) for cutting work.
+- **Naming:** commands are `cutting.*`. The existing Cutting tools (Mirror & Cut, Line Cut, Rectangle Cut: `cmd/cut.rs`, `tools/cut.rs`) are unrelated.
+- **Units:** millimetres are canonical from the cutting core down; the document stays in points.
+- **Machine protocols:** inkscape-silhouette (GPL-2.0) may be read for protocol facts only. Record them in `docs/cutting/protocol-silhouette.md` in your own words, each cited by file and commit, and write encoders from that note. Never copy its code, tables or comments into this repo, tests included.
+- **Hardware:** agents can't reach a cutter. Test everything up to the USB write against the virtual cutter and golden byte streams; leave the real cut to a person, with a checklist.
