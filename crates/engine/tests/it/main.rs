@@ -12,6 +12,7 @@ mod affinity_local;
 mod artboard_click;
 mod clear_commands;
 mod compound_attributes;
+mod cutting;
 mod dimensions;
 mod eyedropper_sources;
 mod find_replace_paras;

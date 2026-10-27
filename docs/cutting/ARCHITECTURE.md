@@ -258,6 +258,7 @@ Each hook is a few lines. Keep them in this list so a merge from `upstream` know
 | `AGENTS.md`, `CLAUDE.md` | the "Fork: cutting workspace" section at the end of each (keep the two identical) |
 | `Cargo.toml` (workspace) | four `[workspace.dependencies]` path entries; members are already `crates/*` |
 | `xtask/src/layers.rs` | four rows appended to `TABLE` |
+| `crates/engine/tests/it/main.rs` | `mod cutting;` (every engine-level cutting test lives under `tests/it/cutting/`) |
 | `crates/engine/Cargo.toml`, `src/cmd.rs` | dependency on `vectorcraft-cutting`; `mod cutting;` + `v.extend(cutting::specs())` |
 | `crates/ui-egui/…` | register the Cutting panel; one call to the overlay from `canvas.rs`; the built-in Cutting workspace in `workspaces.rs`; the UI commands in `menus/ui_commands` |
 | `apps/vectorcraft/src/main.rs` | install the cutter service (Phase 4) |
@@ -273,7 +274,7 @@ The fork leaves them alone, which avoids merge conflicts, and tracks cutting in 
 
 | # | Risk | Mitigation |
 |---|---|---|
-| R1 | **Size of unitless SVGs.** SVG import reads a file with physical units (`width="200mm"`) at its true size but a unitless one at 1 px = 1 pt (72 dpi). A 96 dpi px file from a web tool cuts at 75% of the size its author expects. | The cutting panel always shows the job's size in mm; a "scale" field in the cutting settings; a warning when the document has no physical unit. Never change SVG import itself. |
+| R1 | **Size of unitless SVGs.** SVG import reads a file with physical units (`width="200mm"`) at its true size but a unitless one at 1 px = 1 pt (72 dpi). A unitless file drawn at 96 px/in cuts a third larger than its author expects (a 100 mm square of 378 px opens 133 mm wide; pinned by `crates/engine/tests/it/cutting/svg_size.rs`). | The cutting panel always shows the job's size in mm; a "scale" field in the cutting settings; a warning when the document has no physical unit. Never change SVG import itself. |
 | R2 | **Licence of the protocol source.** inkscape-silhouette is GPL-2.0, and `AGENTS.md` forbids copying GPL code. | **Owner decision (2026-10-27):** inkscape-silhouette may be read for protocol facts. (a) `docs/cutting/protocol-silhouette.md` records facts only (commands, units, sequences, status codes), each cited to its source (inkscape-silhouette by file and commit, Graphtec GP-GL references, public posts, published specs), in our own words, with no code and no transcribed tables or comments; (b) the encoder is written from that note, not from the GPL source, and nothing from it is copied into this repo, tests included. No rule about Silhouette Studio for now (owner decision, 2026-10-27). |
 | R3 | **USB on Windows.** The machine may bind to a vendor or printer-class driver that a user-space USB library can't open without WinUSB. | Spike it in P4.2 on real hardware before designing the UI around it; document the setup step if one is needed. |
 | R4 | **Hardware access.** Agents can't cut on a physical machine; real validation needs a person and a mat. | The virtual cutter and golden byte streams make everything up to the USB write testable; hardware checks are a short manual checklist in each Phase 4 task. |
