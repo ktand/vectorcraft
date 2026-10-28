@@ -3,6 +3,8 @@
 //! (dashed, where it is smaller), a 10 mm grid with every 50 mm stronger, labels in millimetres
 //! from the cut area's origin along the top and left edges, and the artboard in a warning colour
 //! when the cut area doesn't hold all of it. Grid lines closer than a few pixels are left out.
+//! Over the mat, the cut job's toolpaths in cutting order ([`toolpaths`]; the Cutting panel's
+//! Show Toolpaths), from the job `crate::cutting` keeps for the document.
 
 use vectorcraft_cutjob::RectMm;
 use vectorcraft_cutting::placement::{self, MM_PER_PT};
@@ -61,6 +63,12 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
     if cut != mat {
         p.extend(Shape::dashed_line(&ring(cut), Stroke::new(1.0, t.accent), 5.0, 3.0));
     }
+    if crate::cutting::shows_toolpaths(p.ctx())
+        && let Some(job) = crate::cutting::job(app, p.ctx())
+        && let Ok((job, _)) = &*job
+    {
+        toolpaths(p, job, &screen, &t);
+    }
 
     // Labels outside the top and left edges, measured from the cut area's origin. Each sits just
     // outside its edge on screen, anchored on the side facing away from the mat, so it clears the
@@ -102,6 +110,59 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
         if let Some(top) = a.first() {
             p.text(*top + vec2(4.0, 4.0), egui::Align2::LEFT_TOP, crate::i18n::t("Off the mat"), font, t.bleed);
         }
+    }
+}
+
+/// Most toolpath points one frame draws: past them the rest of a large job isn't drawn.
+const MAX_DRAWN_POINTS: usize = 400_000;
+/// Jobs of more paths than this aren't numbered.
+const MAX_NUMBERS: usize = 500;
+/// A path's number is left out when it would sit this close (px) to the one before.
+const NUMBER_GAP_PX: f32 = 14.0;
+
+/// The job's toolpaths in cutting order (C3.6): cuts solid and scores dashed, each in its colour,
+/// the blade's travel between them faint and dashed, an arrow at each path's start along the way
+/// it is cut, and its number in the order.
+fn toolpaths(p: &egui::Painter, job: &vectorcraft_cutjob::CutJob, screen: &dyn Fn(f64, f64) -> Pos2, t: &Tokens) {
+    use vectorcraft_cutjob::OpKind;
+    let travel = Stroke::new(0.75, t.text_dim.gamma_multiply(0.6));
+    let font = egui::FontId::proportional(9.0);
+    let area = job.mat.cut_area_mm;
+    let mut at = screen(area.x0, area.y0);
+    let numbered = job.paths.len() <= MAX_NUMBERS;
+    let mut last_number: Option<Pos2> = None;
+    let mut drawn = 0usize;
+    for (i, path) in job.paths.iter().enumerate() {
+        if drawn > MAX_DRAWN_POINTS {
+            break;
+        }
+        let pts: Vec<Pos2> = path.points.iter().map(|q| screen(q[0], q[1])).collect();
+        let Some(&start) = pts.first() else { continue };
+        drawn += pts.len();
+        p.extend(Shape::dashed_line(&[at, start], travel, 3.0, 3.0));
+        let score = job.operations.get(path.op).is_some_and(|o| o.kind == OpKind::Score);
+        let color = if score { t.smart_guide } else { t.selection };
+        let mut line = pts.clone();
+        if path.closed {
+            line.push(start);
+        }
+        if score {
+            p.extend(Shape::dashed_line(&line, Stroke::new(1.5, color), 5.0, 3.0));
+        } else {
+            p.add(Shape::line(line, Stroke::new(1.5, color)));
+        }
+        if let Some(&next) = pts.get(1)
+            && (next - start).length() > 1.0
+        {
+            let u = (next - start).normalized();
+            let side = vec2(-u.y, u.x) * 3.0;
+            p.add(Shape::convex_polygon(vec![start + u * 9.0, start + u * 2.0 + side, start + u * 2.0 - side], color, Stroke::NONE));
+        }
+        if numbered && last_number.is_none_or(|l| l.distance(start) >= NUMBER_GAP_PX) {
+            p.text(start + vec2(4.0, -4.0), egui::Align2::LEFT_BOTTOM, (i + 1).to_string(), font.clone(), color);
+            last_number = Some(start);
+        }
+        at = if path.closed { start } else { pts.last().copied().unwrap_or(start) };
     }
 }
 

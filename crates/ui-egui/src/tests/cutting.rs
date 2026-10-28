@@ -59,3 +59,37 @@ fn labels_thin_out_when_zoomed_out() {
     let texts = frame_texts(&mut app, &ctx);
     assert!(!texts.iter().any(|t| t == "50 mm"), "{texts:?}");
 }
+
+/// C3.6: the job's toolpaths are numbered in cutting order over the mat; the panel's Show
+/// Toolpaths hides them.
+#[test]
+fn the_cutting_view_numbers_the_toolpaths() {
+    let mut app = app();
+    let ctx = egui::Context::default();
+    for x in [10, 150] {
+        app.run("shape.rectangle", json!({"x": x, "y": 10, "width": 50, "height": 50})).unwrap();
+    }
+    app.run("view.cutting", json!({})).unwrap();
+    app.run("view.setZoom", json!({"zoom": 100})).unwrap();
+    let texts = frame_texts(&mut app, &ctx);
+    assert!(texts.iter().any(|t| t == "1") && texts.iter().any(|t| t == "2"), "{texts:?}");
+    crate::cutting::set_shows_toolpaths(&ctx, false);
+    let texts = frame_texts(&mut app, &ctx);
+    assert!(!texts.iter().any(|t| t == "2"), "{texts:?}");
+}
+
+/// The job is made again only when the document changes, not each frame or selection change.
+#[test]
+fn the_job_is_kept_until_the_document_changes() {
+    let mut app = app();
+    let ctx = egui::Context::default();
+    let id = app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap()["id"].clone();
+    let a = crate::cutting::job(&app, &ctx).unwrap();
+    app.run("select.set", json!({"ids": [id]})).unwrap();
+    assert!(std::sync::Arc::ptr_eq(&a, &crate::cutting::job(&app, &ctx).unwrap()), "selecting keeps it");
+    app.run("cutting.op.set", json!({"op": "score"})).unwrap();
+    let b = crate::cutting::job(&app, &ctx).unwrap();
+    assert!(!std::sync::Arc::ptr_eq(&a, &b), "an edit makes it again");
+    let (job, _) = b.as_ref().as_ref().unwrap();
+    assert_eq!(job.operations[0].kind, vectorcraft_cutjob::OpKind::Score);
+}
