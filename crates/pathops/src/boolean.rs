@@ -648,7 +648,10 @@ pub(crate) fn normalize_bez(bp: &BezPath, rule: FillRule) -> Result<Contours, Pa
     if !crate::budget::sweep_fits([&bp]) {
         return Err(PathOpsError::TooComplex);
     }
-    let top = Topology::<i32>::from_path(&bp, eps).map_err(|_| PathOpsError::OpenPath)?;
+    // The sweep can panic on rare near-degenerate input (as in `Arrangement::new`): an error, so
+    // callers fall back. Found by the cutting fork's fuzz test, through Unite in a clip outline.
+    let sweep = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Topology::<i32>::from_path(&bp, eps)));
+    let top = sweep.map_err(|_| PathOpsError::Degenerate)?.map_err(|_| PathOpsError::OpenPath)?;
     Ok(top.contours(|w| inside(rule, *w)))
 }
 
