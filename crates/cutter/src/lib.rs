@@ -2,10 +2,24 @@
 //! here and below, never in the cutting core; nothing here does I/O (the app supplies the
 //! transport to a real machine).
 //!
+//! - [`device`]: what a machine is to the app: a [`Transport`] (bytes out, bytes back), found and
+//!   opened by a [`DeviceProvider`], spoken to by a [`Driver`] for its family.
+//! - [`registry`]: the provider the app installs and the drivers this version has, per process.
+//! - [`send`]: an encoded job sent chunk by chunk once the machine is ready, with progress and
+//!   cancel, on a thread of its own for the app.
+//! - [`MemoryTransport`]: a transport that records and answers from a script, for tests.
 //! - [`VirtualCutter`]: a machine that cuts nothing and records what it would have: each stroke
 //!   of the blade, down, in order. It plays a job through its [`Simulation`], so what it records
 //!   is what the preview plays back, and it is what tests use in place of hardware.
 #![forbid(unsafe_code)]
+
+pub mod device;
+mod memory;
+pub mod registry;
+pub mod send;
+
+pub use device::{DeviceInfo, DeviceProvider, DeviceStatus, Driver, Encoded, Transport, TransportError};
+pub use memory::{MemoryTransport, Recorded};
 
 use vectorcraft_cutjob::{CutJob, JobError, OpKind, Simulation};
 

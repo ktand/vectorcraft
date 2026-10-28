@@ -248,10 +248,15 @@ pub trait CutterDriver: Send {                      // implemented per machine f
   The core crates stay I/O-free, so wasm never breaks.
 - Sending runs on a background worker with progress and cancellation, like Background Export and print
   submission. The status line reports the outcome, and a failure is an error message, never a panic.
-- Where a command reaches the device is an open design point (P4.1). Either `ui-egui` defines a
-  `CutterService` trait, as it does for `PrintService` (then send is a UI command, and the CLI and headless MCP
-  get their own transport), or the engine accepts an optional host-supplied service so `cutting.send` works
-  headless too. The second is more useful to agents but adds a hook to `engine`.
+- **Decided (C4.1, 2026-10-28): a registry per process.** `vectorcraft_cutter::registry` holds one
+  `DeviceProvider`, which the app installs at start-up (the desktop app: USB through the system driver; the CLI
+  and the MCP server can install the same one), and the `Driver`s this version has. The engine's `cutting.*`
+  device commands ask it, so sending works from the UI, the control channel, MCP and the CLI alike, with no new
+  field in the engine's session; plug-ins are registered per process the same way. A send runs on a thread of
+  its own (`send::spawn`): each chunk goes once the machine answers ready, `Running` reports progress and
+  cancels between chunks, and the outcome (done, no mat, still busy, unplugged, cancelled) is a message, never a
+  panic. The web build refuses to send until WebUSB is added. `MemoryTransport` records and answers from a
+  script: every test above the USB write runs without hardware.
 
 ## 7. Where the fork touches upstream code
 
