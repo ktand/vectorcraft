@@ -311,6 +311,7 @@
       }
     }
   ],
+  "registration": null,
   "stats": {
     "bladeMm": 392.795715,
     "pathCount": 4,

@@ -141,6 +141,11 @@ Exported to SVG it reads `<path cut:op="score" xmlns:cut="urn:vectorcraft:cuttin
 - The object-level attribute is the only place an operation is stored. There's no parallel map keyed by
   `NodeId`, so there's nothing to go stale.
 
+**The registration marks layer (C6.1).** Print & Cut's marks are ordinary art on a top-level layer, locked and
+set to `cut:op="none"`, so they print with the artboard and are never cut. The layer is found again by a second
+attribute in the same namespace, `cut:marks="1"`, whatever it has been renamed to; `cutting.marks.add` replaces
+it, `cutting.marks.remove` takes it out. Nothing else marks it.
+
 ### 4.3 What is never stored
 
 The cut job itself, flattened geometry, cut order, simulation state, and device connection state. All of them are

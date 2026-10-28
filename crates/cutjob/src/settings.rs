@@ -334,6 +334,11 @@ pub struct CuttingSettings {
     pub track_enhancing: bool,
     /// Cut in groups, with a pause before each after the first (C5.3).
     pub grouping: Grouping,
+    /// Print & Cut (C6.1): the artboard is printed with registration marks, and the machine
+    /// finds them and cuts from them.
+    pub print_and_cut: bool,
+    /// How far in from the artboard's edges the marks go, mm ([`crate::marks::INSET_MM`]).
+    pub mark_inset_mm: f64,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -355,6 +360,8 @@ impl Default for CuttingSettings {
             material: None,
             track_enhancing: false,
             grouping: Grouping::None,
+            print_and_cut: false,
+            mark_inset_mm: crate::marks::DEFAULT_INSET_MM,
             extra: Map::new(),
         }
     }
@@ -366,7 +373,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 14] = [
+    const KEYS: [&'static str; 16] = [
         "version",
         "mat",
         "customMatMm",
@@ -381,6 +388,8 @@ impl CuttingSettings {
         "material",
         "trackEnhancing",
         "grouping",
+        "printAndCut",
+        "markInsetMm",
     ];
 
     /// The settings in `v` (a document's `unknown["cutting"]`, from a file): anything that isn't an
@@ -407,6 +416,8 @@ impl CuttingSettings {
             clip_to_mat: flag(m, "clipToMat", d.clip_to_mat),
             track_enhancing: flag(m, "trackEnhancing", d.track_enhancing),
             grouping: choice(m, "grouping", &Grouping::CHOICES, d.grouping),
+            print_and_cut: flag(m, "printAndCut", d.print_and_cut),
+            mark_inset_mm: num(m, "markInsetMm", crate::marks::INSET_MM.0, crate::marks::INSET_MM.1, d.mark_inset_mm),
             material: m.get("material").and_then(Value::as_str).and_then(crate::material::valid_name),
             extra: unknown(m, &Self::KEYS),
         }
@@ -431,6 +442,8 @@ impl CuttingSettings {
         m.insert("clipToMat".into(), json!(self.clip_to_mat));
         m.insert("trackEnhancing".into(), json!(self.track_enhancing));
         m.insert("grouping".into(), json!(self.grouping.id()));
+        m.insert("printAndCut".into(), json!(self.print_and_cut));
+        m.insert("markInsetMm".into(), json!(self.mark_inset_mm));
         if let Some(name) = &self.material {
             m.insert("material".into(), json!(name));
         }

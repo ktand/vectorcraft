@@ -2,6 +2,7 @@
 //! engine as users reach it. See `docs/cutting/`.
 
 mod job;
+mod marks;
 mod materials;
 mod ops;
 mod placement;

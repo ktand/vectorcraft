@@ -118,6 +118,7 @@ mod tests {
             ],
             warnings: vec![],
             track_enhancing: false,
+            registration: None,
             groups: vec![],
         }
     }

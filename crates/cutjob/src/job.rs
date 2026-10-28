@@ -91,6 +91,26 @@ pub struct CutJob {
     pub track_enhancing: bool,
     /// Cut in groups, a pause before each after the first; none: one group.
     pub groups: Vec<JobGroup>,
+    /// Print & Cut: the machine finds these marks first and cuts between them.
+    pub registration: Option<JobRegistration>,
+}
+
+/// Where a Print & Cut job's registration marks lie on the mat (C6.1): what the machine is told
+/// to look for, and the area it may cut once it has found them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct JobRegistration {
+    /// The top-left mark's anchor, mat mm.
+    pub origin_mm: [f64; 2],
+    /// From it across to the top-right mark's anchor and down to the bottom-left one's, mm.
+    pub size_mm: [f64; 2],
+}
+
+impl JobRegistration {
+    /// The area between the marks, mat mm.
+    pub fn area(&self) -> RectMm {
+        let [x, y] = self.origin_mm;
+        RectMm { x0: x, y0: y, x1: x + self.size_mm[0], y1: y + self.size_mm[1] }
+    }
 }
 
 /// One group of a job cut in groups (C5.3): its name, and where its paths start.
@@ -132,6 +152,13 @@ pub enum JobError {
     },
     /// The groups don't start at the first path, in order, within the job.
     BadGroups,
+    /// The registration marks aren't a finite, non-empty rectangle on the mat.
+    BadRegistration,
+    /// Path `path` leaves the area between the registration marks at `point`.
+    OutsideMarks {
+        path: usize,
+        point: [f64; 2],
+    },
 }
 
 impl std::fmt::Display for JobError {
@@ -146,6 +173,10 @@ impl std::fmt::Display for JobError {
             JobError::NotFinite { path } => write!(f, "path {path} has a point that isn't a finite number"),
             JobError::OutsideCutArea { path, point } => write!(f, "path {path} leaves the cut area at ({:.2}, {:.2}) mm", point[0], point[1]),
             JobError::BadGroups => write!(f, "the job's groups aren't in order"),
+            JobError::BadRegistration => write!(f, "the registration marks aren't on the mat"),
+            JobError::OutsideMarks { path, point } => {
+                write!(f, "path {path} leaves the area between the registration marks at ({:.2}, {:.2}) mm", point[0], point[1])
+            }
         }
     }
 }
@@ -217,6 +248,13 @@ impl CutJob {
         if !starts_ok || self.groups.len() > MAX_PATHS {
             return Err(JobError::BadGroups);
         }
+        let marks = self.registration.map(|r| r.area());
+        if let Some(m) = marks {
+            let finite = [m.x0, m.y0, m.x1, m.y1].iter().all(|v| v.is_finite());
+            if !finite || m.width() <= 0.0 || m.height() <= 0.0 || m.x0 < 0.0 || m.y0 < 0.0 || m.x1 > w || m.y1 > h {
+                return Err(JobError::BadRegistration);
+            }
+        }
         for (op, o) in self.operations.iter().enumerate() {
             if let Some(setting) = o.tool.problem() {
                 return Err(JobError::BadSetting { op, setting });
@@ -236,6 +274,11 @@ impl CutJob {
                 let s = AREA_SLACK_MM;
                 if x < a.x0 - s || y < a.y0 - s || x > a.x1 + s || y > a.y1 + s {
                     return Err(JobError::OutsideCutArea { path: i, point: [x, y] });
+                }
+                if let Some(m) = marks
+                    && (x < m.x0 - s || y < m.y0 - s || x > m.x1 + s || y > m.y1 + s)
+                {
+                    return Err(JobError::OutsideMarks { path: i, point: [x, y] });
                 }
             }
         }
@@ -269,6 +312,7 @@ impl CutJob {
             "version": self.version,
             "trackEnhancing": self.track_enhancing,
             "groups": self.groups.iter().map(|g| json!({"name": g.name, "start": g.start})).collect::<Vec<_>>(),
+            "registration": self.registration.map(|r| json!({"originMm": r.origin_mm, "sizeMm": r.size_mm})),
             "mat": {"id": self.mat.id, "sizeMm": self.mat.size_mm, "cutAreaMm": [a.x0, a.y0, a.x1, a.y1]},
             "operations": self.operations.iter().map(|o| json!({
                 "kind": o.kind.id(),

@@ -103,6 +103,7 @@ mod tests {
             ],
             warnings: vec![],
             track_enhancing: false,
+            registration: None,
             groups: vec![],
         };
         let svg = to_svg(&job);
