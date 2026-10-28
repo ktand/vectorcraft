@@ -49,7 +49,7 @@ These requirements come from the plan's §4 initial acceptance criteria. No hard
 
 | Id | Task | Acceptance |
 |---|---|---|
-| C3.1 | **Job model** in `cutjob`: `CutJob`, `Operation`, `ToolSettings`, `Toolpath`, `JobStats`, `CutJob::validate` with caps | Validation rejects non-finite, out-of-area, out-of-range, over-cap jobs with an error, never a panic (proptest); stats tests |
+| C3.1 | **Job model** — **done** — in `cutjob`: `CutJob`, `JobMat`, `Operation` (`OpKind` score/cut), `ToolSettings` (ranges shared with the settings reader, `problem()`), `Toolpath` with `SourceRef`, `JobWarning`, `JobStats` (path, blade and travel mm), `CutJob::validate` with caps (`MAX_PATHS`, `MAX_POINTS`), `to_value` | Validation rejects non-finite, out-of-area, out-of-range, over-cap jobs with an error, never a panic (proptest); stats tests |
 | C3.2 | **Select and resolve** (pipeline 1) in `cutting` | Tests: hidden, guide, template, non-printable and off-artboard objects excluded; op resolution matches `cutting.op.get` |
 | C3.3 | **Geometry** (pipeline 2–3): paths, compound paths, geometry effects, type outlines, symbols; clip groups (or a warning — decide in the task); images skipped with warning | One test per object kind against expected polylines; a warning names the source id |
 | C3.4 | **Transform, flatten, bounds** (pipeline 4–6) | A circle of r = 10 mm flattens within `toleranceMm` of the true circle; out-of-mat path → error naming it; with "clip to mat" → clipped + warning |

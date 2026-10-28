@@ -116,19 +116,41 @@ pub struct ToolSettings {
 impl ToolSettings {
     const KEYS: [&'static str; 4] = ["force", "speedMmS", "passes", "overcutMm"];
 
+    /// The ranges settings are read into and a job is checked against ([`crate::CutJob::validate`]).
+    pub const FORCE: (f64, f64) = (0.0, 1.0);
+    pub const SPEED_MM_S: (f64, f64) = (1.0, 2_000.0);
+    pub const PASSES: (u8, u8) = (1, 10);
+    pub const OVERCUT_MM: (f64, f64) = (0.0, 5.0);
+
     fn with_force(force: f64) -> Self {
         ToolSettings { force, speed_mm_s: 100.0, passes: 1, overcut_mm: 0.0, extra: Map::new() }
     }
 
     fn read(m: Option<&Map<String, Value>>, default: ToolSettings) -> Self {
         let Some(m) = m else { return default };
-        let passes = whole(m, "passes", 1, 10, u32::from(default.passes));
+        let passes = whole(m, "passes", u32::from(Self::PASSES.0), u32::from(Self::PASSES.1), u32::from(default.passes));
         ToolSettings {
-            force: num(m, "force", 0.0, 1.0, default.force),
-            speed_mm_s: num(m, "speedMmS", 1.0, 2_000.0, default.speed_mm_s),
+            force: num(m, "force", Self::FORCE.0, Self::FORCE.1, default.force),
+            speed_mm_s: num(m, "speedMmS", Self::SPEED_MM_S.0, Self::SPEED_MM_S.1, default.speed_mm_s),
             passes: u8::try_from(passes).unwrap_or(default.passes),
-            overcut_mm: num(m, "overcutMm", 0.0, 5.0, default.overcut_mm),
+            overcut_mm: num(m, "overcutMm", Self::OVERCUT_MM.0, Self::OVERCUT_MM.1, default.overcut_mm),
             extra: unknown(m, &Self::KEYS),
+        }
+    }
+
+    /// What in these settings is out of range or not finite, if anything.
+    pub fn problem(&self) -> Option<&'static str> {
+        let within = |v: f64, (lo, hi): (f64, f64)| v.is_finite() && (lo..=hi).contains(&v);
+        if !within(self.force, Self::FORCE) {
+            Some("force")
+        } else if !within(self.speed_mm_s, Self::SPEED_MM_S) {
+            Some("speedMmS")
+        } else if !(Self::PASSES.0..=Self::PASSES.1).contains(&self.passes) {
+            Some("passes")
+        } else if !within(self.overcut_mm, Self::OVERCUT_MM) {
+            Some("overcutMm")
+        } else {
+            None
         }
     }
 

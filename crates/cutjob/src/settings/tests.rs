@@ -166,7 +166,7 @@ proptest! {
         prop_assert!(s.offset_mm.iter().all(|o| o.abs() <= MAX_LENGTH));
         prop_assert!(s.custom_mat_mm.iter().all(|m| (MIN_MAT..=MAX_LENGTH).contains(m)));
         for t in [&s.operations.cut, &s.operations.score] {
-            prop_assert!((0.0..=1.0).contains(&t.force) && (1..=10).contains(&t.passes));
+            prop_assert_eq!(t.problem(), None, "{:?}", t);
         }
         prop_assert!(s.version >= SETTINGS_VERSION);
         let again = CuttingSettings::from_value(Some(&s.to_value()));
