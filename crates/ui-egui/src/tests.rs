@@ -28,6 +28,8 @@ mod plugin_runs;
 mod plugins;
 mod printps;
 mod printtiling;
+// Fork: the cutting workspace.
+mod cutting;
 mod puppetwarp;
 mod recolor;
 mod recovery;

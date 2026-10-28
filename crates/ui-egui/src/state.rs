@@ -255,6 +255,9 @@ pub struct ViewFlags {
     /// View → Hide/Show Template: template layers drawn (dimmed) or left out of the canvas.
     #[serde(default = "yes")]
     pub templates: bool,
+    /// Fork: View › Cutting View: the cutting mat over the art (`canvas/cutting_overlay.rs`).
+    #[serde(default)]
+    pub cutting: bool,
 }
 
 impl Default for ViewFlags {
@@ -281,6 +284,7 @@ impl Default for ViewFlags {
             live_paint_gaps: false,
             hidden_chars: false,
             templates: true,
+            cutting: false,
         }
     }
 }

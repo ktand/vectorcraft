@@ -159,6 +159,8 @@ pub const UI_COMMANDS: &[(&str, &str, &str, &str)] = &[
     ("view.outline", "Outline", "Cmd+Y", "{} toggle Outline/Preview"),
     ("view.pixelPreview", "Pixel Preview", "Cmd+Alt+Y", "{}"),
     ("view.trimView", "Trim View", "", "{} toggle: hide everything outside the artboards"),
+    // Fork: the cutting workspace.
+    ("view.cutting", "Cutting View", "", "{} toggle: draw the cutting mat (cutting.settings.get) over the art, with a millimetre grid"),
     ("view.cornerWidget", "Hide Corner Widget", "", "{} toggle the live corner widgets"),
     ("view.snapToPixel", "Snap to Pixel", "", "{} toggle: drawing and moving land on whole pixels"),
     ("view.snapToGlyph", "Snap to Glyph", "", "{} toggle: drawing snaps to live-text baselines and glyph bounds"),

@@ -6539,6 +6539,8 @@ dependencies = [
  "vectorcraft-brush",
  "vectorcraft-cad",
  "vectorcraft-color",
+ "vectorcraft-cutjob",
+ "vectorcraft-cutting",
  "vectorcraft-doc",
  "vectorcraft-effects",
  "vectorcraft-engine",

@@ -44,6 +44,7 @@ pub fn checked(app: &VectorcraftApp, id: &str, p: &Value) -> Option<bool> {
         "view.outline" => v.outline,
         "view.pixelPreview" => v.pixel_preview,
         "view.trimView" => v.trim_view,
+        "view.cutting" => v.cutting,
         "view.snapToPixel" => v.snap_to_pixel,
         "view.snapToGlyph" => v.snap_to_glyph,
         // Type on a Path effect of the selected path type.

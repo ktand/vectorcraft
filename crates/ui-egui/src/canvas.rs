@@ -17,6 +17,8 @@ use crate::{CacheKey, VectorcraftApp, now_ms, widgets};
 mod artboards;
 mod context;
 mod cursor;
+// Fork: the cutting workspace.
+mod cutting_overlay;
 mod drag;
 mod grid;
 mod home;
@@ -556,6 +558,9 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
     if app.session.active().is_some_and(|d| d.print_tiling) || app.session.tool_id() == "printTiling" {
         print_tiling_overlay(app, &painter, &xf);
+    }
+    if app.ui.view.cutting {
+        cutting_overlay::cutting_overlay(app, &painter, &xf);
     }
     original_path_overlay(app, &painter, &xf);
 

@@ -263,7 +263,7 @@ Each hook is a few lines. Keep them in this list so a merge from `upstream` know
 | `xtask/src/layers.rs` | four rows appended to `TABLE` |
 | `crates/engine/tests/it/main.rs` | `mod cutting;` (every engine-level cutting test lives under `tests/it/cutting/`) |
 | `crates/engine/Cargo.toml`, `src/cmd.rs` | dependency on `vectorcraft-cutting`; `mod cutting;` + `v.extend(cutting::specs())` |
-| `crates/ui-egui/…` | register the Cutting panel; one call to the overlay from `canvas.rs`; the built-in Cutting workspace in `workspaces.rs`; the UI commands in `menus/ui_commands` |
+| `crates/ui-egui/…` | `Cargo.toml`: the two cutting dependencies; `state.rs`: `ViewFlags::cutting` and its default; `menus/ui_commands.rs`, `menus/run.rs`, `menus/state.rs`, `menus/tree.rs`: `view.cutting`'s entry, toggle, checkmark and View-menu item; `canvas.rs`: `mod cutting_overlay;` and its call; `tests.rs`: `mod cutting;`. Later: the Cutting panel and the built-in Cutting workspace in `workspaces.rs` |
 | `apps/vectorcraft/src/main.rs` | install the cutter service (Phase 4) |
 
 Possible upstream PRs that would shrink this list (optional, later): an extension point for registering command
