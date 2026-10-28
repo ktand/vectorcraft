@@ -68,16 +68,9 @@ fn find(name: &str) -> Option<Material> {
     all().into_iter().find(|m| m.name.eq_ignore_ascii_case(name.trim()))
 }
 
-fn same(a: &ToolSettings, b: &ToolSettings) -> bool {
-    (a.force - b.force).abs() < 1e-9
-        && (a.speed_mm_s - b.speed_mm_s).abs() < 1e-9
-        && a.passes == b.passes
-        && (a.overcut_mm - b.overcut_mm).abs() < 1e-9
-}
-
 /// `s`'s tool settings are no longer those of the material it names.
 fn changed(s: &CuttingSettings) -> bool {
-    s.material.as_deref().and_then(find).is_some_and(|m| !same(&m.cut, &s.operations.cut) || !same(&m.score, &s.operations.score))
+    s.material.as_deref().and_then(find).is_some_and(|m| !m.cut.same_setup(&s.operations.cut) || !m.score.same_setup(&s.operations.score))
 }
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -87,7 +80,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Materials",
             [],
             None,
-            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, cut, score: {force, speedMmS, passes, overcutMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since}",
+            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since}",
             has_doc,
             list
         ),
@@ -121,14 +114,10 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
-fn tool_json(t: &ToolSettings) -> Value {
-    json!({"force": t.force, "speedMmS": t.speed_mm_s, "passes": t.passes, "overcutMm": t.overcut_mm})
-}
-
 fn listing(s: &Session) -> Result<Value> {
     let settings = vectorcraft_cutting::settings(&s.doc()?.doc);
     let materials: Vec<Value> =
-        all().iter().map(|m| json!({"name": m.name, "builtin": m.builtin, "cut": tool_json(&m.cut), "score": tool_json(&m.score)})).collect();
+        all().iter().map(|m| json!({"name": m.name, "builtin": m.builtin, "cut": m.cut.to_value(), "score": m.score.to_value()})).collect();
     Ok(json!({"materials": materials, "current": settings.material, "changed": changed(&settings)}))
 }
 

@@ -222,6 +222,22 @@ impl ToolSettings {
         }
     }
 
+    /// The same tool setup as `other` (numbers to within rounding; unknown keys aside).
+    pub fn same_setup(&self, other: &ToolSettings) -> bool {
+        let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+        near(self.force, other.force)
+            && near(self.speed_mm_s, other.speed_mm_s)
+            && self.passes == other.passes
+            && near(self.overcut_mm, other.overcut_mm)
+            && self.depth == other.depth
+            && self.accel == other.accel
+            && near(self.corner_overcut_mm, other.corner_overcut_mm)
+            && match (self.blade_offset_mm, other.blade_offset_mm) {
+                (Some(a), Some(b)) => near(a, b),
+                (a, b) => a.is_none() && b.is_none(),
+            }
+    }
+
     /// What in these settings is out of range or not finite, if anything.
     pub fn problem(&self) -> Option<&'static str> {
         let within = |v: f64, (lo, hi): (f64, f64)| v.is_finite() && (lo..=hi).contains(&v);
@@ -246,7 +262,8 @@ impl ToolSettings {
         }
     }
 
-    fn to_value(&self) -> Value {
+    /// The settings as JSON, as the document and the materials file keep them.
+    pub fn to_value(&self) -> Value {
         let mut m = self.extra.clone();
         m.insert("force".into(), json!(self.force));
         m.insert("speedMmS".into(), json!(self.speed_mm_s));

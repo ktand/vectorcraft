@@ -1,7 +1,8 @@
 //! Materials (C5.1): a named pair of tool settings, for cutting and for scoring, chosen instead of
 //! setting each number. The few built in are starting points of our own, conservative, for a
 //! test cut before the real one; the ones that matter are the user's own, saved after a good test
-//! cut on their machine. No maker's material table is used.
+//! cut on their machine, with the whole tool setup (blade depth and offset too, C5.5). No maker's
+//! material table is used.
 
 use serde_json::{Value, json};
 
@@ -46,8 +47,7 @@ pub fn valid_name(name: &str) -> Option<String> {
 impl Material {
     /// As kept in the user's file.
     pub fn to_value(&self) -> Value {
-        let tool = |t: &ToolSettings| json!({"force": t.force, "speedMmS": t.speed_mm_s, "passes": t.passes, "overcutMm": t.overcut_mm});
-        json!({"name": self.name, "cut": tool(&self.cut), "score": tool(&self.score)})
+        json!({"name": self.name, "cut": self.cut.to_value(), "score": self.score.to_value()})
     }
 
     /// One read from the user's file (leniently, as the document's settings are), `None` when it
@@ -89,6 +89,17 @@ mod tests {
         let user = Material { name: "My vinyl".into(), cut: tool(0.3, 90.0, 1), score: tool(0.1, 100.0, 1), builtin: false };
         let file = json!([user.to_value()]);
         assert_eq!(read_materials(&file), [user]);
+    }
+
+    /// C5.5: the blade's setup is kept with the material, as the force and speed are.
+    #[test]
+    fn the_blade_setup_is_kept() {
+        let cut = ToolSettings { depth: Some(4), accel: Some(2), corner_overcut_mm: 0.3, blade_offset_mm: Some(0.25), ..tool(0.3, 90.0, 1) };
+        let user = Material { name: "Thick card".into(), cut, score: tool(0.1, 100.0, 1), builtin: false };
+        let back = read_materials(&json!([user.to_value()]));
+        assert_eq!(back, std::slice::from_ref(&user));
+        assert!(back[0].cut.same_setup(&user.cut));
+        assert!(!back[0].cut.same_setup(&ToolSettings { blade_offset_mm: None, ..user.cut.clone() }));
     }
 
     #[test]
