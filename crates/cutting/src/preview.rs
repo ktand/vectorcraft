@@ -103,6 +103,7 @@ mod tests {
             ],
             warnings: vec![],
             track_enhancing: false,
+            groups: vec![],
         };
         let svg = to_svg(&job);
         assert!(svg.starts_with(r#"<svg xmlns="http://www.w3.org/2000/svg" width="304.8mm" height="304.8mm" viewBox="0 0 304.8 304.8">"#));

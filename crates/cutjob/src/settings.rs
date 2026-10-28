@@ -111,6 +111,30 @@ fn optional_step(m: &Map<String, Value>, key: &str, (lo, hi): (u8, u8), default:
     }
 }
 
+/// How a job is split into groups cut one after the other, with a pause between (C5.3).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Grouping {
+    /// One group: everything in one go.
+    #[default]
+    None,
+    /// A group for each top-level layer, bottom first.
+    Layer,
+    /// A group for each colour (an object's stroke, else its fill), in the order they come.
+    Color,
+}
+
+impl Grouping {
+    pub fn id(self) -> &'static str {
+        match self {
+            Grouping::None => "none",
+            Grouping::Layer => "layer",
+            Grouping::Color => "color",
+        }
+    }
+
+    const CHOICES: [(&'static str, Grouping); 3] = [("none", Grouping::None), ("layer", Grouping::Layer), ("color", Grouping::Color)];
+}
+
 /// How one operation drives the tool, machine-neutral: a driver maps these to its own steps.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToolSettings {
@@ -266,6 +290,8 @@ pub struct CuttingSettings {
     pub material: Option<String>,
     /// Track enhancing: the machine grips the material harder as it feeds (C5.2).
     pub track_enhancing: bool,
+    /// Cut in groups, with a pause before each after the first (C5.3).
+    pub grouping: Grouping,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -286,6 +312,7 @@ impl Default for CuttingSettings {
             clip_to_mat: false,
             material: None,
             track_enhancing: false,
+            grouping: Grouping::None,
             extra: Map::new(),
         }
     }
@@ -297,7 +324,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 13] = [
+    const KEYS: [&'static str; 14] = [
         "version",
         "mat",
         "customMatMm",
@@ -311,6 +338,7 @@ impl CuttingSettings {
         "clipToMat",
         "material",
         "trackEnhancing",
+        "grouping",
     ];
 
     /// The settings in `v` (a document's `unknown["cutting"]`, from a file): anything that isn't an
@@ -336,6 +364,7 @@ impl CuttingSettings {
             ordering: choice(m, "ordering", &Ordering::CHOICES, d.ordering),
             clip_to_mat: flag(m, "clipToMat", d.clip_to_mat),
             track_enhancing: flag(m, "trackEnhancing", d.track_enhancing),
+            grouping: choice(m, "grouping", &Grouping::CHOICES, d.grouping),
             material: m.get("material").and_then(Value::as_str).and_then(crate::material::valid_name),
             extra: unknown(m, &Self::KEYS),
         }
@@ -359,6 +388,7 @@ impl CuttingSettings {
         m.insert("ordering".into(), json!(self.ordering.id()));
         m.insert("clipToMat".into(), json!(self.clip_to_mat));
         m.insert("trackEnhancing".into(), json!(self.track_enhancing));
+        m.insert("grouping".into(), json!(self.grouping.id()));
         if let Some(name) = &self.material {
             m.insert("material".into(), json!(name));
         }

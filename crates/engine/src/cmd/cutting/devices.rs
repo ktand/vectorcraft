@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Status",
             [],
             None,
-            "{} the job last sent → {sending: bool, device: name or null, chunksSent, chunks, outcome: null while sending, else done|cancelled|the error}",
+            "{} the job last sent → {sending: bool, device: name or null, chunksSent, chunks, waitingFor: the group it has paused before (cutting.continue goes on) or null, outcome: null while sending, else done|cancelled|the error}",
             always,
             status
         ),
@@ -51,6 +51,15 @@ pub fn specs() -> Vec<CommandSpec> {
             "{} stop the job being sent before its next chunk (the machine finishes the chunk it has) → {cancelled: whether one was running}",
             always,
             cancel
+        ),
+        cmd!(
+            query "cutting.continue",
+            "Continue Cutting",
+            [],
+            None,
+            "{} go on with a job cut in groups that has paused before its next group (the tool or material changed) → {continued: whether one was waiting}",
+            always,
+            continue_
         ),
     ]
 }
@@ -97,7 +106,7 @@ fn send(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn status(_: &mut Session, _: &Value) -> Result<Value> {
     let Some((device, running)) = registry::current() else {
-        return Ok(json!({"sending": false, "device": null, "chunksSent": 0, "chunks": 0, "outcome": null}));
+        return Ok(json!({"sending": false, "device": null, "chunksSent": 0, "chunks": 0, "waitingFor": null, "outcome": null}));
     };
     let p = running.progress();
     let outcome = match &p.outcome {
@@ -106,7 +115,9 @@ fn status(_: &mut Session, _: &Value) -> Result<Value> {
         Some(Err(SendError::Cancelled)) => json!("cancelled"),
         Some(Err(e)) => json!(e.to_string()),
     };
-    Ok(json!({"sending": p.outcome.is_none(), "device": device.name, "chunksSent": p.chunks_sent, "chunks": p.chunks, "outcome": outcome}))
+    Ok(
+        json!({"sending": p.outcome.is_none(), "device": device.name, "chunksSent": p.chunks_sent, "chunks": p.chunks, "waitingFor": p.waiting, "outcome": outcome}),
+    )
 }
 
 fn cancel(_: &mut Session, _: &Value) -> Result<Value> {
@@ -115,4 +126,9 @@ fn cancel(_: &mut Session, _: &Value) -> Result<Value> {
         r.cancel();
     }
     Ok(json!({ "cancelled": running.is_some() }))
+}
+
+fn continue_(_: &mut Session, _: &Value) -> Result<Value> {
+    let continued = registry::current().is_some_and(|(_, r)| r.resume());
+    Ok(json!({ "continued": continued }))
 }

@@ -93,6 +93,15 @@ fn settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             set(app, json!({ "defaultOp": op_ids.get(i).copied().unwrap_or("cut") }));
         }
     });
+    let groupings = ["None", "By Layer", "By Colour"];
+    let grouping_ids = ["none", "layer", "color"];
+    let grouping = grouping_ids.iter().position(|g| s["grouping"] == *g).unwrap_or(0);
+    // Cut in groups, with a pause before each after the first to change the tool or material.
+    widgets::label_row(ui, tl!("Groups"), LABEL_W, |ui| {
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "grouping"), groupings[grouping], &groupings, 120.0) {
+            set(app, json!({ "grouping": grouping_ids.get(i).copied().unwrap_or("none") }));
+        }
+    });
     let clip = s["clipToMat"].as_bool() == Some(true);
     if widgets::check(ui, tl!("Clip to Mat"), clip, true) {
         set(app, json!({ "clipToMat": !clip }));
@@ -342,6 +351,7 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     };
     let status = app.session.execute("cutting.status", &json!({})).unwrap_or_default();
     let sending = status["sending"].as_bool() == Some(true);
+    let waiting = status["waitingFor"].as_str();
     match found.len() {
         0 => {
             widgets::dim_label(ui, tl!("No cutter is connected."));
@@ -368,6 +378,9 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
                 Err(e) => (true, e),
             });
         }
+        if waiting.is_some() && ui.button(tl!("Continue")).clicked() {
+            let _ = app.run("cutting.continue", json!({}));
+        }
         if sending && ui.button(tl!("Cancel")).clicked() {
             let _ = app.run("cutting.cancel", json!({}));
         }
@@ -376,7 +389,11 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             m.chosen = 0;
         }
     });
-    if sending {
+    if let Some(group) = waiting {
+        let text = format!("{} {group}. {}", tl!("Paused before"), tl!("Change the tool or material, then Continue."));
+        ui.label(egui::RichText::new(text).color(t.text));
+        ctx.request_repaint_after(std::time::Duration::from_millis(250));
+    } else if sending {
         let (sent, all) = (status["chunksSent"].as_u64().unwrap_or(0), status["chunks"].as_u64().unwrap_or(0));
         widgets::dim_label(ui, &format!("{} {sent} / {all}", tl!("Sending:")));
         ctx.request_repaint_after(std::time::Duration::from_millis(250));
@@ -444,6 +461,27 @@ mod tests {
         app.run("cutting.settings.set", json!({"mat": "custom", "offsetMm": [300, 0]})).unwrap();
         frame(&mut app);
         assert!(crate::cutting::job(&app, &ctx).is_some_and(|j| j.is_err()), "off the mat: no job");
+    }
+
+    /// C5.3: the Groups choice shows what the document cuts by.
+    #[test]
+    fn the_panel_shows_the_grouping() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        app.run("cutting.settings.set", json!({"grouping": "color"})).unwrap();
+        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 1600.0))), ..Default::default() };
+        let mut out = ctx.run_ui(raw, |ui| show(&mut app, ui));
+        out.textures_delta.clear();
+        let texts: Vec<String> = out
+            .shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect();
+        assert!(texts.iter().any(|t| t == "Groups") && texts.iter().any(|t| t == "By Colour"), "{texts:?}");
     }
 
     /// Window → Workspace → Cutting is the cutting mode: the mat shows and the Cutting panel opens;
