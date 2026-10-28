@@ -31,10 +31,13 @@ pub enum Op {
     Score,
     /// Left out of the job.
     NoCut,
+    /// Cut along the outline of all the shapes set to it, united: where they overlap, the lines
+    /// inside aren't cut (C3.10).
+    Outline,
 }
 
 impl Op {
-    pub const ALL: [Op; 3] = [Op::Cut, Op::Score, Op::NoCut];
+    pub const ALL: [Op; 4] = [Op::Cut, Op::Score, Op::NoCut, Op::Outline];
 
     /// The id files and commands use.
     pub fn id(self) -> &'static str {
@@ -42,6 +45,7 @@ impl Op {
             Op::Cut => "cut",
             Op::Score => "score",
             Op::NoCut => "none",
+            Op::Outline => "outline",
         }
     }
 
@@ -50,7 +54,7 @@ impl Op {
         Op::ALL.into_iter().find(|o| o.id() == id)
     }
 
-    fn choices() -> [(&'static str, Op); 3] {
+    fn choices() -> [(&'static str, Op); 4] {
         Op::ALL.map(|o| (o.id(), o))
     }
 }
@@ -180,12 +184,13 @@ impl Default for Operations {
 }
 
 impl Operations {
-    /// The tool settings of `op` (none for [`Op::NoCut`]).
+    /// The tool settings of `op` (none for [`Op::NoCut`]; Cut's for [`Op::Outline`], which cuts).
     pub fn get(&self, op: Op) -> Option<&ToolSettings> {
         match op {
             Op::Cut => Some(&self.cut),
             Op::Score => Some(&self.score),
             Op::NoCut => None,
+            Op::Outline => Some(&self.cut),
         }
     }
 }

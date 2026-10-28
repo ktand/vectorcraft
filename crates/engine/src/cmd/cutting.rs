@@ -37,7 +37,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Cutting Settings",
             [],
             None,
-            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
+            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none|outline (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
             has_doc,
             settings_set
         ),
@@ -46,7 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Cutting Operation",
             [],
             None,
-            "{ids?, op: cut|score|none|inherit} set the cutting operation of the selected objects (or ids: objects, groups or layers); inherit removes their own, so they take their nearest group's or layer's, else defaultOp; one undo step → {ids: those that changed}",
+            "{ids?, op: cut|score|none|outline|inherit} set the cutting operation of the selected objects (or ids: objects, groups or layers); outline cuts along the outline of all the shapes set to it, united (the lines where they overlap not cut); inherit removes their own, so they take their nearest group's or layer's, else defaultOp; one undo step → {ids: those that changed}",
             has_doc,
             op_set
         ),
@@ -55,7 +55,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Operation",
             [],
             None,
-            "{ids?} the cutting operation of each selected object (or ids) → {objects: [{id, op: cut|score|none, own: its own op or null, source: own|inherited|default, from?: id of the group or layer it inherits from}]}",
+            "{ids?} the cutting operation of each selected object (or ids) → {objects: [{id, op: cut|score|none|outline, own: its own op or null, source: own|inherited|default, from?: id of the group or layer it inherits from}]}",
             has_doc,
             op_get
         ),
@@ -279,8 +279,8 @@ fn objects(s: &Session, p: &Value, cmd: &str) -> Result<Vec<NodeId>> {
 fn op_set(s: &mut Session, p: &Value) -> Result<Value> {
     let op = match str_param(p, "op") {
         Some("inherit") => None,
-        Some(id) => Some(Op::parse(id).ok_or_else(|| bad(OP_SET, format!("op must be cut, score, none or inherit, not {id:?}")))?),
-        None => return Err(bad(OP_SET, "op is required: cut, score, none or inherit")),
+        Some(id) => Some(Op::parse(id).ok_or_else(|| bad(OP_SET, format!("op must be cut, score, none, outline or inherit, not {id:?}")))?),
+        None => return Err(bad(OP_SET, "op is required: cut, score, none, outline or inherit")),
     };
     let ids = objects(s, p, OP_SET)?;
     if ids.is_empty() {

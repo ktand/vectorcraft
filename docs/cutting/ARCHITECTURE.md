@@ -129,7 +129,7 @@ shouldn't live there.
 ns     = "urn:vectorcraft:cutting:1"
 prefix = "cut"
 name   = "op"
-value  = "cut" | "score" | "none"
+value  = "cut" | "score" | "none" | "outline"
 ```
 
 Exported to SVG it reads `<path cut:op="score" xmlns:cut="urn:vectorcraft:cutting:1" …/>`.
@@ -210,6 +210,7 @@ Document + CuttingSettings
   2. geometry   paths and compound paths after geometry effects (apply_geometry); type through its outlines,
                 symbols expanded (reshape); a stroke is cut on its centre line, not its outline;
                 images are skipped with a warning
+  3b. weld      the closed shapes set to Cut Outline united; only the union's outline is cut (C3.10)
   3. clip       clip groups and layer clips: closed paths clipped with pathops, open paths split; v1 may warn
                 and cut unclipped (the task decides)
   4. transform  document pt → mm (× 25.4 / 72), artboard top-left → mat origin + offsetMm, orientation

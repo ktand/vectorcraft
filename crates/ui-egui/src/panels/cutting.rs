@@ -82,8 +82,8 @@ fn settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             set(app, json!({ "offsetMm": [offset(0), y] }));
         }
     });
-    let ops = ["Cut", "Score", "No Cut"];
-    let op_ids = ["cut", "score", "none"];
+    let ops = ["Cut", "Cut Outline", "Score", "No Cut"];
+    let op_ids = ["cut", "outline", "score", "none"];
     let default = op_ids.iter().position(|o| s["defaultOp"] == *o).unwrap_or(0);
     // The operation of objects that, with their groups and layers, set none.
     widgets::label_row(ui, tl!("Default"), LABEL_W, |ui| {
@@ -114,7 +114,7 @@ fn selection_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         return;
     }
     let all = |f: &dyn Fn(&Value) -> bool| objects.iter().all(f);
-    for (label, op) in [("Cut", "cut"), ("Score", "score"), ("No Cut", "none")] {
+    for (label, op) in [("Cut", "cut"), ("Cut Outline", "outline"), ("Score", "score"), ("No Cut", "none")] {
         if widgets::radio(ui, label, all(&|o| o["op"] == op), true) {
             let _ = app.run("cutting.op.set", json!({ "op": op }));
         }

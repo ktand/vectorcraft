@@ -34,7 +34,10 @@ fn shown_objects_are_cut_in_paint_order() {
     let (mut d, layer) = doc();
     let (a, b) = (square(&mut d, 10.0, 10.0), square(&mut d, 50.0, 10.0));
     let (a, b) = (add(&mut d, layer, a), add(&mut d, layer, b));
-    assert_eq!(cut(&d), [Item { id: a, op: OpKind::Cut, clips: vec![] }, Item { id: b, op: OpKind::Cut, clips: vec![] }]);
+    assert_eq!(
+        cut(&d),
+        [Item { id: a, op: OpKind::Cut, outline: false, clips: vec![] }, Item { id: b, op: OpKind::Cut, outline: false, clips: vec![] }]
+    );
 }
 
 #[test]
@@ -118,7 +121,7 @@ fn ops_resolve_as_the_commands_report_them() {
         assert_eq!(
             Some(item.op),
             match r.op {
-                Op::Cut => Some(OpKind::Cut),
+                Op::Cut | Op::Outline => Some(OpKind::Cut),
                 Op::Score => Some(OpKind::Score),
                 Op::NoCut => None,
             }
@@ -146,7 +149,7 @@ fn clip_groups_are_noted_and_their_clipping_path_isnt_cut() {
         *clip = true;
     }
     let g = add(&mut d, layer, g);
-    assert_eq!(cut(&d), [Item { id: art_id, op: OpKind::Cut, clips: vec![g] }]);
+    assert_eq!(cut(&d), [Item { id: art_id, op: OpKind::Cut, outline: false, clips: vec![g] }]);
 }
 
 #[test]

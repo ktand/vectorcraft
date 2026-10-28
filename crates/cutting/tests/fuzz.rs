@@ -40,6 +40,7 @@ fn op() -> impl Strategy<Value = Option<String>> {
         1 => Just(Some("cut".to_string())),
         1 => Just(Some("score".to_string())),
         1 => Just(Some("none".to_string())),
+        1 => Just(Some("outline".to_string())),
         1 => ".{0,12}".prop_map(Some),
     ]
 }

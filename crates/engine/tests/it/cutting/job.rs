@@ -109,3 +109,19 @@ fn the_preview_exports_as_svg_and_json() {
     assert_eq!(v, job(&mut s));
     assert!(s.execute("cutting.preview.export", &json!({"format": "pdf"})).is_err());
 }
+
+/// C3.10: two overlapping squares set to Cut Outline are cut as one outline.
+#[test]
+fn cut_outline_unites_overlapping_shapes() {
+    let mut s = new_doc();
+    let a = square(&mut s, 10.0, 10.0, 40.0);
+    let b = square(&mut s, 30.0, 30.0, 40.0);
+    assert_eq!(job(&mut s)["stats"]["pathCount"], 2);
+    s.execute("cutting.op.set", &json!({"ids": [a, b], "op": "outline"})).unwrap();
+    assert_eq!(s.execute("cutting.op.get", &json!({"ids": [a]})).unwrap()["objects"][0]["op"], json!("outline"));
+    let j = job(&mut s);
+    assert_eq!(j["stats"]["pathCount"], 1);
+    // Round both: 40 + 20 + 20 + 40 on each of two sides, less nothing inside.
+    assert!((j["stats"]["pathMm"].as_f64().unwrap() - 240.0).abs() < 0.1, "{}", j["stats"]["pathMm"]);
+    assert_eq!(j["job"]["operations"][0]["kind"], json!("cut"));
+}

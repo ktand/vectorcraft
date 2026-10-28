@@ -25,6 +25,8 @@ use crate::select::Item;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Outline {
     pub op: OpKind,
+    /// Its object is set to Cut Outline: [`crate::weld`] unites it with the others.
+    pub outline: bool,
     pub source: SourceRef,
     pub closed: bool,
     /// One subpath: a move, then lines and curves.
@@ -85,7 +87,7 @@ pub fn outlines(d: &Document, items: &[Item]) -> (Vec<Outline>, Vec<JobWarning>)
             if !seen.insert((key(&path), closed)) {
                 continue;
             }
-            out.push(Outline { op: item.op, source: SourceRef { node: item.id.0, subpath: index }, closed, path });
+            out.push(Outline { op: item.op, outline: item.outline, source: SourceRef { node: item.id.0, subpath: index }, closed, path });
             index += 1;
         }
         let source = Some(SourceRef { node: item.id.0, subpath: 0 });

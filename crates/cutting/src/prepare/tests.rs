@@ -15,7 +15,7 @@ fn placement(offset: [f64; 2]) -> Placement {
 }
 
 fn outline(path: BezPath, closed: bool) -> Outline {
-    Outline { op: OpKind::Cut, source: SourceRef { node: 9, subpath: 0 }, closed, path }
+    Outline { op: OpKind::Cut, outline: false, source: SourceRef { node: 9, subpath: 0 }, closed, path }
 }
 
 fn run(outlines: &[Outline], offset: [f64; 2], clip: bool) -> Result<(Vec<Polyline>, Vec<JobWarning>), PrepError> {

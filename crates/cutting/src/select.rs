@@ -22,6 +22,9 @@ use crate::ops::own_op;
 pub struct Item {
     pub id: NodeId,
     pub op: OpKind,
+    /// Set to Cut Outline: cut, along the outline it makes with the others set to it
+    /// ([`crate::weld`]).
+    pub outline: bool,
     /// The clip groups and clipping layers around it, outermost first.
     pub clips: Vec<NodeId>,
 }
@@ -68,7 +71,7 @@ fn visit(n: &Node, inherited: Op, artboard: Rect, clips: &mut Vec<NodeId>, out: 
         NodeKind::Path { guide: true, .. } | NodeKind::Path { clipping: true, .. } => {}
         _ => {
             let kind = match op {
-                Op::Cut => OpKind::Cut,
+                Op::Cut | Op::Outline => OpKind::Cut,
                 Op::Score => OpKind::Score,
                 Op::NoCut => return,
             };
@@ -77,7 +80,7 @@ fn visit(n: &Node, inherited: Op, artboard: Rect, clips: &mut Vec<NodeId>, out: 
             if n.geometric_bounds().is_some_and(|b| !touches(b, artboard)) {
                 return;
             }
-            out.push(Item { id: n.id, op: kind, clips: clips.clone() });
+            out.push(Item { id: n.id, op: kind, outline: op == Op::Outline, clips: clips.clone() });
         }
     }
 }

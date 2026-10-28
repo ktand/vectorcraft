@@ -10,6 +10,7 @@
 //! - [`select`]: which objects a job cuts, and with which operation.
 //! - [`geometry`]: the outlines each of them cuts along, as drawn.
 //! - [`clip`]: those outlines cut to the clipping masks around them.
+//! - [`weld`]: the shapes set to Cut Outline united, cut along the outline of the union.
 //! - [`prepare`]: those outlines on the mat, in millimetres, flattened.
 //! - [`order`]: the order they are cut in.
 //! - [`preview`]: a job as an SVG at the mat's size.
@@ -25,6 +26,7 @@ pub mod placement;
 pub mod prepare;
 pub mod preview;
 pub mod select;
+pub mod weld;
 
 use vectorcraft_cutjob::{CutJob, CuttingSettings, DOCUMENT_KEY, JOB_VERSION, JobError, JobMat, OpKind, Operation, Toolpath};
 use vectorcraft_doc::Document;
@@ -70,6 +72,8 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     let placement = placement::place(&s, d).ok_or(BuildError::NoArtboard(s.artboard))?;
     let items = select::select(d, &s);
     let (outlines, mut warnings) = geometry::outlines(d, &items);
+    let (outlines, welding) = weld::weld(outlines);
+    warnings.extend(welding);
     let (polylines, more) = prepare::prepare(&outlines, &placement, s.tolerance_mm, s.clip_to_mat).map_err(BuildError::Prepare)?;
     warnings.extend(more);
     let area = placement.mat.cut_area_mm;
