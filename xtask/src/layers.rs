@@ -86,6 +86,8 @@ pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
     &["three-d", "effects"],
     // Inflate cuts its surface's grid cells to the shape with Pathfinder's booleans.
     &["pathops", "three-d"],
+    // Fork: the cutting core's golden tests open hand-written SVGs (a dev-dependency only).
+    &["svg", "cutting"],
 ];
 
 fn intra_layer_allowed(from: &str, to: &str) -> bool {
