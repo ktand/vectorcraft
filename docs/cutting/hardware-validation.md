@@ -77,6 +77,20 @@ Result:
 
 Result:
 
+## Step 4e: Print & Cut (C6.1, C6.2)
+
+- A Letter or A4 artboard with a 50 mm circle in the middle; Print & Cut on, Add Marks; print it at 100 % (no
+  "fit to page"). Put the sheet on the mat at its top-left corner, the square mark at the top left; load it.
+- Send: the machine should look for the marks (the head moves to each), then cut the circle round the print.
+  Measure how far the cut is from the printed circle at four points (target: within 0.5 mm).
+- Then with the sheet turned round (square at the bottom right): the job should stop with "the cutter didn't
+  find the registration marks", nothing cut. Note what the machine did.
+- If the search fails on a good sheet: note the marks inset, and try `TB52,0` instead of `TB52,2` (the other
+  mark type in the notes). If the cut is offset by a fixed amount, measure it: the anchor may be the line's
+  centre rather than its outer edge.
+
+Result:
+
 ## Step 5: a real cut
 
 - Only after steps 1–3 pass: the golden test file (`nested.svg`) cut through on paper with the cut force set as

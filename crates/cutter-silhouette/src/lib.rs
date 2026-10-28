@@ -13,7 +13,7 @@
 #![forbid(unsafe_code)]
 
 use vectorcraft_cutjob::{CutJob, ToolSettings};
-use vectorcraft_cutter::{DeviceInfo, DeviceStatus, Driver, Encoded};
+use vectorcraft_cutter::{Check, DeviceInfo, DeviceStatus, Driver, Encoded};
 
 /// Graphtec's USB vendor id, which Silhouette's machines use.
 pub const VENDOR_ID: u16 = 0x0B4D;
@@ -21,6 +21,12 @@ pub const VENDOR_ID: u16 = 0x0B4D;
 pub const UNITS_PER_MM: f64 = 20.0;
 /// Most bytes in one chunk.
 pub const CHUNK_BYTES: usize = 4_096;
+/// The answer to a registration mark search that found them: four spaces, `0`, ETX.
+pub const MARKS_FOUND: &[u8] = b"    0";
+/// How long the machine may take to find the marks, ms.
+pub const MARK_SEARCH_MS: u32 = 40_000;
+/// The search starts this far (mm) before where the top-left mark should be, on each axis.
+const SEARCH_LEAD_MM: f64 = 10.0;
 
 const ESC: u8 = 0x1B;
 const EOT: u8 = 0x04;
@@ -95,18 +101,32 @@ fn units(mm: f64) -> i64 {
     (mm * UNITS_PER_MM).round() as i64
 }
 
+/// Commands packed: the chunks, the pauses before them and the checks after them.
+type Packed = (Vec<Vec<u8>>, Vec<(usize, String)>, Vec<Check>);
+
 /// The commands a job is made of, before they are packed into chunks.
 #[derive(Default)]
 struct Commands {
     list: Vec<Vec<u8>>,
     /// Before the command at each index the sender pauses, for the group named (C5.3).
     pauses: Vec<(usize, String)>,
+    /// After the command before each index the machine must answer (C6.2).
+    checks: Vec<(usize, Check)>,
+    /// Positions are sent from here, mat mm: the mat's origin, or the top-left registration
+    /// mark once the machine has found the marks.
+    origin: [f64; 2],
 }
 
 impl Commands {
     /// The sender pauses here, before group `name`.
     fn pause(&mut self, name: &str) {
         self.pauses.push((self.list.len(), name.to_string()));
+    }
+
+    /// The machine must answer `check` after the commands so far (its `after_chunk` is set when
+    /// the commands are packed).
+    fn check(&mut self, check: Check) {
+        self.checks.push((self.list.len(), check));
     }
 
     fn raw(&mut self, bytes: &[u8]) {
@@ -122,17 +142,27 @@ impl Commands {
 
     /// A move (blade up) or a cut (blade down) to mat point `p`, mm: vertical first.
     fn to(&mut self, down: bool, p: [f64; 2]) {
-        self.cmd(&format!("{}{},{}", if down { 'D' } else { 'M' }, units(p[1]), units(p[0])));
+        let [x, y] = [p[0] - self.origin[0], p[1] - self.origin[1]];
+        self.cmd(&format!("{}{},{}", if down { 'D' } else { 'M' }, units(y), units(x)));
     }
 
-    /// Packed into chunks of at most [`CHUNK_BYTES`], split only between commands and at each
-    /// pause, which becomes "before chunk n".
-    fn chunks(self) -> (Vec<Vec<u8>>, Vec<(usize, String)>) {
+    /// Packed into chunks of at most [`CHUNK_BYTES`], split only between commands, at each
+    /// pause, which becomes "before chunk n", and at each check, "after chunk n".
+    fn chunks(self) -> Packed {
         let mut out: Vec<Vec<u8>> = vec![];
         let mut pauses = vec![];
+        let mut checks = vec![];
         let mut cur: Vec<u8> = vec![];
         let mut next_pause = self.pauses.into_iter().peekable();
+        let mut next_check = self.checks.into_iter().peekable();
         for (i, c) in self.list.into_iter().enumerate() {
+            while let Some((_, mut check)) = next_check.next_if(|(at, _)| *at == i) {
+                if !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
+                check.after_chunk = out.len().saturating_sub(1);
+                checks.push(check);
+            }
             while let Some((_, name)) = next_pause.next_if(|(at, _)| *at == i) {
                 if !cur.is_empty() {
                     out.push(std::mem::take(&mut cur));
@@ -147,7 +177,7 @@ impl Commands {
         if !cur.is_empty() {
             out.push(cur);
         }
-        (out, pauses)
+        (out, pauses, checks)
     }
 }
 
@@ -209,6 +239,24 @@ impl Silhouette {
             // Which of FY0 and FY1 turns it on is to confirm on the machine (protocol notes).
             c.cmd("FY1");
         }
+        if let Some(r) = job.registration {
+            // Print & Cut (protocol notes): the portrait marks, then the search, which the machine
+            // answers once it has looked; positions are from the top-left mark after it.
+            for cmd in ["TB99", "TB52,2", "TB51,400", "TB53,10", "TB55,1"] {
+                c.cmd(cmd);
+            }
+            let [x, y] = r.origin_mm;
+            let (top, left) = ((y - SEARCH_LEAD_MM).max(0.0), (x - SEARCH_LEAD_MM).max(0.0));
+            c.cmd(&format!("TB123,{},{},{},{}", units(r.size_mm[1]), units(r.size_mm[0]), units(top), units(left)));
+            c.check(Check {
+                after_chunk: 0,
+                expect: MARKS_FOUND.to_vec(),
+                timeout_ms: MARK_SEARCH_MS,
+                failure: "the cutter didn't find the registration marks: check the sheet is the right way round, the marks are printed dark and the sheet is flat".into(),
+            });
+            c.origin = r.origin_mm;
+            warnings.push("Print & Cut is to confirm on the machine: cut a test sheet first".into());
+        }
         let mut lowest = 0.0f64;
         // Group by group (one without grouping), a pause before each after the first; in each,
         // every operation's settings again (the tool may have been changed) and its paths.
@@ -257,10 +305,10 @@ impl Silhouette {
             warnings.push(format!("speeds are approximate until measured on the machine: one step is taken as {MM_S_PER_SPEED_STEP} mm/s"));
         }
         // The head out of the way, below the work, then the end of the job.
-        c.to(false, [0.0, lowest.max(area.y0)]);
+        c.to(false, [c.origin[0], lowest.max(area.y0).max(c.origin[1])]);
         c.cmd("SO0");
-        let (chunks, pauses) = c.chunks();
-        Ok(Encoded { chunks, warnings, pauses })
+        let (chunks, pauses, checks) = c.chunks();
+        Ok(Encoded { chunks, warnings, pauses, checks })
     }
 }
 
@@ -311,6 +359,8 @@ pub fn simulated_cameo4() -> vectorcraft_cutter::simulated::SimulatedMachine {
             moving: vec![b'1', ETX],
             busy_per_write: Duration::from_secs(2),
             busy_per_byte: Duration::from_millis(1),
+            // It always finds the registration marks.
+            answers: vec![(b"TB123,".to_vec(), MARKS_FOUND.to_vec())],
         },
         sent: Sent::default(),
     }

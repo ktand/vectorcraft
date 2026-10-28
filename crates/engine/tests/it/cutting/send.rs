@@ -22,6 +22,17 @@ fn status(s: &mut Session) -> Value {
     s.execute("cutting.status", &json!({})).unwrap()
 }
 
+/// The status once the send has stopped.
+fn finished(s: &mut Session) -> Value {
+    for _ in 0..1000 {
+        if !status(s)["sending"].as_bool().unwrap() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    status(s)
+}
+
 #[test]
 fn the_job_goes_to_the_cutter_in_the_background() {
     let mut s = Session::new();
@@ -98,5 +109,27 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     let st = status(&mut s);
     assert_eq!((st["outcome"].clone(), st["waitingFor"].clone()), (json!("done"), Value::Null));
     assert!(grouped.written().ends_with(b"SO0"));
+
+    // C6.2: Print & Cut. A machine that answers the search with anything but "found" stops the
+    // job there; the simulated Cameo finds its marks and the job goes on to the end.
+    s.execute("file.new", &json!({"width": 300, "height": 300})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 50, "height": 50})).unwrap();
+    s.execute("cutting.settings.set", &json!({"printAndCut": true})).unwrap();
+    s.execute("cutting.marks.add", &json!({})).unwrap();
+    let blind = MemoryTransport::answering(b"0");
+    registry::install(Some(Arc::new(FakeCameo(blind.clone()))));
+    s.execute("cutting.send", &json!({})).unwrap();
+    let st = finished(&mut s);
+    assert!(st["outcome"].as_str().unwrap().contains("didn't find the registration marks"), "{st}");
+    assert!(String::from_utf8_lossy(&blind.written()).contains("TB123,"));
+    assert!(!blind.written().ends_with(b"SO0"), "nothing cut");
+    let mut sim = vectorcraft_cutter_silhouette::simulated_cameo4();
+    sim.behaviour.busy_per_write = std::time::Duration::ZERO;
+    sim.behaviour.busy_per_byte = std::time::Duration::ZERO;
+    let sent = sim.sent.clone();
+    registry::install(Some(Arc::new(sim)));
+    s.execute("cutting.send", &json!({})).unwrap();
+    assert_eq!(finished(&mut s)["outcome"], json!("done"));
+    assert!(sent.bytes().ends_with(b"SO0"));
     registry::install(None);
 }

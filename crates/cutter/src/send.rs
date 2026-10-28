@@ -52,6 +52,8 @@ pub enum SendError {
     Unloaded,
     /// The machine stayed busy past the sender's patience.
     StillMoving,
+    /// The machine didn't give an answer the job needs (why, for the user).
+    Refused(String),
     Transport(TransportError),
 }
 
@@ -61,6 +63,7 @@ impl std::fmt::Display for SendError {
             SendError::Cancelled => write!(f, "the job was cancelled"),
             SendError::Unloaded => write!(f, "load the mat into the cutter first"),
             SendError::StillMoving => write!(f, "the cutter stayed busy too long"),
+            SendError::Refused(why) => f.write_str(why),
             SendError::Transport(e) => e.fmt(f),
         }
     }
@@ -93,6 +96,31 @@ fn wait_ready(t: &mut dyn Transport, driver: &dyn Driver, patience: Patience, ca
 
 /// How often a paused send looks for being told to go on, ms.
 const PAUSE_POLL_MS: u64 = 50;
+/// How long one read for a check's answer waits, ms; the check's timeout is counted in these
+/// (with a pause as long when nothing came, for transports that don't wait themselves).
+const CHECK_READ_MS: u32 = 250;
+
+/// Reads the machine's answer for `check`: as many bytes as the answer it must give, within
+/// about its timeout.
+fn expect(t: &mut dyn Transport, check: &crate::device::Check, patience: Patience, cancel: &AtomicBool) -> Result<(), SendError> {
+    let mut got = vec![];
+    let mut buf = [0u8; 64];
+    let tries = (check.timeout_ms / (2 * CHECK_READ_MS)).max(1);
+    for _ in 0..tries {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(SendError::Cancelled);
+        }
+        let n = t.read(&mut buf, CHECK_READ_MS).map_err(SendError::Transport)?;
+        got.extend_from_slice(buf.get(..n).unwrap_or_default());
+        if got.len() >= check.expect.len() {
+            break;
+        }
+        if n == 0 && patience.poll_ms > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(u64::from(CHECK_READ_MS)));
+        }
+    }
+    if got.get(..check.expect.len()) == Some(check.expect.as_slice()) { Ok(()) } else { Err(SendError::Refused(check.failure.clone())) }
+}
 
 /// Sends `job` to `t`: each chunk once the machine is ready, and before each of the job's pauses
 /// (once the machine has finished what it has) waiting to be told to go on. `progress` follows
@@ -134,6 +162,9 @@ pub fn send(
             }
             t.write(chunk).map_err(SendError::Transport)?;
             set(&|p| p.chunks_sent = i + 1);
+            for check in job.checks.iter().filter(|c| c.after_chunk == i) {
+                expect(t, check, patience, cancel)?;
+            }
         }
         Ok(())
     })();
