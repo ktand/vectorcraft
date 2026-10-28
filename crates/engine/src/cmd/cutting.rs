@@ -9,6 +9,8 @@
 use serde_json::{Map, Value, json};
 use vectorcraft_cutjob::{CuttingSettings, MAT_PRESETS, MatGeometry, Op};
 use vectorcraft_cutting::ops::{self, Source};
+use vectorcraft_cutting::placement;
+use vectorcraft_doc::Document;
 
 use super::*;
 
@@ -22,7 +24,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Settings",
             [],
             None,
-            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm}}, ordering}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat]}",
+            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm}}, ordering}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
             has_doc,
             settings_get
         ),
@@ -61,12 +63,27 @@ fn mat_json(m: &MatGeometry) -> Value {
     json!({"id": m.id, "label": m.label, "sizeMm": m.size_mm, "cutAreaMm": [a.x0, a.y0, a.x1, a.y1], "approximate": m.approximate})
 }
 
-fn settings_json(s: &CuttingSettings) -> Value {
-    json!({"settings": s.to_value(), "mat": mat_json(&s.mat_geometry()), "mats": MAT_PRESETS.iter().map(mat_json).collect::<Vec<_>>()})
+/// Where the artboard lies on the mat, and whether the cut area holds all of it (null: the
+/// settings' artboard isn't in the document).
+fn placement_json(s: &CuttingSettings, d: &Document) -> Value {
+    placement::place(s, d).map_or(Value::Null, |p| {
+        let a = p.artboard_mm;
+        json!({"artboardMm": [a.x0, a.y0, a.x1, a.y1], "fits": p.fits()})
+    })
+}
+
+fn settings_json(s: &CuttingSettings, d: &Document) -> Value {
+    json!({
+        "settings": s.to_value(),
+        "mat": mat_json(&s.mat_geometry()),
+        "mats": MAT_PRESETS.iter().map(mat_json).collect::<Vec<_>>(),
+        "placement": placement_json(s, d),
+    })
 }
 
 fn settings_get(s: &mut Session, _: &Value) -> Result<Value> {
-    Ok(settings_json(&vectorcraft_cutting::settings(&s.doc()?.doc)))
+    let d = &s.doc()?.doc;
+    Ok(settings_json(&vectorcraft_cutting::settings(d), d))
 }
 
 /// The keys `cutting.settings.set` takes at the top, in `operations` and in each tool's.
@@ -164,7 +181,7 @@ fn settings_set(s: &mut Session, p: &Value) -> Result<Value> {
             Ok(())
         })?;
     }
-    Ok(settings_json(&new))
+    Ok(settings_json(&new, &s.doc()?.doc))
 }
 
 /// The objects `p` names in `ids` (each checked; one inside another given one is dropped, as the

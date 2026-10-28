@@ -12,7 +12,5 @@ workspace = true
 [dependencies]
 vectorcraft-doc = { workspace = true }
 vectorcraft-cutjob = { workspace = true }
-serde_json = { workspace = true }
-
-[dev-dependencies]
 vectorcraft-geom = { workspace = true }
+serde_json = { workspace = true }

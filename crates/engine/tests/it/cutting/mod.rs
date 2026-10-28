@@ -2,4 +2,5 @@
 //! engine as users reach it. See `docs/cutting/`.
 
 mod ops;
+mod placement;
 mod svg_size;

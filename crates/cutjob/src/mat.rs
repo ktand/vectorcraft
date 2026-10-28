@@ -26,12 +26,13 @@ pub struct MatGeometry {
     pub id: &'static str,
     /// English label for menus (the UI translates it).
     pub label: &'static str,
-    /// The physical mat, width × height (height along the feed direction).
+    /// The mat's gridded area, width × height (height along the feed direction). The plastic
+    /// beyond the grid isn't modelled: no published figure gives it.
     pub size_mm: [f64; 2],
     /// Where the blade may go, in mat coordinates.
     pub cut_area_mm: RectMm,
-    /// The size comes from the product's name only, not yet from its published specifications
-    /// (ARCHITECTURE.md › R9): the cut area is the whole mat until the margins are checked.
+    /// The cut area isn't from the maker's published specifications (ARCHITECTURE.md › R9), and
+    /// the UI says so.
     pub approximate: bool,
 }
 
@@ -61,6 +62,13 @@ const IN_12: f64 = 304.8;
 const IN_24: f64 = 609.6;
 
 /// The built-in mats, the default first.
+///
+/// Sources (checked 2026-10-28): Silhouette's Cameo 4 specifications give a guaranteed operating
+/// area "With a Cutting Mat" of 12 in × 24 in (30.5 cm × 61.0 cm), and list the 12-inch Cameo mat
+/// in the box (<https://www.silhouetteamerica.com/cameo-4>). That 12 in width over the whole
+/// 12 × 12 in mat is from retailers' listings (e.g. <https://www.swingdesign.com/products/silhouette-12-cutting-mat>)
+/// and a university fab lab's sheet ("12" x 12" with a cutting mat",
+/// <https://cucfablab.web.illinois.edu/lab-tool/silhouette-cameo-3/>), not from Silhouette itself.
 pub static MAT_PRESETS: [MatGeometry; 2] = [
     MatGeometry {
         id: "silhouette.12x12",
@@ -74,7 +82,7 @@ pub static MAT_PRESETS: [MatGeometry; 2] = [
         label: "Silhouette 12 × 24 in",
         size_mm: [IN_12, IN_24],
         cut_area_mm: RectMm { x0: 0.0, y0: 0.0, x1: IN_12, y1: IN_24 },
-        approximate: true,
+        approximate: false,
     },
 ];
 

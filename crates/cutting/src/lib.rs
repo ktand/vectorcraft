@@ -6,9 +6,11 @@
 //!   ancestors and otherwise the document's default.
 //! - [`settings`] and [`set_settings`]: the document's [`CuttingSettings`], under
 //!   `Document::unknown["cutting"]`.
+//! - [`placement`]: where the settings' artboard lies on the mat, document points to mat mm.
 #![forbid(unsafe_code)]
 
 pub mod ops;
+pub mod placement;
 
 use vectorcraft_cutjob::{CuttingSettings, DOCUMENT_KEY};
 use vectorcraft_doc::Document;
