@@ -6163,7 +6163,9 @@ dependencies = [
  "serde_json",
  "vectorcraft-cutjob",
  "vectorcraft-doc",
+ "vectorcraft-effects",
  "vectorcraft-geom",
+ "vectorcraft-text",
 ]
 
 [[package]]

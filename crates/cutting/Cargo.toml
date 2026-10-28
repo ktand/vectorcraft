@@ -13,4 +13,10 @@ workspace = true
 vectorcraft-doc = { workspace = true }
 vectorcraft-cutjob = { workspace = true }
 vectorcraft-geom = { workspace = true }
+# Geometry as drawn: live effects, type outlines, evaluated live objects.
+vectorcraft-effects = { workspace = true }
 serde_json = { workspace = true }
+
+[dev-dependencies]
+# The tests outline type in the bundled fonts (the workspace leaves turning them on to the engine).
+vectorcraft-text = { workspace = true, features = ["bundled-fonts"] }
