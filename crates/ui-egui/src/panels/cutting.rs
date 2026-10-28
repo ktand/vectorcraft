@@ -552,6 +552,7 @@ mod tests {
                 moving: b"1".to_vec(),
                 busy_per_write: Duration::ZERO,
                 busy_per_byte: Duration::ZERO,
+                answers: vec![],
             },
             sent: Sent::default(),
         };

@@ -83,6 +83,19 @@ pub struct Encoded {
     /// Before chunk n, the sender waits for the user to go on to the group named (a job cut in
     /// groups, C5.3), in order.
     pub pauses: Vec<(usize, String)>,
+    /// Answers the machine must give after a chunk before the job goes on (C6.2: it found the
+    /// registration marks), in order.
+    pub checks: Vec<Check>,
+}
+
+/// An answer the machine must give after chunk `after_chunk`, within `timeout_ms`; anything else
+/// stops the job with `failure`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Check {
+    pub after_chunk: usize,
+    pub expect: Vec<u8>,
+    pub timeout_ms: u32,
+    pub failure: String,
 }
 
 /// One family of machines: what it accepts and how it answers. No I/O: the sender does that.

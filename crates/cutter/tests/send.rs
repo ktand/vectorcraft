@@ -23,7 +23,12 @@ impl Driver for TestDriver {
         "Test machine".into()
     }
     fn encode(&self, job: &CutJob, _: &DeviceInfo) -> Result<Encoded, String> {
-        Ok(Encoded { chunks: job.paths.iter().map(|p| format!("{}", p.points.len()).into_bytes()).collect(), warnings: vec![], pauses: vec![] })
+        Ok(Encoded {
+            chunks: job.paths.iter().map(|p| format!("{}", p.points.len()).into_bytes()).collect(),
+            warnings: vec![],
+            pauses: vec![],
+            checks: vec![],
+        })
     }
     fn status_query(&self) -> &[u8] {
         b"?"
@@ -39,7 +44,7 @@ impl Driver for TestDriver {
 }
 
 fn job(chunks: &[&str]) -> Encoded {
-    Encoded { chunks: chunks.iter().map(|c| c.as_bytes().to_vec()).collect(), warnings: vec![], pauses: vec![] }
+    Encoded { chunks: chunks.iter().map(|c| c.as_bytes().to_vec()).collect(), warnings: vec![], pauses: vec![], checks: vec![] }
 }
 
 const QUICK: Patience = Patience { polls: 5, poll_ms: 0 };
@@ -142,7 +147,7 @@ fn the_registry_lists_the_machines_its_drivers_drive() {
 }
 
 fn paused_job() -> Encoded {
-    Encoded { chunks: vec![b"a".to_vec(), b"b".to_vec()], warnings: vec![], pauses: vec![(1, "Blue".into())] }
+    Encoded { chunks: vec![b"a".to_vec(), b"b".to_vec()], pauses: vec![(1, "Blue".into())], ..Encoded::default() }
 }
 
 fn until(running: &vectorcraft_cutter::send::Running, done: impl Fn(&Progress) -> bool) {
@@ -180,4 +185,31 @@ fn a_paused_send_can_be_cancelled() {
     until(&running, |p| p.outcome.is_some());
     assert_eq!(running.progress().outcome, Some(Err(SendError::Cancelled)));
     assert!(!seen.written().ends_with(b"b"), "the second group never went");
+}
+
+fn checked_job() -> Encoded {
+    let check = vectorcraft_cutter::Check { after_chunk: 0, expect: b"OK".to_vec(), timeout_ms: 1_000, failure: "the marks weren't found".into() };
+    Encoded { chunks: vec![b"find".to_vec(), b"cut".to_vec()], checks: vec![check], ..Encoded::default() }
+}
+
+fn run_checked(answer: &[u8]) -> (Result<(), SendError>, Vec<u8>) {
+    let mut t = MemoryTransport::answering(b"R");
+    t.state.lock().unwrap().replies = [b"R".to_vec(), answer.to_vec()].into();
+    let progress = Mutex::new(Progress::default());
+    let r = send(&mut t, &TestDriver, &checked_job(), QUICK, &Controls::default(), &progress);
+    (r, t.written())
+}
+
+/// C6.2: after the chunk that asks, the machine's answer is read: the right one and the job goes
+/// on, anything else (or nothing) and it stops there with the reason.
+#[test]
+fn a_checked_answer_lets_the_job_go_on_or_stops_it() {
+    let (r, written) = run_checked(b"OK");
+    assert_eq!(r, Ok(()));
+    assert!(written.ends_with(b"cut"));
+    for wrong in [&b"NO"[..], b""] {
+        let (r, written) = run_checked(wrong);
+        assert_eq!(r, Err(SendError::Refused("the marks weren't found".into())), "{wrong:?}");
+        assert!(!written.ends_with(b"cut"), "nothing cut after a wrong answer");
+    }
 }

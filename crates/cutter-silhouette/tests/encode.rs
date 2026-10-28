@@ -246,3 +246,30 @@ fn the_simulated_cameo_answers_like_one() {
     assert_eq!(Silhouette.parse_status(&buf[..n]), DeviceStatus::Moving);
     assert_eq!(m.sent.bytes(), b"M20,20\x03");
 }
+
+/// C6.2: Print & Cut: the portrait marks and the search for them, in machine units (the length,
+/// the width, then where to start looking, 10 mm before the top-left mark), a chunk ending there
+/// with the answer that means found; the paths after it measured from the top-left mark.
+#[test]
+fn print_and_cut_searches_for_the_marks_first() {
+    let mut j = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }],
+        vec![path(0, false, &[[30.0, 40.0], [50.0, 40.0]])],
+        "silhouette.12x12",
+    );
+    j.registration = Some(vectorcraft_cutjob::JobRegistration { origin_mm: [20.0, 25.0], size_mm: [180.0, 230.0] });
+    let e = Silhouette.encode(&j, &cameo4()).unwrap();
+    let text: Vec<String> = e.chunks.iter().map(|c| String::from_utf8_lossy(c).to_string()).collect();
+    let first = &text[0];
+    assert!(first.ends_with("TB99\u{3}TB52,2\u{3}TB51,400\u{3}TB53,10\u{3}TB55,1\u{3}TB123,4600,3600,300,200\u{3}"), "{first:?}");
+    assert_eq!(e.checks.len(), 1);
+    let check = &e.checks[0];
+    assert_eq!((check.after_chunk, check.expect.as_slice(), check.timeout_ms), (0, b"    0\x03".as_slice(), 40_000));
+    let rest = text[1..].concat();
+    assert!(rest.contains("M300,200\u{3}D300,600\u{3}"), "from the mark: (30, 40) − (20, 25) mm: {rest:?}");
+    assert!(e.warnings.iter().any(|w| w.contains("Print & Cut")));
+    // Without it, none of that.
+    j.registration = None;
+    let plain = Silhouette.encode(&j, &cameo4()).unwrap();
+    assert!(plain.checks.is_empty() && !String::from_utf8_lossy(&plain.chunks.concat()).contains("TB123"));
+}
