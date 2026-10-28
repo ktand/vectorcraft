@@ -91,9 +91,16 @@ fn units(mm: f64) -> i64 {
 #[derive(Default)]
 struct Commands {
     list: Vec<Vec<u8>>,
+    /// Before the command at each index the sender pauses, for the group named (C5.3).
+    pauses: Vec<(usize, String)>,
 }
 
 impl Commands {
+    /// The sender pauses here, before group `name`.
+    fn pause(&mut self, name: &str) {
+        self.pauses.push((self.list.len(), name.to_string()));
+    }
+
     fn raw(&mut self, bytes: &[u8]) {
         self.list.push(bytes.to_vec());
     }
@@ -110,11 +117,20 @@ impl Commands {
         self.cmd(&format!("{}{},{}", if down { 'D' } else { 'M' }, units(p[1]), units(p[0])));
     }
 
-    /// Packed into chunks of at most [`CHUNK_BYTES`], split only between commands.
-    fn chunks(self) -> Vec<Vec<u8>> {
+    /// Packed into chunks of at most [`CHUNK_BYTES`], split only between commands and at each
+    /// pause, which becomes "before chunk n".
+    fn chunks(self) -> (Vec<Vec<u8>>, Vec<(usize, String)>) {
         let mut out: Vec<Vec<u8>> = vec![];
+        let mut pauses = vec![];
         let mut cur: Vec<u8> = vec![];
-        for c in self.list {
+        let mut next_pause = self.pauses.into_iter().peekable();
+        for (i, c) in self.list.into_iter().enumerate() {
+            while let Some((_, name)) = next_pause.next_if(|(at, _)| *at == i) {
+                if !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
+                pauses.push((out.len(), name));
+            }
             if !cur.is_empty() && cur.len() + c.len() > CHUNK_BYTES {
                 out.push(std::mem::take(&mut cur));
             }
@@ -123,7 +139,7 @@ impl Commands {
         if !cur.is_empty() {
             out.push(cur);
         }
-        out
+        (out, pauses)
     }
 }
 
@@ -186,33 +202,47 @@ impl Silhouette {
             c.cmd("FY1");
         }
         let mut lowest = 0.0f64;
-        for (op_index, op) in job.operations.iter().enumerate() {
-            let (force, speed) = steps(&op.tool);
-            c.cmd("J1");
-            c.cmd(&format!("FX{force}"));
-            c.cmd(&format!("!{speed}"));
-            c.cmd(&format!("FC{BLADE_OFFSET}"));
-            if let Some(depth) = op.tool.depth {
-                c.cmd(&format!("TF{depth}"));
+        // Group by group (one without grouping), a pause before each after the first; in each,
+        // every operation's settings again (the tool may have been changed) and its paths.
+        let starts: Vec<(usize, &str)> =
+            if job.groups.is_empty() { vec![(0, "")] } else { job.groups.iter().map(|g| (g.start, g.name.as_str())).collect() };
+        for (gi, &(start, name)) in starts.iter().enumerate() {
+            let end = starts.get(gi + 1).map_or(job.paths.len(), |n| n.0);
+            let in_group = job.paths.get(start..end).unwrap_or_default();
+            if gi > 0 {
+                c.pause(name);
             }
-            if let Some(accel) = op.tool.accel {
-                c.cmd(&format!("TJ{accel}"));
-            }
-            for p in job.paths.iter().filter(|p| p.op == op_index) {
-                let Some(&first) = p.points.first() else { continue };
-                for _ in 0..op.tool.passes.max(1) {
-                    c.to(false, first);
-                    for &q in p.points.iter().skip(1) {
-                        c.to(true, q);
-                    }
-                    if p.closed {
-                        c.to(true, first);
-                        for q in overcut(&p.points, op.tool.overcut_mm) {
+            for (op_index, op) in job.operations.iter().enumerate() {
+                if !in_group.iter().any(|p| p.op == op_index) {
+                    continue;
+                }
+                let (force, speed) = steps(&op.tool);
+                c.cmd("J1");
+                c.cmd(&format!("FX{force}"));
+                c.cmd(&format!("!{speed}"));
+                c.cmd(&format!("FC{BLADE_OFFSET}"));
+                if let Some(depth) = op.tool.depth {
+                    c.cmd(&format!("TF{depth}"));
+                }
+                if let Some(accel) = op.tool.accel {
+                    c.cmd(&format!("TJ{accel}"));
+                }
+                for p in in_group.iter().filter(|p| p.op == op_index) {
+                    let Some(&first) = p.points.first() else { continue };
+                    for _ in 0..op.tool.passes.max(1) {
+                        c.to(false, first);
+                        for &q in p.points.iter().skip(1) {
                             c.to(true, q);
                         }
+                        if p.closed {
+                            c.to(true, first);
+                            for q in overcut(&p.points, op.tool.overcut_mm) {
+                                c.to(true, q);
+                            }
+                        }
                     }
+                    lowest = p.points.iter().fold(lowest, |m, q| m.max(q[1]));
                 }
-                lowest = p.points.iter().fold(lowest, |m, q| m.max(q[1]));
             }
         }
         if !job.operations.is_empty() {
@@ -221,7 +251,8 @@ impl Silhouette {
         // The head out of the way, below the work, then the end of the job.
         c.to(false, [0.0, lowest.max(area.y0)]);
         c.cmd("SO0");
-        Ok(Encoded { chunks: c.chunks(), warnings })
+        let (chunks, pauses) = c.chunks();
+        Ok(Encoded { chunks, warnings, pauses })
     }
 }
 

@@ -89,6 +89,16 @@ pub struct CutJob {
     pub warnings: Vec<JobWarning>,
     /// The machine grips the material harder as it feeds (where it can).
     pub track_enhancing: bool,
+    /// Cut in groups, a pause before each after the first; none: one group.
+    pub groups: Vec<JobGroup>,
+}
+
+/// One group of a job cut in groups (C5.3): its name, and where its paths start.
+#[derive(Clone, Debug, PartialEq)]
+pub struct JobGroup {
+    pub name: String,
+    /// Index of its first path; its paths run to the next group's start.
+    pub start: usize,
 }
 
 /// Why a job can't be run.
@@ -120,6 +130,8 @@ pub enum JobError {
         path: usize,
         point: [f64; 2],
     },
+    /// The groups don't start at the first path, in order, within the job.
+    BadGroups,
 }
 
 impl std::fmt::Display for JobError {
@@ -133,6 +145,7 @@ impl std::fmt::Display for JobError {
             JobError::TooFewPoints { path } => write!(f, "path {path} has too few points to cut"),
             JobError::NotFinite { path } => write!(f, "path {path} has a point that isn't a finite number"),
             JobError::OutsideCutArea { path, point } => write!(f, "path {path} leaves the cut area at ({:.2}, {:.2}) mm", point[0], point[1]),
+            JobError::BadGroups => write!(f, "the job's groups aren't in order"),
         }
     }
 }
@@ -198,6 +211,12 @@ impl CutJob {
         if !finite || a.x0 < 0.0 || a.y0 < 0.0 || a.x1 > w || a.y1 > h || a.width() <= 0.0 || a.height() <= 0.0 {
             return Err(JobError::BadMat);
         }
+        let starts_ok = self.groups.first().is_none_or(|g| g.start == 0)
+            && self.groups.windows(2).all(|w| w[0].start < w[1].start)
+            && self.groups.last().is_none_or(|g| g.start < self.paths.len().max(1));
+        if !starts_ok || self.groups.len() > MAX_PATHS {
+            return Err(JobError::BadGroups);
+        }
         for (op, o) in self.operations.iter().enumerate() {
             if let Some(setting) = o.tool.problem() {
                 return Err(JobError::BadSetting { op, setting });
@@ -249,6 +268,7 @@ impl CutJob {
         json!({
             "version": self.version,
             "trackEnhancing": self.track_enhancing,
+            "groups": self.groups.iter().map(|g| json!({"name": g.name, "start": g.start})).collect::<Vec<_>>(),
             "mat": {"id": self.mat.id, "sizeMm": self.mat.size_mm, "cutAreaMm": [a.x0, a.y0, a.x1, a.y1]},
             "operations": self.operations.iter().map(|o| json!({
                 "kind": o.kind.id(),

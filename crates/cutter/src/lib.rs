@@ -110,6 +110,7 @@ mod tests {
             ],
             warnings: vec![],
             track_enhancing: false,
+            groups: vec![],
         }
     }
 

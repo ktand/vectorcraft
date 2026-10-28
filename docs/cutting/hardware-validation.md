@@ -61,6 +61,14 @@ Result:
 
 Result:
 
+## Step 4c: cutting in groups (C5.3)
+
+- Two squares on two layers, Groups **By Layer**: the first square is cut, then the panel says "Paused before"
+  the second layer while the machine waits with the mat loaded. Continue: the second square is cut where it
+  should be (the mat hasn't moved). Cancel while paused: nothing more is cut.
+
+Result:
+
 ## Step 5: a real cut
 
 - Only after steps 1–3 pass: the golden test file (`nested.svg`) cut through on paper with the cut force set as

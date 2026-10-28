@@ -5,10 +5,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::sync::Mutex;
-use std::sync::atomic::AtomicBool;
 
 use vectorcraft_cutjob::{CutJob, JOB_VERSION, JobMat, OpKind, Operation, RectMm, Simulation, SourceRef, ToolSettings, Toolpath};
-use vectorcraft_cutter::send::{Patience, Progress, send};
+use vectorcraft_cutter::send::{Controls, Patience, Progress, send};
 use vectorcraft_cutter::{DeviceInfo, Driver, MemoryTransport};
 use vectorcraft_cutter_silhouette::{CHUNK_BYTES, Silhouette};
 
@@ -24,6 +23,7 @@ fn job(ops: Vec<Operation>, paths: Vec<Toolpath>, mat: &str) -> CutJob {
         paths,
         warnings: vec![],
         track_enhancing: false,
+        groups: vec![],
     }
 }
 
@@ -143,7 +143,7 @@ fn sent_to_a_ready_machine() {
     let e = Silhouette.encode(&j, &cameo4()).unwrap();
     let mut t = MemoryTransport::answering(b"0\x03");
     let progress = Mutex::new(Progress::default());
-    send(&mut t, &Silhouette, &e, Patience { polls: 3, poll_ms: 0 }, &AtomicBool::new(false), &progress).unwrap();
+    send(&mut t, &Silhouette, &e, Patience { polls: 3, poll_ms: 0 }, &Controls::default(), &progress).unwrap();
     let written = t.written();
     assert!(written.starts_with(&[0x1B, 0x05, 0x1B, 0x04]), "status, then initialise: {:?}", &written[..4]);
     assert!(written.ends_with(b"SO0\x03"));
@@ -180,4 +180,25 @@ fn steps_read_back_as_themselves() {
     }
     assert_eq!((force_step(-1.0), force_step(2.0), force_step(f64::NAN)), (1, 33, 1));
     assert_eq!((speed_step(0.0), speed_step(1e9), speed_step(f64::NAN)), (1, 30, 1));
+}
+
+/// C5.3: a job cut in groups pauses before each group after the first, between chunks, and
+/// gives each group the tool settings again.
+#[test]
+fn groups_pause_between_them() {
+    let mut j = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }],
+        vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]]), path(0, false, &[[5.0, 5.0], [6.0, 6.0]])],
+        "silhouette.12x12",
+    );
+    j.groups = vec![vectorcraft_cutjob::JobGroup { name: "Red".into(), start: 0 }, vectorcraft_cutjob::JobGroup { name: "Blue".into(), start: 1 }];
+    let e = Silhouette.encode(&j, &cameo4()).unwrap();
+    assert_eq!(e.pauses.len(), 1);
+    let (at, name) = &e.pauses[0];
+    assert_eq!(name, "Blue");
+    let after = String::from_utf8_lossy(&e.chunks[*at..].concat()).to_string();
+    assert!(after.starts_with("J1\u{3}FX17\u{3}"), "the settings again: {after:?}");
+    assert!(after.contains("M100,100\u{3}"), "the second path after the pause: {after:?}");
+    let before = String::from_utf8_lossy(&e.chunks[..*at].concat()).to_string();
+    assert!(before.contains("M20,20\u{3}") && !before.contains("M100,100"), "{before:?}");
 }

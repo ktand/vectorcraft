@@ -12,6 +12,7 @@
 //! - [`clip`]: those outlines cut to the clipping masks around them.
 //! - [`weld`]: the shapes set to Cut Outline united, cut along the outline of the union.
 //! - [`prepare`]: those outlines on the mat, in millimetres, flattened.
+//! - [`group`]: which group each object is cut in, when the job is cut in groups.
 //! - [`order`]: the order they are cut in.
 //! - [`corners`]: sharp corners run past and back, for the operations that ask for it.
 //! - [`preview`]: a job as an SVG at the mat's size.
@@ -22,6 +23,7 @@
 pub mod clip;
 pub mod corners;
 pub mod geometry;
+pub mod group;
 pub mod ops;
 pub mod order;
 pub mod placement;
@@ -79,7 +81,41 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     let (polylines, more) = prepare::prepare(&outlines, &placement, s.tolerance_mm, s.clip_to_mat).map_err(BuildError::Prepare)?;
     warnings.extend(more);
     let area = placement.mat.cut_area_mm;
-    let ordered = order::order(polylines, s.ordering, [area.x0, area.y0]);
+    // Each group in the order its first object comes, ordered by itself, the blade going on from
+    // where the group before left it (one group without grouping).
+    let mut names: Vec<String> = vec![];
+    let mut group_of_node = std::collections::HashMap::new();
+    for item in &items {
+        let name = group::group_of(d, item.id, s.grouping);
+        let index = names.iter().position(|n| *n == name).unwrap_or_else(|| {
+            names.push(name);
+            names.len() - 1
+        });
+        group_of_node.insert(item.id.0, index);
+    }
+    let mut buckets: Vec<Vec<prepare::Polyline>> = vec![vec![]; names.len().max(1)];
+    for p in polylines {
+        let g = group_of_node.get(&p.source.node).copied().unwrap_or(0);
+        if let Some(b) = buckets.get_mut(g) {
+            b.push(p);
+        }
+    }
+    let mut ordered = vec![];
+    let mut groups = vec![];
+    let mut at = [area.x0, area.y0];
+    for (g, bucket) in buckets.into_iter().enumerate() {
+        if bucket.is_empty() {
+            continue;
+        }
+        if s.grouping != vectorcraft_cutjob::Grouping::None {
+            groups.push(vectorcraft_cutjob::JobGroup { name: names.get(g).cloned().unwrap_or_default(), start: ordered.len() });
+        }
+        let these = order::order(bucket, s.ordering, at);
+        if let Some(last) = these.last().and_then(|p| if p.closed { p.points.first() } else { p.points.last() }) {
+            at = *last;
+        }
+        ordered.extend(these);
+    }
     // One operation for each kind the job uses, scored first.
     let mut kinds: Vec<OpKind> = ordered.iter().map(|p| p.op).collect();
     kinds.sort();
@@ -105,6 +141,7 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
         paths,
         warnings,
         track_enhancing: s.track_enhancing,
+        groups,
     };
     corners::overcut_corners(&mut job);
     job.validate().map_err(BuildError::Invalid)?;
@@ -134,6 +171,30 @@ mod tests {
     fn an_empty_document_makes_an_empty_job() {
         let job = build_job(&Document::new(100.0, 100.0)).unwrap();
         assert!(job.paths.is_empty() && job.operations.is_empty() && job.warnings.is_empty());
+    }
+
+    /// Grouped by layer: a group a layer, bottom first, each one's paths together.
+    #[test]
+    fn grouped_by_layer_the_layers_go_one_after_the_other() {
+        use vectorcraft_doc::{Appearance, LayerColor, Node};
+        use vectorcraft_geom::{Rect, shapes};
+        let mut d = Document::new(500.0, 500.0);
+        let bottom = d.layers[0].id;
+        let top = Node::layer(d.alloc_id(), "Second", LayerColor::Preset(1));
+        let top = d.insert(None, usize::MAX, top).unwrap();
+        for (layer, x) in [(bottom, 10.0), (top, 20.0), (bottom, 300.0)] {
+            let sq = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(x, 10.0, x + 20.0, 30.0)), Appearance::default());
+            d.insert(Some(layer), usize::MAX, sq).unwrap();
+        }
+        set_settings(&mut d, &CuttingSettings { grouping: vectorcraft_cutjob::Grouping::Layer, ..CuttingSettings::default() });
+        let job = build_job(&d).unwrap();
+        let names: Vec<(&str, usize)> = job.groups.iter().map(|g| (g.name.as_str(), g.start)).collect();
+        let first = d.layers[0].name.clone().unwrap_or_default();
+        assert_eq!(names, [(first.as_str(), 0), ("Second", 2)]);
+        assert_eq!(job.paths.len(), 3);
+        // Without grouping: one group, the squares in travel order.
+        set_settings(&mut d, &CuttingSettings::default());
+        assert!(build_job(&d).unwrap().groups.is_empty());
     }
 
     #[test]

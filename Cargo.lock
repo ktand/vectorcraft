@@ -6180,6 +6180,7 @@ version = "0.17.0"
 dependencies = [
  "proptest",
  "serde_json",
+ "vectorcraft-color",
  "vectorcraft-cutjob",
  "vectorcraft-doc",
  "vectorcraft-effects",

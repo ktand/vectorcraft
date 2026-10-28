@@ -6,7 +6,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 
 use vectorcraft_cutjob::CutJob;
-use vectorcraft_cutter::send::{Patience, Progress, SendError, send, spawn};
+use vectorcraft_cutter::send::{Controls, Patience, Progress, SendError, send, spawn};
 use vectorcraft_cutter::{DeviceInfo, DeviceProvider, DeviceStatus, Driver, Encoded, MemoryTransport, Transport, TransportError, registry};
 
 /// Asks with `?`; `R` is ready, `M` moving, `U` unloaded.
@@ -23,7 +23,7 @@ impl Driver for TestDriver {
         "Test machine".into()
     }
     fn encode(&self, job: &CutJob, _: &DeviceInfo) -> Result<Encoded, String> {
-        Ok(Encoded { chunks: job.paths.iter().map(|p| format!("{}", p.points.len()).into_bytes()).collect(), warnings: vec![] })
+        Ok(Encoded { chunks: job.paths.iter().map(|p| format!("{}", p.points.len()).into_bytes()).collect(), warnings: vec![], pauses: vec![] })
     }
     fn status_query(&self) -> &[u8] {
         b"?"
@@ -39,14 +39,14 @@ impl Driver for TestDriver {
 }
 
 fn job(chunks: &[&str]) -> Encoded {
-    Encoded { chunks: chunks.iter().map(|c| c.as_bytes().to_vec()).collect(), warnings: vec![] }
+    Encoded { chunks: chunks.iter().map(|c| c.as_bytes().to_vec()).collect(), warnings: vec![], pauses: vec![] }
 }
 
 const QUICK: Patience = Patience { polls: 5, poll_ms: 0 };
 
 fn run(t: &mut MemoryTransport, chunks: &[&str]) -> (Result<(), SendError>, Progress) {
     let progress = Mutex::new(Progress::default());
-    let r = send(t, &TestDriver, &job(chunks), QUICK, &AtomicBool::new(false), &progress);
+    let r = send(t, &TestDriver, &job(chunks), QUICK, &Controls::default(), &progress);
     (r, progress.into_inner().unwrap())
 }
 
@@ -94,7 +94,7 @@ fn a_transport_failure_stops_the_job() {
 fn cancelling_stops_before_the_next_chunk() {
     let mut t = MemoryTransport::answering(b"R");
     let progress = Mutex::new(Progress::default());
-    let r = send(&mut t, &TestDriver, &job(&["a", "b"]), QUICK, &AtomicBool::new(true), &progress);
+    let r = send(&mut t, &TestDriver, &job(&["a", "b"]), QUICK, &Controls { cancel: AtomicBool::new(true), ..Controls::default() }, &progress);
     assert_eq!(r, Err(SendError::Cancelled));
     assert!(t.written().is_empty(), "nothing went");
 }
@@ -139,4 +139,45 @@ fn the_registry_lists_the_machines_its_drivers_drive() {
     assert!(registry::provider().unwrap().open("usb-1").is_ok());
     registry::install(None);
     assert!(registry::machines().is_empty());
+}
+
+fn paused_job() -> Encoded {
+    Encoded { chunks: vec![b"a".to_vec(), b"b".to_vec()], warnings: vec![], pauses: vec![(1, "Blue".into())] }
+}
+
+fn until(running: &vectorcraft_cutter::send::Running, done: impl Fn(&Progress) -> bool) {
+    for _ in 0..500 {
+        if done(&running.progress()) {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("not reached: {:?}", running.progress());
+}
+
+/// C5.3: the send stops before the next group and goes on when told.
+#[test]
+fn a_paused_send_waits_and_goes_on() {
+    let t = MemoryTransport::answering(b"R");
+    let seen = t.clone();
+    let running = spawn(Box::new(t), Arc::new(TestDriver), paused_job(), QUICK).unwrap();
+    until(&running, |p| p.waiting.is_some());
+    assert_eq!(running.progress().waiting.as_deref(), Some("Blue"));
+    assert_eq!(seen.written(), b"?a?", "the first group went, and the machine finished it");
+    assert!(running.resume());
+    until(&running, |p| p.outcome.is_some());
+    assert_eq!(running.progress().outcome, Some(Ok(())));
+    assert!(seen.written().ends_with(b"b"));
+}
+
+#[test]
+fn a_paused_send_can_be_cancelled() {
+    let t = MemoryTransport::answering(b"R");
+    let seen = t.clone();
+    let running = spawn(Box::new(t), Arc::new(TestDriver), paused_job(), QUICK).unwrap();
+    until(&running, |p| p.waiting.is_some());
+    running.cancel();
+    until(&running, |p| p.outcome.is_some());
+    assert_eq!(running.progress().outcome, Some(Err(SendError::Cancelled)));
+    assert!(!seen.written().ends_with(b"b"), "the second group never went");
 }

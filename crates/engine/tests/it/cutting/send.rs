@@ -71,5 +71,32 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     }
     assert_eq!(status(&mut s)["outcome"], json!("load the mat into the cutter first"));
     assert!(s.execute("cutting.send", &json!({"device": "usb-other"})).unwrap_err().to_string().contains("no cutter \"usb-other\""));
+
+    // C5.3: cut by layer, the send pauses before the second layer and goes on when told.
+    s.execute("layer.new", &json!({"name": "Gold"})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 50, "height": 50})).unwrap();
+    s.execute("cutting.settings.set", &json!({"grouping": "layer"})).unwrap();
+    let grouped = MemoryTransport::answering(b"0");
+    registry::install(Some(Arc::new(FakeCameo(grouped.clone()))));
+    assert_eq!(s.execute("cutting.continue", &json!({})).unwrap()["continued"], json!(false), "nothing waiting yet");
+    s.execute("cutting.send", &json!({})).unwrap();
+    for _ in 0..500 {
+        if !status(&mut s)["waitingFor"].is_null() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let st = status(&mut s);
+    assert_eq!((st["waitingFor"].clone(), st["sending"].clone()), (json!("Gold"), json!(true)));
+    assert_eq!(s.execute("cutting.continue", &json!({})).unwrap()["continued"], json!(true));
+    for _ in 0..500 {
+        if !status(&mut s)["sending"].as_bool().unwrap() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let st = status(&mut s);
+    assert_eq!((st["outcome"].clone(), st["waitingFor"].clone()), (json!("done"), Value::Null));
+    assert!(grouped.written().ends_with(b"SO0"));
     registry::install(None);
 }

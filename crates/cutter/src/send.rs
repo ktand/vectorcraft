@@ -33,6 +33,15 @@ pub struct Progress {
     pub chunks: usize,
     /// Set once it stops: `Ok` when every chunk went, else why not.
     pub outcome: Option<Result<(), SendError>>,
+    /// Paused before this group, until told to go on ([`Controls::resume`]).
+    pub waiting: Option<String>,
+}
+
+/// What a send is told while it runs: stop, or go on after a pause.
+#[derive(Debug, Default)]
+pub struct Controls {
+    pub cancel: AtomicBool,
+    pub resume: AtomicBool,
 }
 
 /// Why a send stopped before the end.
@@ -82,16 +91,21 @@ fn wait_ready(t: &mut dyn Transport, driver: &dyn Driver, patience: Patience, ca
     Err(SendError::StillMoving)
 }
 
-/// Sends `job` to `t`: each chunk once the machine is ready. `progress` follows it; `cancel`
-/// stops it before the next chunk.
+/// How often a paused send looks for being told to go on, ms.
+const PAUSE_POLL_MS: u64 = 50;
+
+/// Sends `job` to `t`: each chunk once the machine is ready, and before each of the job's pauses
+/// (once the machine has finished what it has) waiting to be told to go on. `progress` follows
+/// it; `controls` stop it before the next chunk or resume it after a pause.
 pub fn send(
     t: &mut dyn Transport,
     driver: &dyn Driver,
     job: &Encoded,
     patience: Patience,
-    cancel: &AtomicBool,
+    controls: &Controls,
     progress: &Mutex<Progress>,
 ) -> Result<(), SendError> {
+    let cancel = &controls.cancel;
     let set = |f: &dyn Fn(&mut Progress)| {
         if let Ok(mut p) = progress.lock() {
             f(&mut p);
@@ -101,6 +115,20 @@ pub fn send(
     let result = (|| {
         for (i, chunk) in job.chunks.iter().enumerate() {
             wait_ready(t, driver, patience, cancel)?;
+            if let Some((_, name)) = job.pauses.iter().find(|(at, _)| *at == i) {
+                controls.resume.store(false, Ordering::Relaxed);
+                set(&|p| p.waiting = Some(name.clone()));
+                while !controls.resume.swap(false, Ordering::Relaxed) {
+                    if cancel.load(Ordering::Relaxed) {
+                        set(&|p| p.waiting = None);
+                        return Err(SendError::Cancelled);
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(PAUSE_POLL_MS));
+                }
+                set(&|p| p.waiting = None);
+                // The tool or material may have been changed: the machine is asked again.
+                wait_ready(t, driver, patience, cancel)?;
+            }
             if cancel.load(Ordering::Relaxed) {
                 return Err(SendError::Cancelled);
             }
@@ -117,7 +145,7 @@ pub fn send(
 #[derive(Clone, Debug, Default)]
 pub struct Running {
     pub progress: Arc<Mutex<Progress>>,
-    pub cancel: Arc<AtomicBool>,
+    pub controls: Arc<Controls>,
 }
 
 impl Running {
@@ -128,7 +156,16 @@ impl Running {
 
     /// Asks it to stop before the next chunk.
     pub fn cancel(&self) {
-        self.cancel.store(true, Ordering::Relaxed);
+        self.controls.cancel.store(true, Ordering::Relaxed);
+    }
+
+    /// Tells it to go on after a pause; whether it was paused.
+    pub fn resume(&self) -> bool {
+        let paused = self.progress().waiting.is_some();
+        if paused {
+            self.controls.resume.store(true, Ordering::Relaxed);
+        }
+        paused
     }
 
     /// Whether it has stopped (done, failed or cancelled).
@@ -141,12 +178,12 @@ impl Running {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn spawn(mut t: Box<dyn Transport>, driver: Arc<dyn Driver>, job: Encoded, patience: Patience) -> Result<Running, String> {
     let running = Running::default();
-    let (progress, cancel) = (running.progress.clone(), running.cancel.clone());
+    let (progress, controls) = (running.progress.clone(), running.controls.clone());
     std::thread::Builder::new()
         .name("cutter-send".into())
         .spawn(move || {
             // The outcome is kept in `progress`, where the app reads it.
-            let _ = send(t.as_mut(), driver.as_ref(), &job, patience, &cancel, &progress);
+            let _ = send(t.as_mut(), driver.as_ref(), &job, patience, &controls, &progress);
         })
         .map_err(|e| format!("couldn't start sending: {e}"))?;
     Ok(running)

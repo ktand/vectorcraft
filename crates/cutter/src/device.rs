@@ -80,6 +80,9 @@ pub struct Encoded {
     /// What the job asked for that the machine can't do exactly (a speed clamped, a setting
     /// approximated).
     pub warnings: Vec<String>,
+    /// Before chunk n, the sender waits for the user to go on to the group named (a job cut in
+    /// groups, C5.3), in order.
+    pub pauses: Vec<(usize, String)>,
 }
 
 /// One family of machines: what it accepts and how it answers. No I/O: the sender does that.
