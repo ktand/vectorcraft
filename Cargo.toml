@@ -54,6 +54,7 @@ vectorcraft-scriptcheck = { path = "crates/scriptcheck" }
 vectorcraft-cutjob = { path = "crates/cutjob" }
 vectorcraft-cutting = { path = "crates/cutting" }
 vectorcraft-cutter = { path = "crates/cutter" }
+vectorcraft-cutter-silhouette = { path = "crates/cutter-silhouette" }
 
 # foundation
 kurbo = { version = "0.13", features = ["serde"] }

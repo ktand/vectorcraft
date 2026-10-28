@@ -52,7 +52,7 @@ crates/
   cutjob/              NEW  L0 standalone  job model, validation, statistics, simulation timeline (serde only)
   cutting/             NEW  L3             document → CutJob: extract, flatten, transform, clip, order, validate
   cutter/              NEW  L2             Device and Transport traits, VirtualCutter, device registry
-  cutter-silhouette/   NEW  L2             Silhouette protocol encoder and model table (no I/O)
+  cutter-silhouette/   NEW  L3             Silhouette protocol encoder and model table (no I/O)
   engine/              EDIT L5             + cmd/cutting.rs (the cutting.* commands), one line in cmd.rs
   ui-egui/             EDIT L6             + panels/cutting.rs, canvas/cutting_overlay.rs, Cutting workspace, UI commands
 apps/vectorcraft/      EDIT L7             + cutters.rs: USB transport (Phase 4)
@@ -80,7 +80,7 @@ apps ─────────┴──► cutter-silhouette ─────�
   `cutjob`. It has no UI and does no I/O.
 - **`vectorcraft-cutter` (L2)** depends only on `cutjob`. It defines the device traits and the virtual cutter,
   which simulates execution and records it.
-- **`vectorcraft-cutter-silhouette` (L2)** depends on `cutter` and `cutjob`. It's pure encoding (job →
+- **`vectorcraft-cutter-silhouette` (L3)** depends on `cutter` and `cutjob` (L3 rather than L2: `cutter` is L2 itself). It's pure encoding (job →
   bytes, status bytes → state), so the tests run without hardware. Each future machine family gets a crate of
   its own, which isolates protocol code and its provenance.
 - **Engine glue** is one module, `crates/engine/src/cmd/cutting.rs`. It reads settings and per-object ops,
@@ -265,8 +265,8 @@ Each hook is a few lines. Keep them in this list so a merge from `upstream` know
 | File | Change |
 |---|---|
 | `AGENTS.md`, `CLAUDE.md` | the "Fork: cutting workspace" section at the end of each (keep the two identical) |
-| `Cargo.toml` (workspace) | `[workspace.dependencies]` path entries (`cutjob`, `cutting`, `cutter` so far); members are already `crates/*` |
-| `xtask/src/layers.rs` | rows appended to `TABLE` (`cutjob` Standalone, `cutting` L3, `cutter` L2); `["svg", "cutting"]` in `INTRA_LAYER_ORDER` (the golden tests open SVGs) |
+| `Cargo.toml` (workspace) | `[workspace.dependencies]` path entries (`cutjob`, `cutting`, `cutter`, `cutter-silhouette` so far); members are already `crates/*` |
+| `xtask/src/layers.rs` | rows appended to `TABLE` (`cutjob` Standalone, `cutting` L3, `cutter` L2, `cutter-silhouette` L3); `["svg", "cutting"]` in `INTRA_LAYER_ORDER` (the golden tests open SVGs) |
 | `crates/engine/tests/it/main.rs` | `mod cutting;` (every engine-level cutting test lives under `tests/it/cutting/`) |
 | `crates/engine/Cargo.toml`, `src/cmd.rs` | dependency on `vectorcraft-cutting`; `mod cutting;` + `v.extend(cutting::specs())` |
 | `crates/ui-egui/…` | `Cargo.toml`: the two cutting dependencies; `state.rs`: `ViewFlags::cutting` and its default; `menus/ui_commands.rs`, `menus/run.rs`, `menus/state.rs`, `menus/tree.rs`: `view.cutting`'s entry, toggle, checkmark and View-menu item; `canvas.rs`: `mod cutting_overlay;`, the mat plate's call after the pasteboard fill (behind the art) and the overlay's call (over it); `tests.rs`: `mod cutting;`; `lib.rs`: `mod cutting;` (the shared job cache); `panels.rs`: `pub mod cutting;` and its `show` arm; `state.rs`: the panel's `ICON_PANELS` row and its `ICON_PANEL_GROUPS` group; `menus/tree.rs`: Window › Cutting; `workspaces.rs`: the built-in Cutting workspace, `CUTTING`, and one line in `apply` (the workspace turns Cutting View on, the others off) |
