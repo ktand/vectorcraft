@@ -4,7 +4,7 @@
 use serde_json::{Map, Value, json};
 
 use crate::mat::{CUSTOM, MAT_PRESETS, MatGeometry};
-use crate::read::{choice, num, object, pair, unknown, whole};
+use crate::read::{choice, flag, num, object, pair, unknown, whole};
 
 /// `Document::unknown` key the settings live under.
 pub const DOCUMENT_KEY: &str = "cutting";
@@ -211,6 +211,9 @@ pub struct CuttingSettings {
     pub tolerance_mm: f64,
     pub operations: Operations,
     pub ordering: Ordering,
+    /// Paths that leave the cut area are cut up to its edge (with a warning) instead of stopping
+    /// the job.
+    pub clip_to_mat: bool,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -228,6 +231,7 @@ impl Default for CuttingSettings {
             tolerance_mm: 0.025,
             operations: Operations::default(),
             ordering: Ordering::InsideFirst,
+            clip_to_mat: false,
             extra: Map::new(),
         }
     }
@@ -239,8 +243,8 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 10] =
-        ["version", "mat", "customMatMm", "orientation", "artboard", "offsetMm", "defaultOp", "toleranceMm", "operations", "ordering"];
+    const KEYS: [&'static str; 11] =
+        ["version", "mat", "customMatMm", "orientation", "artboard", "offsetMm", "defaultOp", "toleranceMm", "operations", "ordering", "clipToMat"];
 
     /// The settings in `v` (a document's `unknown["cutting"]`, from a file): anything that isn't an
     /// object gives the defaults. Never fails.
@@ -263,6 +267,7 @@ impl CuttingSettings {
                 extra: ops.map(|o| unknown(o, &["cut", "score"])).unwrap_or_default(),
             },
             ordering: choice(m, "ordering", &Ordering::CHOICES, d.ordering),
+            clip_to_mat: flag(m, "clipToMat", d.clip_to_mat),
             extra: unknown(m, &Self::KEYS),
         }
     }
@@ -283,6 +288,7 @@ impl CuttingSettings {
         m.insert("toleranceMm".into(), json!(self.tolerance_mm));
         m.insert("operations".into(), Value::Object(ops));
         m.insert("ordering".into(), json!(self.ordering.id()));
+        m.insert("clipToMat".into(), json!(self.clip_to_mat));
         Value::Object(m)
     }
 

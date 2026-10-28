@@ -9,11 +9,13 @@
 //! - [`placement`]: where the settings' artboard lies on the mat, document points to mat mm.
 //! - [`select`]: which objects a job cuts, and with which operation.
 //! - [`geometry`]: the outlines each of them cuts along, as drawn.
+//! - [`prepare`]: those outlines on the mat, in millimetres, flattened.
 #![forbid(unsafe_code)]
 
 pub mod geometry;
 pub mod ops;
 pub mod placement;
+pub mod prepare;
 pub mod select;
 
 use vectorcraft_cutjob::{CuttingSettings, DOCUMENT_KEY};

@@ -29,7 +29,8 @@ fn the_defaults_round_trip_as_documented() {
                 "cut": {"force": 0.3, "speedMmS": 100.0, "passes": 1, "overcutMm": 0.0},
                 "score": {"force": 0.1, "speedMmS": 100.0, "passes": 1, "overcutMm": 0.0}
             },
-            "ordering": "insideFirst"
+            "ordering": "insideFirst",
+            "clipToMat": false
         })
     );
     assert_eq!(read(v), d);
@@ -52,6 +53,7 @@ fn every_setting_round_trips() {
             extra: Map::new(),
         },
         ordering: Ordering::Document,
+        clip_to_mat: true,
         extra: Map::new(),
     };
     assert_eq!(read(s.to_value()), s);

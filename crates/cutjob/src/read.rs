@@ -28,6 +28,11 @@ pub(crate) fn pair(m: &Map<String, Value>, key: &str, min: f64, max: f64, defaul
     }
 }
 
+/// `m[key]` as a switch.
+pub(crate) fn flag(m: &Map<String, Value>, key: &str, default: bool) -> bool {
+    m.get(key).and_then(Value::as_bool).unwrap_or(default)
+}
+
 /// `m[key]` as one of `choices` by its id.
 pub(crate) fn choice<T: Copy>(m: &Map<String, Value>, key: &str, choices: &[(&str, T)], default: T) -> T {
     let Some(s) = m.get(key).and_then(Value::as_str) else { return default };
