@@ -9,6 +9,7 @@
 //! - [`placement`]: where the settings' artboard lies on the mat, document points to mat mm.
 //! - [`select`]: which objects a job cuts, and with which operation.
 //! - [`geometry`]: the outlines each of them cuts along, as drawn.
+//! - [`clip`]: those outlines cut to the clipping masks around them.
 //! - [`prepare`]: those outlines on the mat, in millimetres, flattened.
 //! - [`order`]: the order they are cut in.
 //! - [`preview`]: a job as an SVG at the mat's size.
@@ -16,6 +17,7 @@
 //!   the job is made from it each time.
 #![forbid(unsafe_code)]
 
+pub mod clip;
 pub mod geometry;
 pub mod ops;
 pub mod order;

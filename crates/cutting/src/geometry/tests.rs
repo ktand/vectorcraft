@@ -122,14 +122,6 @@ fn images_are_left_out_with_a_warning() {
 }
 
 #[test]
-fn clipped_art_is_cut_whole_with_a_warning() {
-    let (d, id) = with(|d| square(d, 10.0, 10.0, 10.0));
-    let (out, warnings) = outlines(&d, &[Item { id, op: OpKind::Score, clips: vec![NodeId(1)] }]);
-    assert_eq!((out.len(), out[0].op), (1, OpKind::Score));
-    assert!(warnings.iter().any(|w| w.message.contains("clipping")));
-}
-
-#[test]
 fn hidden_members_of_a_symbols_art_arent_cut() {
     let mut d = Document::new(200.0, 200.0);
     let shown = square(&mut d, 0.0, 0.0, 10.0);

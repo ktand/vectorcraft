@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 570eb3e3c7d7dd6ce0980625c506fef34575dcfda4f523443b40cff4bf1999df # shrinks to objs = [Obj { art: Group { children: [Group { children: [Path { points: [], closed: false, curve: false }, Path { points: [(10.0, 10.0), (10.0, -1e300)], closed: false, curve: true }], clip: false }, Path { points: [(10.0, 10.0), (10.0, 10.0)], closed: false, curve: false }], clip: true }, op: None, visible: true }], settings = Object {}

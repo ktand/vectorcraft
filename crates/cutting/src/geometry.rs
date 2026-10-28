@@ -8,7 +8,9 @@
 //! line to cut and are left out with a warning. An outline drawn twice in the same object (type's
 //! runs under its own fill) is cut once.
 //!
-//! Clip groups and clipping layers aren't applied yet: art inside one is cut whole, with a warning.
+//! Art inside clip groups and clipping layers is cut only where it shows ([`crate::clip`]); a
+//! clip group inside a symbol's or a live object's own art isn't applied yet (cut whole, with a
+//! warning).
 
 use std::collections::HashSet;
 
@@ -37,7 +39,10 @@ const MAX_SUBPATHS: usize = 100_000;
 struct Notes {
     images: bool,
     meshes: bool,
+    /// A clip group inside the object's own art (a symbol's, a live object's): not applied.
     clipped: bool,
+    /// The booleans refused to clip an outline, or it was too large to: cut whole.
+    clip_failed: bool,
     too_deep: bool,
     no_outline: bool,
     too_many: bool,
@@ -50,11 +55,29 @@ pub fn outlines(d: &Document, items: &[Item]) -> (Vec<Outline>, Vec<JobWarning>)
     for item in items {
         let Some(n) = d.node(item.id) else { continue };
         let mut paths = vec![];
-        let mut notes = Notes { clipped: !item.clips.is_empty(), ..Notes::default() };
+        let mut notes = Notes::default();
         collect(d, &symbols, n, 0, &mut paths, &mut notes);
+        let mut subs: Vec<(BezPath, bool)> = paths.iter().flat_map(subpaths).collect();
+        // The clip groups around it, outermost first: each clips what the one outside it left.
+        for &clip in &item.clips {
+            let Some(region) = crate::clip::region(d, clip) else {
+                // Clipped to nothing: hidden, as it is drawn.
+                subs.clear();
+                break;
+            };
+            subs = subs
+                .into_iter()
+                .flat_map(|(p, closed)| {
+                    crate::clip::clip(&p, closed, &region).unwrap_or_else(|| {
+                        notes.clip_failed = true;
+                        vec![(p, closed)]
+                    })
+                })
+                .collect();
+        }
         let mut seen = HashSet::new();
         let mut index = 0u32;
-        for (path, closed) in paths.iter().flat_map(subpaths) {
+        for (path, closed) in subs {
             if index as usize >= MAX_SUBPATHS {
                 notes.too_many = true;
                 break;
@@ -73,7 +96,8 @@ pub fn outlines(d: &Document, items: &[Item]) -> (Vec<Outline>, Vec<JobWarning>)
         };
         warn(notes.images, "an image has no line to cut and is left out");
         warn(notes.meshes, "a gradient mesh has no line to cut and is left out");
-        warn(notes.clipped, "clipping masks aren't applied yet: the art inside one is cut whole");
+        warn(notes.clipped, "clipping masks inside symbols and live objects aren't applied yet: the art inside one is cut whole");
+        warn(notes.clip_failed, "a clipping mask couldn't be applied to some of the art: it is cut whole");
         warn(notes.too_deep, "art nested too deep is left out");
         warn(notes.no_outline, "type couldn't be outlined (is its font missing?) and is left out");
         warn(notes.too_many, "only the first 100000 outlines of an object are cut");
@@ -138,7 +162,7 @@ fn walk(d: &Document, symbols: &SymbolBoxes, n: &Node, depth: usize, paths: &mut
 
 /// `p` split into subpaths that draw something, each with whether it is closed. A segment after
 /// a close with no move before it starts again from the closed subpath's first point.
-fn subpaths(p: &BezPath) -> Vec<(BezPath, bool)> {
+pub(crate) fn subpaths(p: &BezPath) -> Vec<(BezPath, bool)> {
     let mut out = vec![];
     let mut cur = BezPath::new();
     let mut start = None;
