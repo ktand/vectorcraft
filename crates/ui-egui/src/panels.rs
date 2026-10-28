@@ -16,6 +16,8 @@ pub mod color;
 pub mod color_guide;
 pub mod color_themes;
 pub mod css_properties;
+// Fork: the cutting workspace.
+pub mod cutting;
 pub mod doc_info;
 pub mod flattener_preview;
 pub mod glyphs;
@@ -179,6 +181,7 @@ pub fn show_icon_panel(app: &mut VectorcraftApp, ui: &mut Ui, id: &str) {
         links::ID => links::show(app, ui),
         asset_export::ID => asset_export::show(app, ui),
         css_properties::ID => css_properties::show(app, ui),
+        cutting::ID => cutting::show(app, ui),
         id if library_panel::parse(id).is_some() => library_panel::show(app, ui, id),
         _ => {
             dim_label(ui, tl!("This panel is on the roadmap (see the parity plan)."));

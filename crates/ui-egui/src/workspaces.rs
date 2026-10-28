@@ -134,8 +134,18 @@ pub fn builtins() -> Vec<Workspace> {
             x.task_bar = true;
             x.open_panel = Some("align".into());
         }),
+        // Fork: the cutting workspace. Switching to it turns Cutting View on ([`apply`]).
+        w(CUTTING, &|x| {
+            x.control_bar = true;
+            x.rulers = true;
+            x.open_panel = Some(crate::panels::cutting::ID.into());
+        }),
     ]
 }
+
+/// Fork: the Cutting workspace (Window → Workspace → Cutting): the mat over the art, the Cutting
+/// panel open; every other workspace hides the mat.
+pub const CUTTING: &str = "Cutting";
 
 /// Preferences › Devices › Enable Touch Workspace (#394): on, a touch screen switches to the Touch
 /// workspace; off, or when no touch screen is reported, the workspace before that switch is
@@ -213,6 +223,8 @@ pub fn apply(ui: &mut UiState, w: &Workspace) {
     ui.dock_width = w.dock_width;
     crate::state::sanitize_toolbar_pos(&mut ui.toolbar_pos);
     ui.flyout = None;
+    // Fork: the Cutting workspace is the cutting mode.
+    ui.view.cutting = w.name.eq_ignore_ascii_case(CUTTING);
     ui.workspace = w.name.clone();
 }
 

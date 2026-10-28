@@ -22,6 +22,8 @@ pub mod community;
 pub mod control;
 pub mod credits;
 pub mod cursors;
+// Fork: what the Cutting panel and the canvas share.
+pub(crate) mod cutting;
 pub mod dialogs;
 pub mod dock;
 mod edit_toolbar;
