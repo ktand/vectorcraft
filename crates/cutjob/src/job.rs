@@ -279,6 +279,7 @@ impl CutJob {
                 "depth": o.tool.depth,
                 "accel": o.tool.accel,
                 "cornerOvercutMm": o.tool.corner_overcut_mm,
+                "bladeOffsetMm": o.tool.blade_offset_mm,
             })).collect::<Vec<_>>(),
             "paths": self.paths.iter().map(|p| json!({
                 "op": p.op,

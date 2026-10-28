@@ -60,7 +60,7 @@ In the order the encoder sends them. "n" is a whole number.
 | Depth | `TF` n | AutoBlade depth 0–10, holder 1 only | [IS] |
 | Acceleration | `TJ` n | 1–3 | [IS] |
 | Track enhancing | `FY0` / `FY1` | one turns it on, the other off; which is which isn't stated (**to confirm**; the encoder sends `FY1` for on) | [IS] |
-| Blade offset | `FC` n | the blade's offset in machine units (0.9 mm, 18 units, by default); `FC0` for a pen | [IS] |
+| Blade offset | `FC` n | the blade's offset in machine units (0.9 mm, 18 units, by default); `FC0` for a pen. The machine turns the blade round corners by it, so the paths sent are where the tip cuts (we send each operation's `bladeOffsetMm`, C5.4) | [IS] |
 | Corners, lift | `FF` …, `FE` … | corner handling and lift between strokes | [IS] |
 | Move | `M` y,x | travel with the blade up | [IS] |
 | Cut | `D` y,x | cut a straight line to the point, blade down | [IS] |

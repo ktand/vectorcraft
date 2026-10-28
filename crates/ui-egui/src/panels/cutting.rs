@@ -254,7 +254,7 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
 }
 
 /// How each operation drives the blade, force and speed in the machine's own steps (C5.2), passes,
-/// overcut, blade depth, acceleration and the corner overcut, set through `cutting.settings.set`
+/// overcut, blade depth, acceleration, the corner overcut and the blade offset, set through `cutting.settings.set`
 /// (values typed out of range are brought into it).
 fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     material_rows(app, ui);
@@ -313,6 +313,13 @@ fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         widgets::label_row(ui, tl!("Corners"), LABEL_W, |ui| {
             if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "corners"), get("cornerOvercutMm", 0.0), " mm past", 1, 72.0, 0.1, 0.0, &[]) {
                 set_tool(app, "cornerOvercutMm", (v.clamp(0.0, 2.0) * 10.0).round() / 10.0);
+            }
+        });
+        // The machine turns the blade round corners by this; the usual blade's until set.
+        let offset = tool["bladeOffsetMm"].as_f64().unwrap_or(silhouette::BLADE_OFFSET_MM);
+        widgets::label_row(ui, tl!("Blade offset"), LABEL_W, |ui| {
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "blade-offset"), offset, " mm", 2, 64.0, 0.05, 0.0, &[]) {
+                set_tool(app, "bladeOffsetMm", (v.clamp(0.0, 2.0) * 20.0).round() / 20.0);
             }
         });
     }

@@ -141,7 +141,16 @@ fn machine_settings_reach_the_job() {
     assert_eq!(j["job"]["paths"][0]["points"].as_array().unwrap().len(), 10);
     s.execute("cutting.settings.set", &json!({"operations": {"cut": {"depth": null}}})).unwrap();
     assert_eq!(job(&mut s)["job"]["operations"][0]["depth"], Value::Null);
-    for bad in [json!({"operations": {"cut": {"depth": 12}}}), json!({"operations": {"cut": {"accel": 0}}}), json!({"trackEnhancing": "yes"})] {
+    // C5.4: the blade offset, null for the usual blade's.
+    assert_eq!(job(&mut s)["job"]["operations"][0]["bladeOffsetMm"], Value::Null);
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"bladeOffsetMm": 0.25}}})).unwrap();
+    assert_eq!(job(&mut s)["job"]["operations"][0]["bladeOffsetMm"], json!(0.25));
+    for bad in [
+        json!({"operations": {"cut": {"depth": 12}}}),
+        json!({"operations": {"cut": {"accel": 0}}}),
+        json!({"trackEnhancing": "yes"}),
+        json!({"operations": {"cut": {"bladeOffsetMm": 3}}}),
+    ] {
         assert!(s.execute("cutting.settings.set", &bad).is_err(), "{bad}");
     }
 }

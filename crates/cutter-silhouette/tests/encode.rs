@@ -202,3 +202,20 @@ fn groups_pause_between_them() {
     let before = String::from_utf8_lossy(&e.chunks[..*at].concat()).to_string();
     assert!(before.contains("M20,20\u{3}") && !before.contains("M100,100"), "{before:?}");
 }
+
+/// C5.4: the blade offset is the machine's to turn the blade by: `FC` in its units (20 a mm),
+/// the usual blade's 0.9 mm until set, 0 for a pen; the paths are left where the tip cuts.
+#[test]
+fn the_blade_offset_goes_to_the_machine() {
+    let fc = |offset: Option<f64>| {
+        let t = ToolSettings { blade_offset_mm: offset, ..tool(0.5, 100.0, 1, 0.0) };
+        let j = job(vec![Operation { kind: OpKind::Cut, tool: t }], vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]])], "silhouette.12x12");
+        let text = String::from_utf8_lossy(&Silhouette.encode(&j, &cameo4()).unwrap().chunks.concat()).to_string();
+        let fc = text.split('\u{3}').find(|c| c.starts_with("FC")).unwrap_or_default().to_string();
+        assert!(text.contains("M20,20\u{3}D40,40\u{3}"), "the path as it is: {text:?}");
+        fc
+    };
+    assert_eq!(fc(None), "FC18");
+    assert_eq!(fc(Some(0.25)), "FC5");
+    assert_eq!(fc(Some(0.0)), "FC0");
+}
