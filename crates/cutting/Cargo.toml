@@ -22,3 +22,5 @@ serde_json = { workspace = true }
 vectorcraft-text = { workspace = true, features = ["bundled-fonts"] }
 # The golden tests open hand-written SVGs.
 vectorcraft-svg = { workspace = true }
+# The fuzz test makes random documents.
+proptest = { workspace = true }

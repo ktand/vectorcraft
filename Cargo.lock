@@ -6168,6 +6168,7 @@ dependencies = [
 name = "vectorcraft-cutting"
 version = "0.17.0"
 dependencies = [
+ "proptest",
  "serde_json",
  "vectorcraft-cutjob",
  "vectorcraft-doc",
