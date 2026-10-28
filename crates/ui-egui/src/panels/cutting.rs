@@ -338,7 +338,16 @@ fn find_machines(app: &mut VectorcraftApp) -> Vec<(String, String)> {
     let r = app.session.execute("cutting.devices", &json!({})).unwrap_or_default();
     r["devices"]
         .as_array()
-        .map(|a| a.iter().filter_map(|d| Some((d["id"].as_str()?.to_string(), d["model"].as_str()?.to_string()))).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|d| {
+                    let model = d["model"].as_str()?;
+                    // A machine that isn't there says so wherever it is named.
+                    let label = if d["simulated"] == true { format!("{model} {}", tl!("(simulated)")) } else { model.to_string() };
+                    Some((d["id"].as_str()?.to_string(), label))
+                })
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -468,6 +477,66 @@ mod tests {
         app.run("cutting.settings.set", json!({"mat": "custom", "offsetMm": [300, 0]})).unwrap();
         frame(&mut app);
         assert!(crate::cutting::job(&app, &ctx).is_some_and(|j| j.is_err()), "off the mat: no job");
+    }
+
+    fn panel_texts(app: &mut VectorcraftApp, ctx: &egui::Context) -> Vec<String> {
+        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 2400.0))), ..Default::default() };
+        let mut out = ctx.run_ui(raw, |ui| show(app, ui));
+        out.textures_delta.clear();
+        out.shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// C4.8 and C5.3: a simulated cutter is named as one, and a send cut by layer that has paused
+    /// before the second says so and offers Continue. The only test here that installs machines.
+    #[test]
+    fn a_paused_send_offers_continue() {
+        use std::sync::Arc;
+        use std::time::Duration;
+        use vectorcraft_cutter::simulated::{Behaviour, SIMULATED_ID_PREFIX, Sent, SimulatedMachine};
+        let quick = SimulatedMachine {
+            info: vectorcraft_cutter::DeviceInfo {
+                id: format!("{SIMULATED_ID_PREFIX}quick"),
+                vendor_id: vectorcraft_cutter_silhouette::VENDOR_ID,
+                product_id: 0x1137,
+                name: "Simulated cutter".into(),
+            },
+            behaviour: Behaviour {
+                query: vec![0x1B, 0x05],
+                ready: b"0".to_vec(),
+                moving: b"1".to_vec(),
+                busy_per_write: Duration::ZERO,
+                busy_per_byte: Duration::ZERO,
+            },
+            sent: Sent::default(),
+        };
+        vectorcraft_cutter::registry::install(Some(Arc::new(quick)));
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        app.run("layer.new", json!({"name": "Gold"})).unwrap();
+        app.run("shape.rectangle", json!({"x": 100, "y": 100, "width": 50, "height": 50})).unwrap();
+        app.run("cutting.settings.set", json!({"grouping": "layer"})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Cameo 4 (simulated)"), "{texts:?}");
+        app.run("cutting.send", json!({})).unwrap();
+        for _ in 0..500 {
+            if app.session.execute("cutting.status", &json!({})).unwrap()["waitingFor"] == "Gold" {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t.starts_with("Paused before Gold.")), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "Continue") && texts.iter().any(|t| t == "Cancel"), "{texts:?}");
+        app.run("cutting.cancel", json!({})).unwrap();
+        vectorcraft_cutter::registry::install(None);
     }
 
     /// C5.3: the Groups choice shows what the document cuts by.

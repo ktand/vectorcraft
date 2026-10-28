@@ -22,6 +22,7 @@ vectorcraft-ui-egui = { workspace = true }
 vectorcraft-text = { workspace = true }
 # Fork: the cutting workspace: the USB cutters the app reaches (src/cutters.rs).
 vectorcraft-cutter = { workspace = true }
+vectorcraft-cutter-silhouette = { workspace = true }
 # Shared across the Craft suite: decides who draws the window frame per desktop (compositor vs app)
 # so VectorCraft matches the rest on Linux. `egui` adds `craft_window::decorate`. See #217.
 craft-window = { workspace = true }

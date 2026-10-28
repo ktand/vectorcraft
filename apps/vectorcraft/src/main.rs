@@ -125,6 +125,7 @@ Options:
                                  (may be given more than once)
   --in-window-menus              Keep the menus inside the window on macOS
                                  (or VECTORCRAFT_IN_WINDOW_MENUS=1)
+  --virtual-cutter               List a simulated cutter to send cut jobs to
   --version                      Print the version and exit
   -h, --help                     Print this help and exit
 
@@ -141,8 +142,6 @@ fn main() -> std::process::ExitCode {
     // Before any thread starts: the pointer must find a cursor theme on Wayland (#2450).
     #[cfg(target_os = "linux")]
     cursor_theme::apply();
-    // Fork: the USB cutters the cutting.* commands can send to.
-    cutters::install();
     // Validate roots before logging, font scans, preferences or the window: a missing value
     // must not clear an environment root and start the control channel without confinement.
     let mut control = automation_args::ControlArg::default();
@@ -151,6 +150,7 @@ fn main() -> std::process::ExitCode {
         automation_args::AutomationArgs::new(root_env("VECTORCRAFT_AUTOMATION_READ_ROOT"), root_env("VECTORCRAFT_AUTOMATION_WRITE_ROOT"));
     let mut files = Vec::new();
     let mut in_window_menus = std::env::var_os("VECTORCRAFT_IN_WINDOW_MENUS").is_some_and(|v| !v.is_empty() && v != "0");
+    let mut virtual_cutter = false;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match roots_args.consume(&a, &mut args).and_then(|root| if root { Ok(true) } else { control.consume(&a, &mut args) }) {
@@ -163,6 +163,7 @@ fn main() -> std::process::ExitCode {
         }
         match a.as_str() {
             "--in-window-menus" => in_window_menus = true,
+            "--virtual-cutter" => virtual_cutter = true,
             "--version" => {
                 println!("vectorcraft {}", env!("CARGO_PKG_VERSION"));
                 return std::process::ExitCode::SUCCESS;
@@ -178,6 +179,8 @@ fn main() -> std::process::ExitCode {
             _ => files.push(a),
         }
     }
+    // Fork: the cutters the cutting.* commands can send to.
+    cutters::install(virtual_cutter);
     let automation_args::AutomationArgs { read_roots, write_roots, .. } = roots_args;
     // After the arguments: `--control` and `--version` win over a bad environment value.
     let control_port = match control.port {

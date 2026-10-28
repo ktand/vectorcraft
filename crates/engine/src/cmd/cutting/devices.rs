@@ -21,7 +21,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Machines",
             [],
             None,
-            "{} the connected cutting machines this version can send to → {devices: [{id, model, name}]} (empty without a connected machine or where the app can't reach USB)",
+            "{} the connected cutting machines this version can send to → {devices: [{id, model, name, simulated: a machine that isn't there (the app's --virtual-cutter)}]} (empty without a connected machine or where the app can't reach USB)",
             always,
             devices
         ),
@@ -76,7 +76,13 @@ fn machines() -> Vec<(DeviceInfo, Arc<dyn Driver>)> {
 }
 
 fn devices(_: &mut Session, _: &Value) -> Result<Value> {
-    let list: Vec<Value> = machines().iter().map(|(d, x)| json!({"id": d.id, "model": x.model(d), "name": d.name})).collect();
+    let list: Vec<Value> = machines()
+        .iter()
+        .map(|(d, x)| {
+            let simulated = d.id.starts_with(vectorcraft_cutter::SIMULATED_ID_PREFIX);
+            json!({"id": d.id, "model": x.model(d), "name": d.name, "simulated": simulated})
+        })
+        .collect();
     Ok(json!({ "devices": list }))
 }
 

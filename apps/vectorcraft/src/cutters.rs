@@ -5,14 +5,26 @@
 //! `usbprint.sys` drives (no vendor driver). It is found through the USB-printer device interface
 //! and opened as a file: writes go to the machine, reads bring its answers. Nothing is installed
 //! or replaced, so the maker's own software keeps working. Elsewhere none is installed yet.
+//!
+//! With `--virtual-cutter` a simulated Cameo 4 is listed too (C4.8): sending to it goes through
+//! everything a real send does, without a machine.
 
-#[cfg(windows)]
-pub fn install() {
-    vectorcraft_cutter::registry::install(Some(std::sync::Arc::new(windows_usb::UsbPrint)));
+use std::sync::Arc;
+
+use vectorcraft_cutter::DeviceProvider;
+use vectorcraft_cutter::simulated::Providers;
+
+/// Installs the machines the app can send to: USB cutters, and a simulated one with `simulated`.
+pub fn install(simulated: bool) {
+    let mut providers: Vec<Arc<dyn DeviceProvider>> = vec![];
+    #[cfg(windows)]
+    providers.push(Arc::new(windows_usb::UsbPrint));
+    if simulated {
+        providers.push(Arc::new(vectorcraft_cutter_silhouette::simulated_cameo4()));
+    }
+    let provider: Option<Arc<dyn DeviceProvider>> = (!providers.is_empty()).then(|| Arc::new(Providers(providers)) as Arc<dyn DeviceProvider>);
+    vectorcraft_cutter::registry::install(provider);
 }
-
-#[cfg(not(windows))]
-pub fn install() {}
 
 #[cfg(windows)]
 #[allow(unsafe_code)]
