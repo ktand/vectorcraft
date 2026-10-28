@@ -249,6 +249,10 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     // on, the canvas multiplies it with the paper color: each sRGB channel is artboard × paper / 255,
     // rounded. The transparency grid, while it shows, covers it as it covers the others.
     painter.rect_filled(rect, 0.0, t.pasteboard);
+    // Fork: the cutting mat, behind the artboards and the art.
+    if app.ui.view.cutting {
+        cutting_overlay::mat_plate(app, &painter, &xf);
+    }
     if app.ui.view.artboards && !app.ui.view.outline {
         let setup = &doc.setup;
         let grid = (st.transparency_grid && setup.background == vectorcraft_doc::Background::Transparent).then(|| checker_texture(ui.ctx(), setup));

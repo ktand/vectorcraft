@@ -26,30 +26,38 @@ fn frame_texts(app: &mut VectorcraftApp, ctx: &egui::Context) -> Vec<String> {
         .collect()
 }
 
+/// The 12 × 12 in mat: numbered each inch along the top and left, its size in a corner, the
+/// origin's unit; a custom mat numbered each 50 mm.
 #[test]
-fn the_cutting_view_draws_the_mat_in_millimetres() {
+fn the_cutting_view_draws_the_mat_as_printed() {
     let mut app = app();
     let ctx = egui::Context::default();
     let texts = frame_texts(&mut app, &ctx);
-    assert!(!texts.iter().any(|t| t.ends_with(" mm")), "hidden by default: {texts:?}");
+    assert!(!texts.iter().any(|t| t == "12 × 12 in"), "hidden by default: {texts:?}");
     assert!(crate::menus::checked(&app, "view.cutting", &json!({})) != Some(true));
     app.run("view.cutting", json!({})).unwrap();
     assert_eq!(crate::menus::checked(&app, "view.cutting", &json!({})), Some(true));
-    // Zoomed in enough for a label every 50 mm, along both edges of the 304.8 mm mat.
     app.run("view.setZoom", json!({"zoom": 100})).unwrap();
     let texts = frame_texts(&mut app, &ctx);
-    for mm in [50, 100, 150, 200, 250, 300] {
-        assert_eq!(texts.iter().filter(|t| **t == format!("{mm} mm")).count(), 2, "{mm} mm on both edges: {texts:?}");
+    for inch in 1..=11 {
+        assert_eq!(texts.iter().filter(|t| **t == inch.to_string()).count(), 2, "{inch} on both edges: {texts:?}");
     }
-    assert!(texts.iter().any(|t| t == "0"), "the origin");
+    assert!(texts.iter().any(|t| t == "12 × 12 in"), "the size");
+    assert!(texts.iter().any(|t| t == "in"), "the origin's unit");
     assert!(!texts.iter().any(|t| t == "Off the mat"), "the artboard fits");
     app.run("cutting.settings.set", json!({"offsetMm": [250, 0]})).unwrap();
     assert!(frame_texts(&mut app, &ctx).iter().any(|t| t == "Off the mat"));
+    app.run("cutting.settings.set", json!({"mat": "custom", "customMatMm": [200, 300], "offsetMm": [0, 0]})).unwrap();
+    let texts = frame_texts(&mut app, &ctx);
+    for mm in [50, 100, 150] {
+        assert_eq!(texts.iter().filter(|t| **t == mm.to_string()).count(), 2, "{mm} on both edges: {texts:?}");
+    }
+    assert!(texts.iter().any(|t| t == "200 × 300 mm") && texts.iter().any(|t| t == "mm"), "{texts:?}");
     app.run("view.cutting", json!({})).unwrap();
-    assert!(!frame_texts(&mut app, &ctx).iter().any(|t| t.ends_with(" mm")));
+    assert!(!frame_texts(&mut app, &ctx).iter().any(|t| t == "200 × 300 mm"));
 }
 
-/// Zoomed out, labels thin out to stay readable rather than overlap.
+/// Zoomed out, numbers thin out to stay readable rather than overlap.
 #[test]
 fn labels_thin_out_when_zoomed_out() {
     let mut app = app();
@@ -57,7 +65,7 @@ fn labels_thin_out_when_zoomed_out() {
     app.run("view.cutting", json!({})).unwrap();
     app.run("view.setZoom", json!({"zoom": 10})).unwrap();
     let texts = frame_texts(&mut app, &ctx);
-    assert!(!texts.iter().any(|t| t == "50 mm"), "{texts:?}");
+    assert!(!texts.iter().any(|t| t == "1"), "{texts:?}");
 }
 
 /// C3.6: the job's toolpaths are numbered in cutting order over the mat; the panel's Show
@@ -69,6 +77,8 @@ fn the_cutting_view_numbers_the_toolpaths() {
     for x in [10, 150] {
         app.run("shape.rectangle", json!({"x": x, "y": 10, "width": 50, "height": 50})).unwrap();
     }
+    // A metric mat, numbered 50, 100…: the paths' numbers stand out from the mat's.
+    app.run("cutting.settings.set", json!({"mat": "custom"})).unwrap();
     app.run("view.cutting", json!({})).unwrap();
     app.run("view.setZoom", json!({"zoom": 100})).unwrap();
     let texts = frame_texts(&mut app, &ctx);

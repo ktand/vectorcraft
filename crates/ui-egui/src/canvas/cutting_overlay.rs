@@ -1,38 +1,151 @@
-//! Fork: View › Cutting View (`docs/cutting/ARCHITECTURE.md`): the cutting mat drawn over the art
-//! where the document's cutting settings lay the artboard on it. The mat's outline, its cut area
-//! (dashed, where it is smaller), a 10 mm grid with every 50 mm stronger, labels in millimetres
-//! from the cut area's origin along the top and left edges, and the artboard in a warning colour
-//! when the cut area doesn't hold all of it. Grid lines closer than a few pixels are left out.
-//! Over the mat, the cut job's toolpaths in cutting order ([`toolpaths`]; the Cutting panel's
-//! Show Toolpaths), from the job `crate::cutting` keeps for the document.
+//! Fork: View › Cutting View (`docs/cutting/ARCHITECTURE.md`): the cutting mat where the
+//! document's cutting settings lay the artboard on it.
+//!
+//! [`mat_plate`] draws the mat as the physical object, behind the artboards and the art (C2.7): a
+//! grey plate with rounded corners reaching past the grid by the mat's margin, the grid printed
+//! on it (inches on an imperial mat, numbered each inch; 10 mm on others, numbered each 50 mm),
+//! ruler ticks down the right edge, the feed arrow at the top (the edge the machine takes first)
+//! and the mat's size in a corner. No maker's logo: the mat is drawn, not copied. Lines and
+//! numbers closer than a few pixels are left out.
+//!
+//! [`cutting_overlay`] draws over the art what the art mustn't hide: the cut area where it is
+//! smaller than the mat, the origin, the artboard in a warning colour when the cut area doesn't
+//! hold it, and the cut job's toolpaths in cutting order ([`toolpaths`]; the Cutting panel's Show
+//! Toolpaths) with its playback, from the job `crate::cutting` keeps for the document.
 
 use vectorcraft_cutjob::RectMm;
-use vectorcraft_cutting::placement::{self, MM_PER_PT};
+use vectorcraft_cutting::placement::{self, MM_PER_PT, Placement};
 
 use super::*;
 
-/// The grid's spacing and the stronger lines', mm.
-const MINOR_MM: f64 = 10.0;
-const MAJOR_MM: f64 = 50.0;
 /// Grid lines closer than this on screen are left out, px.
 const MIN_GAP_PX: f64 = 6.0;
-/// Labels need this much room between them, px.
-const LABEL_GAP_PX: f64 = 40.0;
-/// How far labels sit outside the mat's edge, px.
+/// Numbers need this much room between them, px.
+const LABEL_GAP_PX: f64 = 28.0;
+/// Ticks closer than this are left out, px.
+const MIN_TICK_GAP_PX: f64 = 4.0;
+/// How far the origin's unit sits off the corner, px.
 const LABEL_OUT_PX: f32 = 4.0;
-/// Most lines one grid direction draws (a 3 m mat at 10 mm is 300).
-const MAX_LINES: usize = 400;
+/// Most lines one grid direction draws (a 3 m mat at 5 mm ticks is 600).
+const MAX_LINES: usize = 800;
+/// The plate's corner radius, mm.
+const CORNER_MM: f64 = 5.0;
+/// The mat as the physical object is grey in every brightness: its plastic, its edge, and what
+/// is printed on it.
+const PLATE: Color32 = Color32::from_gray(158);
+const PLATE_EDGE: Color32 = Color32::from_gray(112);
+const PRINT: Color32 = Color32::from_gray(58);
 
 /// The mm positions `step` apart strictly inside `0..len`.
 fn ticks(len: f64, step: f64) -> impl Iterator<Item = f64> {
-    let n = if len.is_finite() && step > 0.0 { ((len / step).ceil() as usize).saturating_sub(1).min(MAX_LINES) } else { 0 };
+    // Less a hair: 304.8 / 25.4 is a little over 12 in floating point, and the edge isn't inside.
+    let n = if len.is_finite() && step > 0.0 { ((len / step - 1e-9).ceil() as usize).saturating_sub(1).min(MAX_LINES) } else { 0 };
     (1..=n).map(move |i| i as f64 * step)
 }
 
+/// Where the active document lies on its mat.
+fn placed(app: &VectorcraftApp) -> Option<Placement> {
+    let st = app.session.active()?;
+    placement::place(&vectorcraft_cutting::settings(&st.doc), &st.doc)
+}
+
+/// `n` mm in the mat's own unit, as printed on it.
+fn printed(n: f64, inch: bool) -> String {
+    let v = if inch { n / 25.4 } else { n };
+    format!("{}", (v * 100.0).round() / 100.0)
+}
+
+/// The mat as the physical object, behind the art (C2.7).
+pub(super) fn mat_plate(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) {
+    let Some(pl) = placed(app) else { return };
+    let to_doc = pl.mat_to_doc();
+    let screen = |x: f64, y: f64| xf.to_screen(to_doc * Point::new(x, y));
+    let [w, h] = pl.mat.size_mm;
+    let [ml, mt, mr, mb] = pl.mat.plate_margin_mm;
+    let inch = pl.mat.inch_grid;
+    let px_per_mm = xf.zoom / MM_PER_PT;
+
+    // The plate: a rounded rectangle, convex on screen however the mat and the view are turned.
+    let (x0, y0, x1, y1) = (-ml, -mt, w + mr, h + mb);
+    let r = CORNER_MM.min((x1 - x0) / 2.0).min((y1 - y0) / 2.0).max(0.0);
+    let mut plate = Vec::with_capacity(28);
+    for (cx, cy, from) in [(x1 - r, y0 + r, -90.0f64), (x1 - r, y1 - r, 0.0), (x0 + r, y1 - r, 90.0), (x0 + r, y0 + r, 180.0)] {
+        for k in 0..=6 {
+            let a = (from + 15.0 * f64::from(k)).to_radians();
+            plate.push(screen(cx + r * a.cos(), cy + r * a.sin()));
+        }
+    }
+    p.add(Shape::convex_polygon(plate, PLATE, Stroke::new(1.0, PLATE_EDGE)));
+
+    // The grid, its border, and its numbers along the top and left, inside.
+    let unit = if inch { 25.4 } else { 10.0 };
+    let line = Stroke::new(1.0, PRINT);
+    if unit * px_per_mm >= MIN_GAP_PX {
+        for x in ticks(w, unit) {
+            p.line_segment([screen(x, 0.0), screen(x, h)], line);
+        }
+        for y in ticks(h, unit) {
+            p.line_segment([screen(0.0, y), screen(w, y)], line);
+        }
+    }
+    let border = [screen(0.0, 0.0), screen(w, 0.0), screen(w, h), screen(0.0, h), screen(0.0, 0.0)];
+    p.add(Shape::line(border.to_vec(), Stroke::new(1.0, PRINT)));
+    let font = egui::FontId::proportional(9.0);
+    let mut every = if inch { 25.4 } else { 50.0 };
+    while every * px_per_mm < LABEL_GAP_PX && every < 10_000.0 {
+        every *= 2.0;
+    }
+    if every * px_per_mm >= LABEL_GAP_PX {
+        let cut = pl.mat.cut_area_mm;
+        for x in ticks(w, every) {
+            p.text(screen(x, 0.0) + vec2(-2.0, 2.0), egui::Align2::RIGHT_TOP, printed(x - cut.x0, inch), font.clone(), PRINT);
+        }
+        for y in ticks(h, every) {
+            p.text(screen(0.0, y) + vec2(2.0, -2.0), egui::Align2::LEFT_BOTTOM, printed(y - cut.y0, inch), font.clone(), PRINT);
+        }
+    }
+
+    // Ruler ticks down the right edge: quarters of an inch, or every 5 mm, longer at each unit.
+    let tick = if inch { 25.4 / 4.0 } else { 5.0 };
+    if tick * px_per_mm >= MIN_TICK_GAP_PX {
+        let per_unit = if inch { 4 } else { 2 };
+        for (i, y) in ticks(h, tick).enumerate() {
+            let n = i + 1;
+            let len = if n % per_unit == 0 {
+                4.0
+            } else if inch && n % 2 == 0 {
+                2.5
+            } else {
+                1.5
+            };
+            p.line_segment([screen(w, y), screen(w - len, y)], Stroke::new(0.75, PRINT));
+        }
+    }
+
+    // The feed arrow, in the top margin's middle, pointing at the machine.
+    if mt * px_per_mm >= 8.0 {
+        let (cx, top, base) = (w / 2.0, -mt * 0.85, -mt * 0.45);
+        let half = mt * 0.35;
+        p.add(Shape::convex_polygon(vec![screen(cx, top), screen(cx + half, base), screen(cx - half, base)], PRINT, Stroke::NONE));
+        let (stem, stem_end) = (half * 0.45, -mt * 0.15);
+        let shaft = vec![screen(cx - stem, base), screen(cx + stem, base), screen(cx + stem, stem_end), screen(cx - stem, stem_end)];
+        p.add(Shape::convex_polygon(shaft, PRINT, Stroke::NONE));
+    }
+
+    // Its size, in the bottom margin's right-hand corner (where a maker prints its name).
+    if mb * px_per_mm >= 10.0 {
+        let size = if inch {
+            format!("{} × {} in", printed(w, true), printed(h, true))
+        } else {
+            format!("{} × {} mm", printed(w, false), printed(h, false))
+        };
+        p.text(screen(w, h + mb / 2.0) + vec2(-2.0, 0.0), egui::Align2::RIGHT_CENTER, size, egui::FontId::proportional(10.0), PRINT);
+    }
+}
+
+/// What the art mustn't hide: drawn over it.
 pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) {
-    let Some(st) = app.session.active() else { return };
-    let s = vectorcraft_cutting::settings(&st.doc);
-    let Some(pl) = placement::place(&s, &st.doc) else { return };
+    let Some(pl) = placed(app) else { return };
     let to_doc = pl.mat_to_doc();
     let screen = |x: f64, y: f64| xf.to_screen(to_doc * Point::new(x, y));
     let ring = |r: RectMm| {
@@ -42,25 +155,8 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
     let t = Tokens::get(p.ctx());
     let [w, h] = pl.mat.size_mm;
     let px_per_mm = xf.zoom / MM_PER_PT;
-
-    // In the mat's own colour, faint, so the grid isn't taken for ruler guides or the document grid.
-    for (step, color) in [(MINOR_MM, t.accent.gamma_multiply(0.18)), (MAJOR_MM, t.accent.gamma_multiply(0.45))] {
-        if step * px_per_mm < MIN_GAP_PX {
-            continue;
-        }
-        let stroke = Stroke::new(0.75, color);
-        for x in ticks(w, step) {
-            p.line_segment([screen(x, 0.0), screen(x, h)], stroke);
-        }
-        for y in ticks(h, step) {
-            p.line_segment([screen(0.0, y), screen(w, y)], stroke);
-        }
-    }
-
-    let mat = RectMm { x0: 0.0, y0: 0.0, x1: w, y1: h };
-    p.add(Shape::line(ring(mat), Stroke::new(1.5, t.accent)));
     let cut = pl.mat.cut_area_mm;
-    if cut != mat {
+    if cut != (RectMm { x0: 0.0, y0: 0.0, x1: w, y1: h }) {
         p.extend(Shape::dashed_line(&ring(cut), Stroke::new(1.0, t.accent), 5.0, 3.0));
     }
     if crate::cutting::shows_toolpaths(p.ctx())
@@ -72,40 +168,15 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
             playback(p, &made.sim, mm, &screen, &t);
         }
     }
-
-    // Labels outside the top and left edges, measured from the cut area's origin. Each sits just
-    // outside its edge on screen, anchored on the side facing away from the mat, so it clears the
-    // edge whichever way a turned mat or view puts it.
+    // The origin: a corner mark, and the unit the mat is numbered in off the corner's diagonal.
     let font = egui::FontId::proportional(10.0);
-    let label = |at: Pos2, inside: Pos2, text: String| {
-        let d = (at - inside).normalized();
-        let anchor = match (d.x.abs() > d.y.abs(), d.x < 0.0, d.y < 0.0) {
-            (true, true, _) => egui::Align2::RIGHT_CENTER,
-            (true, false, _) => egui::Align2::LEFT_CENTER,
-            (false, _, true) => egui::Align2::CENTER_BOTTOM,
-            (false, _, false) => egui::Align2::CENTER_TOP,
-        };
-        p.text(at + d * LABEL_OUT_PX, anchor, text, font.clone(), t.accent);
-    };
-    let mut every = MAJOR_MM;
-    while every * px_per_mm < LABEL_GAP_PX && every < 1_000.0 {
-        every *= 2.0;
-    }
-    if every * px_per_mm >= LABEL_GAP_PX {
-        for x in ticks(w, every) {
-            label(screen(x, 0.0), screen(x, 1.0), format!("{} mm", x - cut.x0));
-        }
-        for y in ticks(h, every) {
-            label(screen(0.0, y), screen(1.0, y), format!("{} mm", y - cut.y0));
-        }
-    }
-    // The origin: a corner mark and its 0, off the corner's diagonal.
     let o = screen(cut.x0, cut.y0);
     let arm = 12.0 / px_per_mm;
     let marks = [screen(cut.x0 + arm, cut.y0), o, screen(cut.x0, cut.y0 + arm)];
     p.add(Shape::line(marks.to_vec(), Stroke::new(2.0, t.accent)));
     let d = (o - screen(cut.x0 + 1.0, cut.y0 + 1.0)).normalized();
-    p.text(o + d * LABEL_OUT_PX, egui::Align2::RIGHT_BOTTOM, "0", font.clone(), t.accent);
+    let unit = if pl.mat.inch_grid { "in" } else { "mm" };
+    p.text(o + d * LABEL_OUT_PX, egui::Align2::RIGHT_BOTTOM, unit, font.clone(), t.accent);
 
     if !pl.fits() {
         let a = ring(pl.artboard_mm);
@@ -202,6 +273,7 @@ mod tests {
     fn ticks_fall_strictly_inside() {
         assert_eq!(ticks(304.8, 50.0).collect::<Vec<_>>(), [50.0, 100.0, 150.0, 200.0, 250.0, 300.0]);
         assert_eq!(ticks(100.0, 50.0).collect::<Vec<_>>(), [50.0]);
+        assert_eq!(ticks(304.8, 25.4).count(), 11, "12 in: 1 to 11, not the edge");
         assert_eq!(ticks(f64::NAN, 10.0).count(), 0);
         assert_eq!(ticks(1e12, 10.0).count(), super::MAX_LINES);
     }
