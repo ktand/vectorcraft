@@ -36,7 +36,7 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     let cameo = MemoryTransport::answering(b"0\x03");
     registry::install(Some(Arc::new(FakeCameo(cameo.clone()))));
     let d = s.execute("cutting.devices", &json!({})).unwrap();
-    assert_eq!(d["devices"], json!([{"id": "usb-cameo", "model": "Cameo 4", "name": "Silhouette CAMEO 4"}]));
+    assert_eq!(d["devices"], json!([{"id": "usb-cameo", "model": "Cameo 4", "name": "Silhouette CAMEO 4", "simulated": false}]));
 
     // Nothing drawn: nothing to cut.
     assert!(s.execute("cutting.send", &json!({})).unwrap_err().to_string().contains("nothing to cut"));

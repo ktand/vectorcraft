@@ -72,6 +72,8 @@ rustix = { workspace = true, features = ["std", "process"] }
 
 [dev-dependencies]
 egui_kittest = { workspace = true, features = ["wgpu", "snapshot"] }
+# Fork: a quick simulated cutter for the Cutting panel's send tests.
+vectorcraft-cutter = { workspace = true }
 vectorcraft-testkit = { workspace = true }
 # A variable font built in code (no font file is committed).
 vectorcraft-text = { workspace = true, features = ["test-fonts"] }

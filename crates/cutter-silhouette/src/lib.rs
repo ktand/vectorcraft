@@ -296,6 +296,26 @@ impl Driver for Silhouette {
     }
 }
 
+/// A Cameo 4 that isn't there (C4.8), for trying the app's sending without a machine: it answers
+/// ready, or moving for a while after each part of the job (two seconds and a millisecond a byte,
+/// slower than nothing and quicker than a real cut), always with a mat loaded.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn simulated_cameo4() -> vectorcraft_cutter::simulated::SimulatedMachine {
+    use std::time::Duration;
+    use vectorcraft_cutter::simulated::{Behaviour, SIMULATED_ID_PREFIX, Sent, SimulatedMachine};
+    SimulatedMachine {
+        info: DeviceInfo { id: format!("{SIMULATED_ID_PREFIX}cameo4"), vendor_id: VENDOR_ID, product_id: 0x1137, name: "Simulated cutter".into() },
+        behaviour: Behaviour {
+            query: vec![ESC, ENQ],
+            ready: vec![b'0', ETX],
+            moving: vec![b'1', ETX],
+            busy_per_write: Duration::from_secs(2),
+            busy_per_byte: Duration::from_millis(1),
+        },
+        sent: Sent::default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

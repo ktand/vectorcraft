@@ -219,3 +219,29 @@ fn the_blade_offset_goes_to_the_machine() {
     assert_eq!(fc(Some(0.25)), "FC5");
     assert_eq!(fc(Some(0.0)), "FC0");
 }
+
+/// C4.8: the simulated Cameo 4 is one this driver drives, and answers as the machine does: ready,
+/// then moving after part of a job.
+#[test]
+fn the_simulated_cameo_answers_like_one() {
+    use vectorcraft_cutter::{DeviceProvider, DeviceStatus, Driver};
+    let m = vectorcraft_cutter_silhouette::simulated_cameo4();
+    let d = m.devices().remove(0);
+    assert!(d.id.starts_with(vectorcraft_cutter::SIMULATED_ID_PREFIX));
+    assert_eq!(Silhouette.model(&d), "Cameo 4");
+    let mut t = m.open(&d.id).unwrap();
+    let mut ask = || {
+        t.write(Silhouette.status_query()).unwrap();
+        let mut buf = [0u8; 8];
+        let n = t.read(&mut buf, 0).unwrap();
+        Silhouette.parse_status(&buf[..n])
+    };
+    assert_eq!(ask(), DeviceStatus::Ready);
+    drop(ask);
+    t.write(b"M20,20\x03").unwrap();
+    t.write(Silhouette.status_query()).unwrap();
+    let mut buf = [0u8; 8];
+    let n = t.read(&mut buf, 0).unwrap();
+    assert_eq!(Silhouette.parse_status(&buf[..n]), DeviceStatus::Moving);
+    assert_eq!(m.sent.bytes(), b"M20,20\x03");
+}

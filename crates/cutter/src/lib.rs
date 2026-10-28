@@ -8,6 +8,8 @@
 //! - [`send`]: an encoded job sent chunk by chunk once the machine is ready, with progress and
 //!   cancel, on a thread of its own for the app.
 //! - [`MemoryTransport`]: a transport that records and answers from a script, for tests.
+//! - [`simulated`]: a machine that isn't there, busy a while for each part of a job, for trying
+//!   the app's sending without a cutter; and [`simulated::Providers`], providers listed as one.
 //! - [`VirtualCutter`]: a machine that cuts nothing and records what it would have: each stroke
 //!   of the blade, down, in order. It plays a job through its [`Simulation`], so what it records
 //!   is what the preview plays back, and it is what tests use in place of hardware.
@@ -17,11 +19,17 @@ pub mod device;
 mod memory;
 pub mod registry;
 pub mod send;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod simulated;
 
 pub use device::{DeviceInfo, DeviceProvider, DeviceStatus, Driver, Encoded, Transport, TransportError};
 pub use memory::{MemoryTransport, Recorded};
 
 use vectorcraft_cutjob::{CutJob, JobError, OpKind, Simulation};
+
+/// Ids of simulated machines ([`simulated`]) start with this, so the app can say which one isn't
+/// real (here, not there, so it is known where they aren't built).
+pub const SIMULATED_ID_PREFIX: &str = "simulated:";
 
 /// One stroke of the blade, down from its first point to its last.
 #[derive(Clone, Debug, PartialEq)]
