@@ -23,6 +23,7 @@ fn job() -> CutJob {
         paths: vec![path(1, true, &[[10.0, 10.0], [20.0, 10.0], [20.0, 20.0], [10.0, 20.0]]), path(0, false, &[[50.0, 10.0], [70.0, 10.0]])],
         warnings: vec![],
         track_enhancing: false,
+        registration: None,
         groups: vec![],
     }
 }
@@ -123,6 +124,7 @@ fn any_job() -> impl Strategy<Value = CutJob> {
         paths,
         warnings: vec![],
         track_enhancing: false,
+        registration: None,
         groups: vec![],
     })
 }

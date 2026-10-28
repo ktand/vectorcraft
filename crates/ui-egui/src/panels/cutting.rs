@@ -429,6 +429,43 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     super::set_pstate(&ctx, "cutting-machines", m);
 }
 
+/// Print & Cut (C6.1): the switch, how far in the registration marks go, and the marks layer
+/// added, replaced or removed.
+fn print_and_cut_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
+    let s = &info["settings"];
+    let on = s["printAndCut"].as_bool() == Some(true);
+    if widgets::check(ui, tl!("Print & Cut"), on, true) {
+        set(app, json!({ "printAndCut": !on }));
+    }
+    if !on {
+        widgets::dim_label(ui, tl!("Print the artboard with registration marks, then cut around the print."));
+        return;
+    }
+    let inset = s["markInsetMm"].as_f64().unwrap_or(vectorcraft_cutjob::marks::DEFAULT_INSET_MM);
+    widgets::label_row(ui, tl!("Marks inset"), LABEL_W, |ui| {
+        if let Some(v) = mm_field(ui, "mark-inset", inset, vectorcraft_cutjob::marks::INSET_MM.0) {
+            let (lo, hi) = vectorcraft_cutjob::marks::INSET_MM;
+            set(app, json!({ "markInsetMm": v.clamp(lo, hi) }));
+        }
+    });
+    let has_marks = app.session.active().is_some_and(|st| vectorcraft_cutting::marks::marks_layer(&st.doc).is_some());
+    ui.horizontal(|ui| {
+        let label = if has_marks { tl!("Update Marks") } else { tl!("Add Marks") };
+        if ui.button(label).clicked() {
+            let _ = app.run("cutting.marks.add", json!({}));
+        }
+        if has_marks && ui.button(tl!("Remove Marks")).clicked() {
+            let _ = app.run("cutting.marks.remove", json!({}));
+        }
+    });
+    let note = if has_marks {
+        tl!("Print the artboard, then put the sheet on the mat with the square mark at the top left.")
+    } else {
+        tl!("Add the marks, then print the artboard with them.")
+    };
+    widgets::dim_label(ui, note);
+}
+
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     let Ok(info) = app.session.execute("cutting.settings.get", &json!({})) else {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
@@ -441,6 +478,9 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Tool Settings"));
     tool_rows(app, ui, &info);
+    widgets::divider(ui);
+    widgets::section_header(ui, tl!("Print & Cut"));
+    print_and_cut_rows(app, ui, &info);
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Job"));
     job_rows(app, ui);
@@ -537,6 +577,20 @@ mod tests {
         assert!(texts.iter().any(|t| t == "Continue") && texts.iter().any(|t| t == "Cancel"), "{texts:?}");
         app.run("cutting.cancel", json!({})).unwrap();
         vectorcraft_cutter::registry::install(None);
+    }
+
+    /// C6.1: Print & Cut on, the panel adds the marks and then offers to update or remove them.
+    #[test]
+    fn print_and_cut_adds_the_marks() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 612, "height": 792})).unwrap();
+        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Print & Cut"));
+        app.run("cutting.settings.set", json!({"printAndCut": true})).unwrap();
+        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Add Marks"));
+        app.run("cutting.marks.add", json!({})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Update Marks") && texts.iter().any(|t| t == "Remove Marks"), "{texts:?}");
     }
 
     /// C5.3: the Groups choice shows what the document cuts by.

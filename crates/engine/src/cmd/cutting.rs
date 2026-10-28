@@ -31,7 +31,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Settings",
             [],
             None,
-            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}, ordering, clipToMat, trackEnhancing, grouping, material?}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
+            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}, ordering, clipToMat, trackEnhancing, grouping, printAndCut, markInsetMm, material?}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
             has_doc,
             settings_get
         ),
@@ -40,7 +40,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Cutting Settings",
             [],
             None,
-            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none|outline (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5, depth?: 1–10 or null (an automatic blade's depth; null: the machine's own), accel?: 1–3 or null, cornerOvercutMm?: 0–2 (run past sharp corners and back), bladeOffsetMm?: 0–2 or null (how far the blade's tip trails its axis, for the machine to turn it round corners; 0: a pen; null: the usual blade's)}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job), trackEnhancing?: bool (the machine grips the material harder), grouping?: none|layer|color (cut in groups, by top-level layer or by stroke colour, else fill, pausing before each group after the first so the tool or material can be changed)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
+            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none|outline (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5, depth?: 1–10 or null (an automatic blade's depth; null: the machine's own), accel?: 1–3 or null, cornerOvercutMm?: 0–2 (run past sharp corners and back), bladeOffsetMm?: 0–2 or null (how far the blade's tip trails its axis, for the machine to turn it round corners; 0: a pen; null: the usual blade's)}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job), trackEnhancing?: bool (the machine grips the material harder), grouping?: none|layer|color (cut in groups, by top-level layer or by stroke colour, else fill, pausing before each group after the first so the tool or material can be changed), printAndCut?: bool (the artboard is printed with registration marks and the machine cuts from them: portrait only, art between the marks), markInsetMm?: 5–50 (how far in from the artboard's edges the marks go)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
             has_doc,
             settings_set
         ),
@@ -81,6 +81,24 @@ pub fn specs() -> Vec<CommandSpec> {
             simulate
         ),
         cmd!(
+            "cutting.marks.add",
+            "Add Registration Marks",
+            [],
+            None,
+            "{} put Print & Cut's registration marks on the settings' artboard as a locked layer at the top that prints and isn't cut (replacing the marks layer there was, which is found by its cut:marks attribute whatever it is called), as one undo step → {layer: its id}",
+            has_doc,
+            marks_add
+        ),
+        cmd!(
+            "cutting.marks.remove",
+            "Remove Registration Marks",
+            [],
+            None,
+            "{} take the registration marks layer out of the document, as one undo step → {removed: whether there was one}",
+            has_doc,
+            marks_remove
+        ),
+        cmd!(
             query "cutting.preview.export",
             "Export Cutting Preview",
             [],
@@ -91,6 +109,32 @@ pub fn specs() -> Vec<CommandSpec> {
         ),
     ]);
     v
+}
+
+fn marks_add(s: &mut Session, _: &Value) -> Result<Value> {
+    const CMD: &str = "cutting.marks.add";
+    let mut added = None;
+    s.edit("Add Registration Marks", |d, _| {
+        if let Some(old) = vectorcraft_cutting::marks::marks_layer(d) {
+            d.remove(old).map_err(|e| bad(CMD, e.to_string()))?;
+        }
+        let settings = vectorcraft_cutting::settings(d);
+        let layer = vectorcraft_cutting::marks::marks_layer_node(&settings, d).map_err(|e| bad(CMD, e))?;
+        added = Some(d.insert(None, usize::MAX, layer).map_err(|e| bad(CMD, e.to_string()))?);
+        Ok(())
+    })?;
+    Ok(json!({ "layer": added.map(|id| id.0) }))
+}
+
+fn marks_remove(s: &mut Session, _: &Value) -> Result<Value> {
+    let Some(layer) = vectorcraft_cutting::marks::marks_layer(&s.doc()?.doc) else {
+        return Ok(json!({ "removed": false }));
+    };
+    s.edit("Remove Registration Marks", |d, _| {
+        d.remove(layer).map_err(|e| bad("cutting.marks.remove", e.to_string()))?;
+        Ok(())
+    })?;
+    Ok(json!({ "removed": true }))
 }
 
 fn preview_export(s: &mut Session, p: &Value) -> Result<Value> {
@@ -172,7 +216,7 @@ fn settings_get(s: &mut Session, _: &Value) -> Result<Value> {
 }
 
 /// The keys `cutting.settings.set` takes at the top, in `operations` and in each tool's.
-const TOP_KEYS: [&str; 12] = [
+const TOP_KEYS: [&str; 14] = [
     "mat",
     "customMatMm",
     "orientation",
@@ -185,6 +229,8 @@ const TOP_KEYS: [&str; 12] = [
     "clipToMat",
     "trackEnhancing",
     "grouping",
+    "printAndCut",
+    "markInsetMm",
 ];
 const OP_KEYS: [&str; 2] = ["cut", "score"];
 const TOOL_KEYS: [&str; 8] = ["force", "speedMmS", "passes", "overcutMm", "depth", "accel", "cornerOvercutMm", "bladeOffsetMm"];

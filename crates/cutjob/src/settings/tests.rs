@@ -32,7 +32,9 @@ fn the_defaults_round_trip_as_documented() {
             "ordering": "insideFirst",
             "clipToMat": false,
             "trackEnhancing": false,
-            "grouping": "none"
+            "grouping": "none",
+            "printAndCut": false,
+            "markInsetMm": 10.0
         })
     );
     assert_eq!(read(v), d);
@@ -59,6 +61,8 @@ fn every_setting_round_trips() {
         material: Some("Cardstock".into()),
         track_enhancing: true,
         grouping: Grouping::Color,
+        print_and_cut: true,
+        mark_inset_mm: 12.5,
         extra: Map::new(),
     };
     assert_eq!(read(s.to_value()), s);

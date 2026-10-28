@@ -81,6 +81,24 @@ own presets [IS]; the encoder sends settings directly and needs none.
 
 The Cameo 4 width agrees with our mat presets (`vectorcraft_cutjob::MAT_PRESETS`).
 
+## Print & Cut: registration marks
+
+The machine's optical sensor finds marks printed on the sheet, then cuts relative to them. Sources:
+**[IS]** `silhouette/Graphtec.py` (as above) for the commands, and **[IS-R]** `render_silhouette_regmarks.py`
+at the same commit ([`f376a083`](https://github.com/fablabnbg/inkscape-silhouette/blob/f376a0836b53826e57f50d7ec44658663e629f05/render_silhouette_regmarks.py))
+for what the marks look like. All **to confirm** on the Cameo 4.
+
+| Fact | Source |
+|---|---|
+| The usual mark set has three marks, all black: a filled square 5 mm a side at the top left, and L-shaped corners at the top right and bottom left, each arm 20 mm long and drawn 0.3 mm wide (wider lines were reported to register worse), the arms pointing in toward the page. There is no mark at the bottom right. A four-corner variant has L corners in all four corners. | [IS-R] |
+| Each mark's anchor is its outer corner: the square's top-left corner, the L's corner. The top-left anchor is the origin; the top-right one is the mark width to its right and the bottom-left one the mark length below it (anchor to anchor). Left at their defaults, the marks are 10 mm in from each page edge and the width and length are what remains of the page. | [IS-R] |
+| Nothing else is printed close to the marks: a clear (white) area 20 mm wide is kept round them. | [IS-R] |
+| Before the search the driver sends, each ending in ETX: `TB50,0` (not landscape); `TB99`; `TB52,2` (the mark type: 2 is the Cameo's portrait marks, 0 the original/SD ones); `TB51,400` (mark length) and `TB53,10` (mark line width), both raw numbers whose units the source doesn't give; `TB55,1`. | [IS] |
+| The automatic search is `TB123,h,w,t,l`: the length (top-left to bottom-left anchor), the width (top-left to top-right), and where to start looking, from the top and from the left, all in machine units (20 a mm). The driver starts looking 10 mm before the expected origin on each axis (never below 0). `TB124` with the same values is the four-corner search on the models with it (not the Cameo 4); `TB23,h,w` is a manual registration. | [IS] |
+| The answer to the search is read with a long timeout (40 s): success is four spaces, `0`, ETX. Anything else, or no answer, means the marks weren't found and the job must not be cut. | [IS] |
+| After registration the machine's origin is the top-left mark's anchor: cut positions are measured from it, and the cut area is the rectangle the marks span. | [IS] |
+| The driver's defaults put the origin 15 mm from the left and 20 mm from the top, with marks 180 mm apart across and 230 mm down; the mark drawing's defaults are 10 mm from each edge. Ours come from the marks we draw (C6.1): whatever is printed is what is searched for. | [IS], [IS-R] |
+
 ## Mapping from the cut job
 
 How `vectorcraft-cutjob`'s machine-neutral settings become these commands (the encoder's choices, C4.4):

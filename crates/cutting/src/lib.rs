@@ -15,6 +15,8 @@
 //! - [`group`]: which group each object is cut in, when the job is cut in groups.
 //! - [`order`]: the order they are cut in.
 //! - [`corners`]: sharp corners run past and back, for the operations that ask for it.
+//! - [`marks`]: Print & Cut's registration marks, a locked layer of the document, and where they
+//!   lie on the mat for the job.
 //! - [`preview`]: a job as an SVG at the mat's size.
 //! - [`build_job`]: all of it, a document to a validated [`CutJob`]. The document isn't changed:
 //!   the job is made from it each time.
@@ -24,6 +26,7 @@ pub mod clip;
 pub mod corners;
 pub mod geometry;
 pub mod group;
+pub mod marks;
 pub mod ops;
 pub mod order;
 pub mod placement;
@@ -54,6 +57,8 @@ pub enum BuildError {
     NoArtboard(u32),
     Prepare(PrepError),
     Invalid(JobError),
+    /// Print & Cut can't be laid out (why).
+    PrintAndCut(String),
 }
 
 impl std::fmt::Display for BuildError {
@@ -62,6 +67,7 @@ impl std::fmt::Display for BuildError {
             BuildError::NoArtboard(i) => write!(f, "the cutting settings name artboard {i}, which the document doesn't have"),
             BuildError::Prepare(e) => e.fmt(f),
             BuildError::Invalid(e) => write!(f, "the job isn't valid: {e}"),
+            BuildError::PrintAndCut(e) => e.fmt(f),
         }
     }
 }
@@ -80,6 +86,13 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     warnings.extend(welding);
     let (polylines, more) = prepare::prepare(&outlines, &placement, s.tolerance_mm, s.clip_to_mat).map_err(BuildError::Prepare)?;
     warnings.extend(more);
+    let registration = if s.print_and_cut {
+        let (r, near) = marks::registration(&s, d, &placement, &polylines).map_err(BuildError::PrintAndCut)?;
+        warnings.extend(near);
+        Some(r)
+    } else {
+        None
+    };
     let area = placement.mat.cut_area_mm;
     // Each group in the order its first object comes, ordered by itself, the blade going on from
     // where the group before left it (one group without grouping).
@@ -142,6 +155,7 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
         warnings,
         track_enhancing: s.track_enhancing,
         groups,
+        registration,
     };
     corners::overcut_corners(&mut job);
     job.validate().map_err(BuildError::Invalid)?;

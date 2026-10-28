@@ -14,13 +14,18 @@
 #![forbid(unsafe_code)]
 
 mod job;
+pub mod marks;
 mod mat;
 mod material;
 mod read;
 mod settings;
 mod simulate;
 
-pub use job::{CutJob, JOB_VERSION, JobError, JobGroup, JobMat, JobStats, JobWarning, MAX_PATHS, MAX_POINTS, OpKind, Operation, SourceRef, Toolpath};
+pub use job::{
+    CutJob, JOB_VERSION, JobError, JobGroup, JobMat, JobRegistration, JobStats, JobWarning, MAX_PATHS, MAX_POINTS, OpKind, Operation, SourceRef,
+    Toolpath,
+};
+pub use marks::{Mark, MarkLayout};
 pub use mat::{MAT_PRESETS, MatGeometry, RectMm};
 pub use material::{MAX_MATERIALS, MAX_NAME, Material, builtin_materials, read_materials, valid_name};
 pub use settings::{CuttingSettings, DOCUMENT_KEY, Grouping, Op, Operations, Ordering, Orientation, SETTINGS_VERSION, ToolSettings};

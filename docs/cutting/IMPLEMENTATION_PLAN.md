@@ -88,11 +88,20 @@ These requirements come from the plan's §4 initial acceptance criteria. No hard
 | C5.5 | **Materials keep the blade setup** (owner, 2026-10-28: the maker's software keeps blade depth and offset per material) — **done**: a material keeps each operation's whole tool setup (force, speed, passes, overcut, blade depth, acceleration, corner overcut, blade offset) in `Materials.json`; `cutting.materials` lists them; any of them set by hand counts as changed since the material. Files saved before still read (the missing keys are the defaults) | Cutjob: the setup round-trips through the file; engine: depth and offset saved, listed, a changed offset is a change, applying puts it back |
 | C5.6 | **Shorter travel** — **done**: after nearest-next, `order::improve` turns stretches of each operation's order round where the blade travels less up (2-opt; open paths in them cut the other way) and starts each closed path at the point that suits the paths either side, never cutting a path before one inside it; a work budget (20 million moves weighed per operation, about half a second at most in a release build) rather than a clock, so the same document always gives the same job. Measured: 4,000 scattered dashes, 13,519 → 11,339 mm up (−16%); the golden job 154.8 → 153.6 mm | A case nearest-next gets wrong is put right; inner paths still first and each path cut once; 4,000 paths shortened within the budget; golden job reviewed |
 
-Later in Phase 5 (outline; size later):
+## Phase 6 — Print & Cut
+
+The artboard is printed with registration marks; the machine's sensor finds them on the sheet and cuts round
+the print. Facts: [protocol notes › Print & Cut](protocol-silhouette.md#print--cut-registration-marks).
+
+| Id | Task | Acceptance |
+|---|---|---|
+| C6.1 | **Registration marks and the job** — **done**: `cutjob::marks` (the usual three marks generated in code: a 5 mm filled square top left, 20 mm L corners drawn 0.3 mm at the top right and bottom left, anchors at their outer corners, inset 5–50 mm, 10 by default); the settings' `printAndCut` and `markInsetMm`; `cutting.marks.add` / `.remove` put the marks on the artboard as a locked, uncut layer found by `cut:marks` (ARCHITECTURE §4.2); a Print & Cut job carries `registration` (the top-left anchor on the mat and the marks' spacing), refuses art outside the marks and landscape (the portrait marks), and warns when the marks aren't in the document or art is within 5 mm of one; the panel's Print & Cut section | Mark geometry on a Letter page; the layer is locked and not cut, added once and replaced, undoable; the job's registration follows the artboard; the warnings and refusals |
+| C6.2 | **The machine finds the marks** — the Silhouette encoder sends the search (`TB50,0`, `TB99`, `TB52,2`, `TB51`, `TB53`, `TB55,1`, `TB123` with the spacing and where to look, in machine units) and the paths measured from the top-left anchor; the sender gets a step that reads the machine's answer with its own timeout and stops the job unless it is the success answer ("the marks weren't found"); the simulated cutter answers the search; the hardware checklist gains a Print & Cut step | Encoder golden bytes; the sender stops on a wrong or missing answer and goes on on the right one; the simulated cutter's send finds its marks; checked on the machine |
+
+Later (outline; size later):
 
 Saved device profiles ·
-software blade-offset compensation for a cutter family that can't do it itself (R10) · 
-Print & Cut with registration marks (marks generated in code, no vendor artwork) · job history and error
+software blade-offset compensation for a cutter family that can't do it itself (R10) · job history and error
 reports · more cutter families as their own `cutter-*` crates · upstream PRs for command and overlay
 extension points (ARCHITECTURE §7).
 

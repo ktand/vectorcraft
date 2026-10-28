@@ -23,6 +23,7 @@ fn job(ops: Vec<Operation>, paths: Vec<Toolpath>, mat: &str) -> CutJob {
         paths,
         warnings: vec![],
         track_enhancing: false,
+        registration: None,
         groups: vec![],
     }
 }
