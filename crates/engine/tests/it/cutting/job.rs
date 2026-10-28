@@ -60,6 +60,29 @@ fn art_off_the_mat_is_an_error_unless_clipped_to_it() {
     assert!(s.execute("cutting.settings.set", &json!({"clipToMat": "yes"})).is_err());
 }
 
+/// C3.7: the blade's run through the job, from the cut area's origin.
+#[test]
+fn the_simulation_follows_the_job() {
+    let mut s = new_doc();
+    let a = square(&mut s, 10.0, 10.0, 10.0);
+    square(&mut s, 50.0, 10.0, 10.0);
+    let start = s.execute("cutting.simulate", &json!({"t": 0})).unwrap();
+    assert_eq!((start["position"].clone(), start["down"].clone()), (json!([0.0, 0.0]), json!(false)));
+    let total = start["totalMm"].as_f64().unwrap();
+    let stats = job(&mut s)["stats"].clone();
+    assert!((total - stats["bladeMm"].as_f64().unwrap() - stats["travelMm"].as_f64().unwrap()).abs() < 1e-6);
+    let starts = start["pathStartsMm"].as_array().unwrap().clone();
+    assert_eq!(starts.len(), 2);
+    // 1 mm after the blade comes down on the first square: down, on it, cutting.
+    let on = s.execute("cutting.simulate", &json!({"mm": starts[0].as_f64().unwrap() + 1.0})).unwrap();
+    assert_eq!((on["down"].clone(), on["path"].clone(), on["op"].clone()), (json!(true), json!(0), json!("cut")));
+    assert_eq!(job(&mut s)["job"]["paths"][0]["source"]["node"], json!(a));
+    let end = s.execute("cutting.simulate", &json!({})).unwrap();
+    assert_eq!(end["doneMm"], end["totalMm"]);
+    assert!(end["totalSeconds"].as_f64().unwrap() > 0.0);
+    assert!(s.execute("cutting.simulate", &json!({"t": "half"})).is_err());
+}
+
 #[test]
 fn an_empty_document_makes_an_empty_job() {
     let mut s = new_doc();

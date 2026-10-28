@@ -64,7 +64,39 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             job
         ),
+        cmd!(
+            query "cutting.simulate",
+            "Simulate Cutting",
+            [],
+            None,
+            "{t?: 0–1 of the run (default 1: the end), mm?: mm along the run (instead of t)} where the blade is at that point of the cut job: from the cut area's origin it travels up to each path and cuts it down, once per pass, a closed path on past its start by the overcut → {position: [x, y] mm on the mat, down, path: index into cutting.job's paths or null, pass, op: score|cut|null, doneMm, totalMm, doneSeconds, totalSeconds (estimated: cutting at each operation's speed, travelling at 200 mm/s), pathStartsMm: [where the blade comes down on each path]}",
+            has_doc,
+            simulate
+        ),
     ]
+}
+
+fn simulate(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "cutting.simulate";
+    check_numbers(p, &["t", "mm"], CMD)?;
+    let job = vectorcraft_cutting::build_job(&s.doc()?.doc).map_err(|e| bad(CMD, e.to_string()))?;
+    let sim = vectorcraft_cutjob::Simulation::new(&job);
+    let at = match p.get("mm").and_then(Value::as_f64) {
+        Some(mm) => sim.at_mm(mm),
+        None => sim.at_fraction(f64_or(p, "t", 1.0)),
+    };
+    Ok(json!({
+        "position": at.position,
+        "down": at.down,
+        "path": at.path,
+        "pass": at.pass,
+        "op": at.op.map(|k| k.id()),
+        "doneMm": at.done_mm,
+        "totalMm": sim.total_mm,
+        "doneSeconds": at.done_seconds,
+        "totalSeconds": sim.total_seconds,
+        "pathStartsMm": sim.path_starts_mm(),
+    }))
 }
 
 fn job(s: &mut Session, _: &Value) -> Result<Value> {

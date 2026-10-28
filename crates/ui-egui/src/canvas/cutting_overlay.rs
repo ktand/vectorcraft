@@ -65,9 +65,12 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
     }
     if crate::cutting::shows_toolpaths(p.ctx())
         && let Some(job) = crate::cutting::job(app, p.ctx())
-        && let Ok((job, _)) = &*job
+        && let Ok(made) = &*job
     {
-        toolpaths(p, job, &screen, &t);
+        toolpaths(p, &made.job, &screen, &t);
+        if let Some(mm) = crate::cutting::tick(p.ctx(), &made.sim).mm {
+            playback(p, &made.sim, mm, &screen, &t);
+        }
     }
 
     // Labels outside the top and left edges, measured from the cut area's origin. Each sits just
@@ -163,6 +166,31 @@ fn toolpaths(p: &egui::Painter, job: &vectorcraft_cutjob::CutJob, screen: &dyn F
             last_number = Some(start);
         }
         at = if path.closed { start } else { pts.last().copied().unwrap_or(start) };
+    }
+}
+
+/// The run played back to `mm` (C3.7): what the blade has cut so far drawn strong over the
+/// toolpaths, and the blade where it is, filled while down.
+fn playback(p: &egui::Painter, sim: &vectorcraft_cutjob::Simulation, mm: f64, screen: &dyn Fn(f64, f64) -> Pos2, t: &Tokens) {
+    let done = Stroke::new(3.0, t.accent_strong);
+    let mut left = mm;
+    for m in &sim.moves {
+        if left <= 0.0 {
+            break;
+        }
+        let k = if m.mm > left { left / m.mm } else { 1.0 };
+        left -= m.mm;
+        if m.down {
+            let to = [m.from[0] + k * (m.to[0] - m.from[0]), m.from[1] + k * (m.to[1] - m.from[1])];
+            p.line_segment([screen(m.from[0], m.from[1]), screen(to[0], to[1])], done);
+        }
+    }
+    let blade = sim.at_mm(mm);
+    let at = screen(blade.position[0], blade.position[1]);
+    if blade.down {
+        p.circle_filled(at, 5.0, t.accent_strong);
+    } else {
+        p.circle_stroke(at, 5.0, Stroke::new(2.0, t.accent_strong));
     }
 }
 

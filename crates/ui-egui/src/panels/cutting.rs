@@ -129,21 +129,63 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let Some(job) = crate::cutting::job(app, ui.ctx()) else { return };
     match &*job {
-        Ok((j, s)) => {
+        Ok(made) => {
+            let (j, s) = (&made.job, &made.stats);
             ui.label(format!("{}: {}", tl!("Paths"), s.path_count));
             ui.label(format!("{}: {:.0} mm", tl!("Cut length"), s.blade_mm));
             ui.label(format!("{}: {:.0} mm", tl!("Travel"), s.travel_mm));
+            ui.label(format!("{}: {:.0} s", tl!("Estimated time"), made.sim.total_seconds));
             for w in j.warnings.iter().take(SHOWN_WARNINGS) {
                 ui.label(egui::RichText::new(&w.message).color(t.text_dim));
             }
             if j.warnings.len() > SHOWN_WARNINGS {
                 widgets::dim_label(ui, &format!("{} {}", j.warnings.len() - SHOWN_WARNINGS, tl!("more warnings")));
             }
+            if !j.paths.is_empty() {
+                playback_rows(ui, &made.sim);
+            }
         }
         Err(e) => {
             ui.label(egui::RichText::new(e).color(t.bleed));
         }
     }
+}
+
+/// Play the blade's run, step from path to path, or scrub along it (C3.7); the canvas shows it.
+fn playback_rows(ui: &mut Ui, sim: &vectorcraft_cutjob::Simulation) {
+    use crate::cutting::{Playback, playback, set_playback};
+    let ctx = ui.ctx().clone();
+    let mut p = playback(&ctx);
+    let total = sim.total_mm;
+    let at = p.mm.unwrap_or(total);
+    let starts = sim.path_starts_mm();
+    ui.horizontal(|ui| {
+        let play = if p.playing { tl!("Pause") } else { tl!("Play") };
+        if ui.button(play).clicked() {
+            // Playing from the end starts again.
+            let from = if at >= total { 0.0 } else { at };
+            p = Playback { mm: Some(from), playing: !p.playing, last: ctx.input(|i| i.time) };
+        }
+        if ui.button(tl!("Previous")).clicked() {
+            let prev = starts.iter().rev().find(|s| **s < at - 1e-6).copied().unwrap_or(0.0);
+            p = Playback { mm: Some(prev), playing: false, ..p };
+        }
+        if ui.button(tl!("Next")).clicked() {
+            let next = starts.iter().find(|s| **s > at + 1e-6).copied().unwrap_or(total);
+            p = Playback { mm: Some(next), playing: false, ..p };
+        }
+        if p.mm.is_some() && ui.button(tl!("Done")).clicked() {
+            p = Playback::default();
+        }
+    });
+    let mut v = p.mm.unwrap_or(total);
+    if widgets::slider(ui, egui::Slider::new(&mut v, 0.0..=total.max(f64::MIN_POSITIVE)).show_value(false)).changed() {
+        p = Playback { mm: Some(v), playing: false, ..p };
+    }
+    let blade = sim.at_mm(p.mm.unwrap_or(total));
+    let path = blade.path.map_or(String::new(), |i| format!(" · {} {}", tl!("path"), i + 1));
+    widgets::dim_label(ui, &format!("{:.0} / {:.0} s{path} (×{})", blade.done_seconds, sim.total_seconds, crate::cutting::SPEEDUP));
+    set_playback(&ctx, p);
 }
 
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {

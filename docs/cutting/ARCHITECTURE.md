@@ -260,8 +260,8 @@ Each hook is a few lines. Keep them in this list so a merge from `upstream` know
 | File | Change |
 |---|---|
 | `AGENTS.md`, `CLAUDE.md` | the "Fork: cutting workspace" section at the end of each (keep the two identical) |
-| `Cargo.toml` (workspace) | four `[workspace.dependencies]` path entries; members are already `crates/*` |
-| `xtask/src/layers.rs` | four rows appended to `TABLE` |
+| `Cargo.toml` (workspace) | `[workspace.dependencies]` path entries (`cutjob`, `cutting`, `cutter` so far); members are already `crates/*` |
+| `xtask/src/layers.rs` | rows appended to `TABLE` (`cutjob` Standalone, `cutting` L3, `cutter` L2); `["svg", "cutting"]` in `INTRA_LAYER_ORDER` (the golden tests open SVGs) |
 | `crates/engine/tests/it/main.rs` | `mod cutting;` (every engine-level cutting test lives under `tests/it/cutting/`) |
 | `crates/engine/Cargo.toml`, `src/cmd.rs` | dependency on `vectorcraft-cutting`; `mod cutting;` + `v.extend(cutting::specs())` |
 | `crates/ui-egui/…` | `Cargo.toml`: the two cutting dependencies; `state.rs`: `ViewFlags::cutting` and its default; `menus/ui_commands.rs`, `menus/run.rs`, `menus/state.rs`, `menus/tree.rs`: `view.cutting`'s entry, toggle, checkmark and View-menu item; `canvas.rs`: `mod cutting_overlay;` and its call; `tests.rs`: `mod cutting;`; `lib.rs`: `mod cutting;` (the shared job cache); `panels.rs`: `pub mod cutting;` and its `show` arm; `state.rs`: the panel's `ICON_PANELS` row and its `ICON_PANEL_GROUPS` group; `menus/tree.rs`: Window › Cutting; `workspaces.rs`: the built-in Cutting workspace, `CUTTING`, and one line in `apply` (the workspace turns Cutting View on, the others off) |

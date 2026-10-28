@@ -90,6 +90,37 @@ fn the_job_is_kept_until_the_document_changes() {
     app.run("cutting.op.set", json!({"op": "score"})).unwrap();
     let b = crate::cutting::job(&app, &ctx).unwrap();
     assert!(!std::sync::Arc::ptr_eq(&a, &b), "an edit makes it again");
-    let (job, _) = b.as_ref().as_ref().unwrap();
+    let job = &b.as_ref().as_ref().unwrap().job;
     assert_eq!(job.operations[0].kind, vectorcraft_cutjob::OpKind::Score);
+}
+
+/// C3.7: playing moves the blade along the run at SPEEDUP times its estimated pace, then stops
+/// at the end.
+#[test]
+fn playback_moves_the_blade_and_stops_at_the_end() {
+    use crate::cutting::{Playback, SPEEDUP, playback, set_playback, tick};
+    let mut app = app();
+    app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+    let ctx = egui::Context::default();
+    let made = crate::cutting::job(&app, &ctx).unwrap();
+    let sim = &made.as_ref().as_ref().unwrap().sim;
+    let at = |time: f64| {
+        let mut got = Playback::default();
+        let mut out = ctx.run_ui(egui::RawInput { time: Some(time), ..Default::default() }, |ui| got = tick(ui.ctx(), sim));
+        out.textures_delta.clear();
+        got
+    };
+    at(0.0);
+    set_playback(&ctx, Playback { mm: Some(0.0), playing: true, last: 0.0 });
+    let p = at(0.01);
+    let want = 0.01 * SPEEDUP * sim.total_mm / sim.total_seconds;
+    assert!(p.playing && (p.mm.unwrap() - want).abs() < 1e-6, "{p:?}, want {want}");
+    // Long after: at the end, stopped.
+    let mut t = 0.01;
+    while playback(&ctx).playing && t < 10_000.0 {
+        t += 0.25;
+        at(t);
+    }
+    let p = playback(&ctx);
+    assert!(!p.playing && p.mm == Some(sim.total_mm), "{p:?}");
 }

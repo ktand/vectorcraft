@@ -17,7 +17,9 @@ mod job;
 mod mat;
 mod read;
 mod settings;
+mod simulate;
 
 pub use job::{CutJob, JOB_VERSION, JobError, JobMat, JobStats, JobWarning, MAX_PATHS, MAX_POINTS, OpKind, Operation, SourceRef, Toolpath};
 pub use mat::{MAT_PRESETS, MatGeometry, RectMm};
 pub use settings::{CuttingSettings, DOCUMENT_KEY, Op, Operations, Ordering, Orientation, SETTINGS_VERSION, ToolSettings};
+pub use simulate::{BladeAt, Move, Simulation, TRAVEL_MM_S};

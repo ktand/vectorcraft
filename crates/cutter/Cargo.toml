@@ -1,0 +1,16 @@
+[package]
+name = "vectorcraft-cutter"
+description = "Cutting machines for the cutting workspace: the virtual cutter now, device drivers and their transport later"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+vectorcraft-cutjob = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

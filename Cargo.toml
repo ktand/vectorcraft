@@ -53,6 +53,7 @@ vectorcraft-scriptcheck = { path = "crates/scriptcheck" }
 # Fork: the cutting workspace (docs/cutting/ARCHITECTURE.md).
 vectorcraft-cutjob = { path = "crates/cutjob" }
 vectorcraft-cutting = { path = "crates/cutting" }
+vectorcraft-cutter = { path = "crates/cutter" }
 
 # foundation
 kurbo = { version = "0.13", features = ["serde"] }
