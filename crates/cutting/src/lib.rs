@@ -13,12 +13,14 @@
 //! - [`weld`]: the shapes set to Cut Outline united, cut along the outline of the union.
 //! - [`prepare`]: those outlines on the mat, in millimetres, flattened.
 //! - [`order`]: the order they are cut in.
+//! - [`corners`]: sharp corners run past and back, for the operations that ask for it.
 //! - [`preview`]: a job as an SVG at the mat's size.
 //! - [`build_job`]: all of it, a document to a validated [`CutJob`]. The document isn't changed:
 //!   the job is made from it each time.
 #![forbid(unsafe_code)]
 
 pub mod clip;
+pub mod corners;
 pub mod geometry;
 pub mod ops;
 pub mod order;
@@ -96,13 +98,15 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
         .into_iter()
         .map(|p| Toolpath { op: kinds.iter().position(|k| *k == p.op).unwrap_or(0), source: p.source, closed: p.closed, points: p.points })
         .collect();
-    let job = CutJob {
+    let mut job = CutJob {
         version: JOB_VERSION,
         mat: JobMat { id: placement.mat.id.to_string(), size_mm: placement.mat.size_mm, cut_area_mm: area },
         operations,
         paths,
         warnings,
+        track_enhancing: s.track_enhancing,
     };
+    corners::overcut_corners(&mut job);
     job.validate().map_err(BuildError::Invalid)?;
     Ok(job)
 }

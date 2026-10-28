@@ -26,11 +26,12 @@ fn the_defaults_round_trip_as_documented() {
             "version": 1, "mat": "silhouette.12x12", "customMatMm": [304.8, 304.8], "orientation": "portrait",
             "artboard": 0, "offsetMm": [0.0, 0.0], "defaultOp": "cut", "toleranceMm": 0.025,
             "operations": {
-                "cut": {"force": 0.3, "speedMmS": 100.0, "passes": 1, "overcutMm": 0.0},
-                "score": {"force": 0.1, "speedMmS": 100.0, "passes": 1, "overcutMm": 0.0}
+                "cut": {"force": 0.3, "speedMmS": 100.0, "passes": 1, "overcutMm": 0.0, "depth": null, "accel": null, "cornerOvercutMm": 0.0},
+                "score": {"force": 0.1, "speedMmS": 100.0, "passes": 1, "overcutMm": 0.0, "depth": null, "accel": null, "cornerOvercutMm": 0.0}
             },
             "ordering": "insideFirst",
-            "clipToMat": false
+            "clipToMat": false,
+            "trackEnhancing": false
         })
     );
     assert_eq!(read(v), d);
@@ -48,13 +49,14 @@ fn every_setting_round_trips() {
         default_op: Op::NoCut,
         tolerance_mm: 0.1,
         operations: Operations {
-            cut: ToolSettings { force: 0.75, speed_mm_s: 50.0, passes: 3, overcut_mm: 1.5, extra: Map::new() },
-            score: ToolSettings { force: 0.05, speed_mm_s: 250.0, passes: 2, overcut_mm: 0.0, extra: Map::new() },
+            cut: ToolSettings { force: 0.75, speed_mm_s: 50.0, passes: 3, overcut_mm: 1.5, ..ToolSettings::default() },
+            score: ToolSettings { force: 0.05, speed_mm_s: 250.0, passes: 2, overcut_mm: 0.0, ..ToolSettings::default() },
             extra: Map::new(),
         },
         ordering: Ordering::Document,
         clip_to_mat: true,
         material: Some("Cardstock".into()),
+        track_enhancing: true,
         extra: Map::new(),
     };
     assert_eq!(read(s.to_value()), s);

@@ -87,6 +87,8 @@ pub struct CutJob {
     pub operations: Vec<Operation>,
     pub paths: Vec<Toolpath>,
     pub warnings: Vec<JobWarning>,
+    /// The machine grips the material harder as it feeds (where it can).
+    pub track_enhancing: bool,
 }
 
 /// Why a job can't be run.
@@ -246,6 +248,7 @@ impl CutJob {
         let source = |s: &SourceRef| json!({"node": s.node, "subpath": s.subpath});
         json!({
             "version": self.version,
+            "trackEnhancing": self.track_enhancing,
             "mat": {"id": self.mat.id, "sizeMm": self.mat.size_mm, "cutAreaMm": [a.x0, a.y0, a.x1, a.y1]},
             "operations": self.operations.iter().map(|o| json!({
                 "kind": o.kind.id(),
@@ -253,6 +256,9 @@ impl CutJob {
                 "speedMmS": o.tool.speed_mm_s,
                 "passes": o.tool.passes,
                 "overcutMm": o.tool.overcut_mm,
+                "depth": o.tool.depth,
+                "accel": o.tool.accel,
+                "cornerOvercutMm": o.tool.corner_overcut_mm,
             })).collect::<Vec<_>>(),
             "paths": self.paths.iter().map(|p| json!({
                 "op": p.op,

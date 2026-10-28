@@ -3,7 +3,7 @@
 //! test cut before the real one; the ones that matter are the user's own, saved after a good test
 //! cut on their machine. No maker's material table is used.
 
-use serde_json::{Map, Value, json};
+use serde_json::{Value, json};
 
 use crate::read::object;
 use crate::settings::ToolSettings;
@@ -24,7 +24,7 @@ pub struct Material {
 }
 
 fn tool(force: f64, speed_mm_s: f64, passes: u8) -> ToolSettings {
-    ToolSettings { force, speed_mm_s, passes, overcut_mm: 0.0, extra: Map::new() }
+    ToolSettings { force, speed_mm_s, passes, overcut_mm: 0.0, ..ToolSettings::default() }
 }
 
 /// The starting points built in: light settings to test from, not tested values.

@@ -7,6 +7,8 @@ use egui::Ui;
 use serde_json::{Value, json};
 use vectorcraft_doc::Unit;
 
+use vectorcraft_cutter_silhouette as silhouette;
+
 use crate::VectorcraftApp;
 use crate::theme::Tokens;
 use crate::widgets;
@@ -94,6 +96,10 @@ fn settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let clip = s["clipToMat"].as_bool() == Some(true);
     if widgets::check(ui, tl!("Clip to Mat"), clip, true) {
         set(app, json!({ "clipToMat": !clip }));
+    }
+    let track = s["trackEnhancing"].as_bool() == Some(true);
+    if widgets::check(ui, tl!("Track Enhancing"), track, true) {
+        set(app, json!({ "trackEnhancing": !track }));
     }
     match info["placement"]["fits"].as_bool() {
         Some(true) => {
@@ -238,8 +244,9 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     super::set_pstate(&ctx, "cutting-material-error", error);
 }
 
-/// How each operation drives the blade: force (0–100 % of the machine's range), speed, passes and
-/// overcut, set through `cutting.settings.set` (values typed out of range are brought into it).
+/// How each operation drives the blade, force and speed in the machine's own steps (C5.2), passes,
+/// overcut, blade depth, acceleration and the corner overcut, set through `cutting.settings.set`
+/// (values typed out of range are brought into it).
 fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     material_rows(app, ui);
     for (op, label) in [("cut", "Cut"), ("score", "Score")] {
@@ -247,14 +254,25 @@ fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         let get = |k: &str, d: f64| tool[k].as_f64().unwrap_or(d);
         let set_tool = |app: &mut VectorcraftApp, key: &str, v: f64| set(app, json!({ "operations": { op: { key: v } } }));
         ui.label(egui::RichText::new(tl!(label)).strong());
+        // In the machine's own steps (C5.2): what its maker's software and guides use.
+        let (f_lo, f_hi) = silhouette::FORCE;
         widgets::label_row(ui, tl!("Force"), LABEL_W, |ui| {
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "force"), get("force", 0.3) * 100.0, " %", 0, 64.0, 1.0, 0.0, &[]) {
-                set_tool(app, "force", (v.clamp(0.0, 100.0) / 100.0 * 100.0).round() / 100.0);
+            let step = silhouette::force_step(get("force", 0.3));
+            if let Some(v) =
+                widgets::spin_plain(ui, ("cutting", op, "force"), f64::from(step), &format!(" ({f_lo}–{f_hi})"), 0, 72.0, 1.0, f64::from(f_lo), &[])
+            {
+                let step = v.clamp(f64::from(f_lo), f64::from(f_hi)).round() as u32;
+                set_tool(app, "force", silhouette::force_from_step(step));
             }
         });
+        let (s_lo, s_hi) = silhouette::SPEED;
         widgets::label_row(ui, tl!("Speed"), LABEL_W, |ui| {
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "speed"), get("speedMmS", 100.0), " mm/s", 0, 72.0, 10.0, 1.0, &[]) {
-                set_tool(app, "speedMmS", v.clamp(1.0, 2_000.0).round());
+            let step = silhouette::speed_step(get("speedMmS", 100.0));
+            if let Some(v) =
+                widgets::spin_plain(ui, ("cutting", op, "speed"), f64::from(step), &format!(" ({s_lo}–{s_hi})"), 0, 72.0, 1.0, f64::from(s_lo), &[])
+            {
+                let step = v.clamp(f64::from(s_lo), f64::from(s_hi)).round() as u32;
+                set_tool(app, "speedMmS", silhouette::speed_from_step(step));
             }
         });
         widgets::label_row(ui, tl!("Passes"), LABEL_W, |ui| {
@@ -265,6 +283,27 @@ fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         widgets::label_row(ui, tl!("Overcut"), LABEL_W, |ui| {
             if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "overcut"), get("overcutMm", 0.0), " mm", 1, 64.0, 0.5, 0.0, &[]) {
                 set_tool(app, "overcutMm", (v.clamp(0.0, 5.0) * 10.0).round() / 10.0);
+            }
+        });
+        // 0: the machine's own setting, sent as nothing.
+        let set_optional = |app: &mut VectorcraftApp, key: &str, v: f64, hi: f64| {
+            let step = v.clamp(0.0, hi).round();
+            let value = if step < 1.0 { Value::Null } else { json!(step) };
+            set(app, json!({ "operations": { op: { key: value } } }));
+        };
+        widgets::label_row(ui, tl!("Blade depth"), LABEL_W, |ui| {
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "depth"), get("depth", 0.0), " (0: machine's)", 0, 72.0, 1.0, 0.0, &[]) {
+                set_optional(app, "depth", v, 10.0);
+            }
+        });
+        widgets::label_row(ui, tl!("Accel."), LABEL_W, |ui| {
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "accel"), get("accel", 0.0), " (0: machine's)", 0, 72.0, 1.0, 0.0, &[]) {
+                set_optional(app, "accel", v, 3.0);
+            }
+        });
+        widgets::label_row(ui, tl!("Corners"), LABEL_W, |ui| {
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "corners"), get("cornerOvercutMm", 0.0), " mm past", 1, 72.0, 0.1, 0.0, &[]) {
+                set_tool(app, "cornerOvercutMm", (v.clamp(0.0, 2.0) * 10.0).round() / 10.0);
             }
         });
     }

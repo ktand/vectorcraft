@@ -7,14 +7,13 @@
 use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 
-use serde_json::Map;
 use vectorcraft_cutjob::{CutJob, JOB_VERSION, JobMat, OpKind, Operation, RectMm, Simulation, SourceRef, ToolSettings, Toolpath};
 use vectorcraft_cutter::send::{Patience, Progress, send};
 use vectorcraft_cutter::{DeviceInfo, Driver, MemoryTransport};
 use vectorcraft_cutter_silhouette::{CHUNK_BYTES, Silhouette};
 
 fn tool(force: f64, speed_mm_s: f64, passes: u8, overcut_mm: f64) -> ToolSettings {
-    ToolSettings { force, speed_mm_s, passes, overcut_mm, extra: Map::new() }
+    ToolSettings { force, speed_mm_s, passes, overcut_mm, ..ToolSettings::default() }
 }
 
 fn job(ops: Vec<Operation>, paths: Vec<Toolpath>, mat: &str) -> CutJob {
@@ -24,6 +23,7 @@ fn job(ops: Vec<Operation>, paths: Vec<Toolpath>, mat: &str) -> CutJob {
         operations: ops,
         paths,
         warnings: vec![],
+        track_enhancing: false,
     }
 }
 
@@ -147,4 +147,37 @@ fn sent_to_a_ready_machine() {
     let written = t.written();
     assert!(written.starts_with(&[0x1B, 0x05, 0x1B, 0x04]), "status, then initialise: {:?}", &written[..4]);
     assert!(written.ends_with(b"SO0\x03"));
+}
+
+/// C5.2: blade depth, acceleration and track enhancing as their commands.
+#[test]
+fn depth_acceleration_and_track_enhancing() {
+    let t = ToolSettings { depth: Some(3), accel: Some(2), ..tool(0.5, 100.0, 1, 0.0) };
+    let mut j = job(vec![Operation { kind: OpKind::Cut, tool: t }], vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]])], "silhouette.12x12");
+    j.track_enhancing = true;
+    let text = String::from_utf8_lossy(&Silhouette.encode(&j, &cameo4()).unwrap().chunks.concat()).to_string();
+    assert!(text.contains("TB50,0\u{3}FY1\u{3}J1\u{3}"), "{text:?}");
+    assert!(text.contains("FC18\u{3}TF3\u{3}TJ2\u{3}M"), "{text:?}");
+    // Left unset: not sent.
+    let plain = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }],
+        vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]])],
+        "silhouette.12x12",
+    );
+    let text = String::from_utf8_lossy(&Silhouette.encode(&plain, &cameo4()).unwrap().chunks.concat()).to_string();
+    assert!(!text.contains("TF") && !text.contains("TJ") && !text.contains("FY"), "{text:?}");
+}
+
+/// The panel shows the machine's steps: each reads back as itself.
+#[test]
+fn steps_read_back_as_themselves() {
+    use vectorcraft_cutter_silhouette::{force_from_step, force_step, speed_from_step, speed_step};
+    for step in 1..=33 {
+        assert_eq!(force_step(force_from_step(step)), step);
+    }
+    for step in 1..=30 {
+        assert_eq!(speed_step(speed_from_step(step)), step);
+    }
+    assert_eq!((force_step(-1.0), force_step(2.0), force_step(f64::NAN)), (1, 33, 1));
+    assert_eq!((speed_step(0.0), speed_step(1e9), speed_step(f64::NAN)), (1, 30, 1));
 }

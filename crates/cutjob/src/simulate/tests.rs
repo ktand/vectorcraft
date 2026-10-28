@@ -1,12 +1,10 @@
-use serde_json::Map;
-
 use super::*;
 use crate::job::{JOB_VERSION, JobMat, Operation, SourceRef, Toolpath};
 use crate::mat::RectMm;
 use crate::settings::ToolSettings;
 
 fn tool(passes: u8, overcut_mm: f64) -> ToolSettings {
-    ToolSettings { force: 0.3, speed_mm_s: 50.0, passes, overcut_mm, extra: Map::new() }
+    ToolSettings { force: 0.3, speed_mm_s: 50.0, passes, overcut_mm, ..ToolSettings::default() }
 }
 
 fn path(op: usize, closed: bool, points: &[[f64; 2]]) -> Toolpath {
@@ -21,6 +19,7 @@ fn job(square: ToolSettings, line: ToolSettings) -> CutJob {
         operations: vec![Operation { kind: OpKind::Score, tool: line }, Operation { kind: OpKind::Cut, tool: square }],
         paths: vec![path(1, true, &[[10.0, 10.0], [20.0, 10.0], [20.0, 20.0], [10.0, 20.0]]), path(0, false, &[[50.0, 10.0], [70.0, 10.0]])],
         warnings: vec![],
+        track_enhancing: false,
     }
 }
 

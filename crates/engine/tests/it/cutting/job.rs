@@ -125,3 +125,23 @@ fn cut_outline_unites_overlapping_shapes() {
     assert!((j["stats"]["pathMm"].as_f64().unwrap() - 240.0).abs() < 0.1, "{}", j["stats"]["pathMm"]);
     assert_eq!(j["job"]["operations"][0]["kind"], json!("cut"));
 }
+
+/// C5.2: blade depth, acceleration, corner overcut and track enhancing through the settings.
+#[test]
+fn machine_settings_reach_the_job() {
+    let mut s = new_doc();
+    square(&mut s, 10.0, 10.0, 20.0);
+    s.execute("cutting.settings.set", &json!({"trackEnhancing": true, "operations": {"cut": {"depth": 3, "accel": 2, "cornerOvercutMm": 0.5}}}))
+        .unwrap();
+    let j = job(&mut s);
+    assert_eq!(j["job"]["trackEnhancing"], json!(true));
+    let op = &j["job"]["operations"][0];
+    assert_eq!((op["depth"].clone(), op["accel"].clone(), op["cornerOvercutMm"].clone()), (json!(3), json!(2), json!(0.5)));
+    // The square's three corners after its start each run past and back: 4 + 3 × 2 points.
+    assert_eq!(j["job"]["paths"][0]["points"].as_array().unwrap().len(), 10);
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"depth": null}}})).unwrap();
+    assert_eq!(job(&mut s)["job"]["operations"][0]["depth"], Value::Null);
+    for bad in [json!({"operations": {"cut": {"depth": 12}}}), json!({"operations": {"cut": {"accel": 0}}}), json!({"trackEnhancing": "yes"})] {
+        assert!(s.execute("cutting.settings.set", &bad).is_err(), "{bad}");
+    }
+}

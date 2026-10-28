@@ -78,7 +78,6 @@ pub fn to_svg(job: &CutJob) -> String {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::Map;
     use vectorcraft_cutjob::{JOB_VERSION, JobMat, Operation, RectMm, SourceRef, ToolSettings, Toolpath};
 
     use super::*;
@@ -93,7 +92,7 @@ mod tests {
 
     #[test]
     fn the_preview_draws_the_job_in_order() {
-        let tool = ToolSettings { force: 0.3, speed_mm_s: 100.0, passes: 1, overcut_mm: 0.0, extra: Map::new() };
+        let tool = ToolSettings { force: 0.3, speed_mm_s: 100.0, passes: 1, overcut_mm: 0.0, ..ToolSettings::default() };
         let job = CutJob {
             version: JOB_VERSION,
             mat: JobMat { id: "t".into(), size_mm: [304.8, 304.8], cut_area_mm: RectMm { x0: 0.0, y0: 0.0, x1: 304.8, y1: 304.8 } },
@@ -103,6 +102,7 @@ mod tests {
                 Toolpath { op: 1, source: SourceRef::default(), closed: true, points: vec![[10.0, 10.0], [20.0, 10.0], [20.0, 20.0]] },
             ],
             warnings: vec![],
+            track_enhancing: false,
         };
         let svg = to_svg(&job);
         assert!(svg.starts_with(r#"<svg xmlns="http://www.w3.org/2000/svg" width="304.8mm" height="304.8mm" viewBox="0 0 304.8 304.8">"#));

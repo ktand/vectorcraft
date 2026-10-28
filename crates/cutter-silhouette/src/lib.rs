@@ -40,10 +40,33 @@ pub const MODELS: [(u16, &str, f64); 6] = [
 /// The blade's offset from its axis, machine units (0.9 mm).
 const BLADE_OFFSET: u32 = 18;
 /// Force steps.
-const FORCE: (u32, u32) = (1, 33);
+pub const FORCE: (u32, u32) = (1, 33);
 /// Speed steps, and the mm/s one step is taken for until it is measured on a machine.
-const SPEED: (u32, u32) = (1, 30);
-const MM_S_PER_SPEED_STEP: f64 = 10.0;
+pub const SPEED: (u32, u32) = (1, 30);
+pub const MM_S_PER_SPEED_STEP: f64 = 10.0;
+
+/// The machine's force step for force `f` (0–1 of its range).
+pub fn force_step(f: f64) -> u32 {
+    let span = f64::from(FORCE.1 - FORCE.0);
+    let step = f64::from(FORCE.0) + (if f.is_finite() { f.clamp(0.0, 1.0) } else { 0.0 } * span).round();
+    (step as u32).clamp(FORCE.0, FORCE.1)
+}
+
+/// Force (0–1) for the machine's force `step`: what [`force_step`] reads back as `step`.
+pub fn force_from_step(step: u32) -> f64 {
+    f64::from(step.clamp(FORCE.0, FORCE.1) - FORCE.0) / f64::from(FORCE.1 - FORCE.0)
+}
+
+/// The machine's speed step for `mm_s` (approximate until measured: [`MM_S_PER_SPEED_STEP`]).
+pub fn speed_step(mm_s: f64) -> u32 {
+    let step = (mm_s / MM_S_PER_SPEED_STEP).round();
+    if step.is_finite() { step.clamp(f64::from(SPEED.0), f64::from(SPEED.1)) as u32 } else { SPEED.0 }
+}
+
+/// Speed, mm/s, for the machine's speed `step`: what [`speed_step`] reads back as `step`.
+pub fn speed_from_step(step: u32) -> f64 {
+    f64::from(step.clamp(SPEED.0, SPEED.1)) * MM_S_PER_SPEED_STEP
+}
 
 /// The machine's code for a mat (0: none, the art taped down or on a carrier the machine doesn't know).
 fn mat_code(id: &str) -> Option<u32> {
@@ -106,11 +129,7 @@ impl Commands {
 
 /// The machine's force and speed steps for `tool`.
 fn steps(tool: &ToolSettings) -> (u32, u32) {
-    let span = f64::from(FORCE.1 - FORCE.0);
-    let force = (f64::from(FORCE.0) + (tool.force.clamp(0.0, 1.0) * span).round()) as u32;
-    let speed = (tool.speed_mm_s / MM_S_PER_SPEED_STEP).round();
-    let speed = if speed.is_finite() { speed.clamp(f64::from(SPEED.0), f64::from(SPEED.1)) as u32 } else { SPEED.0 };
-    (force.clamp(FORCE.0, FORCE.1), speed)
+    (force_step(tool.force), speed_step(tool.speed_mm_s))
 }
 
 /// The points along closed `points` from its start for `mm` past it (the overcut).
@@ -162,6 +181,10 @@ impl Silhouette {
         }
         c.cmd("FN0");
         c.cmd("TB50,0");
+        if job.track_enhancing {
+            // Which of FY0 and FY1 turns it on is to confirm on the machine (protocol notes).
+            c.cmd("FY1");
+        }
         let mut lowest = 0.0f64;
         for (op_index, op) in job.operations.iter().enumerate() {
             let (force, speed) = steps(&op.tool);
@@ -169,6 +192,12 @@ impl Silhouette {
             c.cmd(&format!("FX{force}"));
             c.cmd(&format!("!{speed}"));
             c.cmd(&format!("FC{BLADE_OFFSET}"));
+            if let Some(depth) = op.tool.depth {
+                c.cmd(&format!("TF{depth}"));
+            }
+            if let Some(accel) = op.tool.accel {
+                c.cmd(&format!("TJ{accel}"));
+            }
             for p in job.paths.iter().filter(|p| p.op == op_index) {
                 let Some(&first) = p.points.first() else { continue };
                 for _ in 0..op.tool.passes.max(1) {
@@ -234,7 +263,7 @@ mod tests {
 
     #[test]
     fn force_and_speed_steps() {
-        let tool = |force, speed_mm_s| ToolSettings { force, speed_mm_s, passes: 1, overcut_mm: 0.0, extra: Default::default() };
+        let tool = |force, speed_mm_s| ToolSettings { force, speed_mm_s, passes: 1, overcut_mm: 0.0, ..ToolSettings::default() };
         assert_eq!(steps(&tool(0.0, 1.0)), (1, 1));
         assert_eq!(steps(&tool(1.0, 2000.0)), (33, 30));
         assert_eq!(steps(&tool(0.5, 100.0)), (17, 10));

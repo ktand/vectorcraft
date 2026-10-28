@@ -90,13 +90,12 @@ impl VirtualCutter {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::Map;
     use vectorcraft_cutjob::{JOB_VERSION, JobMat, Operation, RectMm, SourceRef, ToolSettings, Toolpath};
 
     use super::*;
 
     fn tool(passes: u8) -> ToolSettings {
-        ToolSettings { force: 0.3, speed_mm_s: 100.0, passes, overcut_mm: 0.0, extra: Map::new() }
+        ToolSettings { force: 0.3, speed_mm_s: 100.0, passes, overcut_mm: 0.0, ..ToolSettings::default() }
     }
 
     fn job() -> CutJob {
@@ -110,6 +109,7 @@ mod tests {
                 path(1, true, &[[10.0, 10.0], [20.0, 10.0], [20.0, 20.0], [10.0, 20.0]]),
             ],
             warnings: vec![],
+            track_enhancing: false,
         }
     }
 

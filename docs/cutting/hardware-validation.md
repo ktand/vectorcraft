@@ -21,7 +21,7 @@ as confirmed (or correct them).
 - With an empty document (File › New), press **Send to Cutter**: it is greyed out (nothing to cut). That's
   right.
 - Draw one small rectangle, 10 × 10 mm. In the panel set **Default** to Score, and under **Tool Settings ›
-  Score** set Force to 0 % (the machine's lightest) and Passes to 1.
+  Score** set Force to 1 (the machine's lightest step) and Passes to 1.
 - Press **Send to Cutter**. Expected: the panel shows "Sending: …", the machine moves, then "Sent.".
 - If instead it shows "load the mat into the cutter first", the status answer works but the mat isn't loaded.
 - If it shows "the cutter didn't answer in time", write it down: the status read through `usbprint.sys` needs a
@@ -46,8 +46,18 @@ Result:
 
 ## Step 4: speed (for the speed mapping)
 
-- Draw a 100 mm line. Score it with **Tool Settings › Score › Speed** at 10, 100 and 300 mm/s (the machine's
-  steps 1, 10 and 30) and time each.
+- Draw a 100 mm line. Score it with **Tool Settings › Score › Speed** at steps 1, 10 and 30 and time each
+  (the panel takes a step as 10 mm/s until this measures it).
+
+Result:
+
+## Step 4b: the new settings (C5.2)
+
+- With the AutoBlade, set **Blade depth** to 1 and score a line, then 3: the deeper one marks more. (`TF` n)
+- **Accel.** 1 and 3 on the same square: 1 should move more gently. (`TJ` n)
+- **Track Enhancing** on: the rollers should grip differently, or the machine reports it. Which of `FY0`/`FY1` turns
+  it on is a guess (`FY1` now): if on and off behave the other way round, note it.
+- **Corners** 0.5 mm on a scored square: each corner gets a small spur past it.
 
 Result:
 

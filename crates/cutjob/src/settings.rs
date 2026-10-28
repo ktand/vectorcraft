@@ -102,6 +102,15 @@ impl Ordering {
     const CHOICES: [(&'static str, Ordering); 2] = [("insideFirst", Ordering::InsideFirst), ("document", Ordering::Document)];
 }
 
+/// `m[key]` as a whole step in `range`, clamped; `null` is none; missing or damaged is `default`.
+fn optional_step(m: &Map<String, Value>, key: &str, (lo, hi): (u8, u8), default: Option<u8>) -> Option<u8> {
+    match m.get(key) {
+        Some(Value::Null) => None,
+        Some(v) => v.as_f64().filter(|f| f.is_finite()).map_or(default, |f| u8::try_from(f.round().clamp(f64::from(lo), f64::from(hi)) as i64).ok()),
+        None => default,
+    }
+}
+
 /// How one operation drives the tool, machine-neutral: a driver maps these to its own steps.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToolSettings {
@@ -113,21 +122,38 @@ pub struct ToolSettings {
     pub passes: u8,
     /// How far a closed path's cut runs on past its start, mm (0–5).
     pub overcut_mm: f64,
+    /// An automatic blade's depth, 1–10 (`None`: the machine's own setting is left alone).
+    pub depth: Option<u8>,
+    /// Acceleration, 1 (gentle) to 3 (`None`: the machine's own).
+    pub accel: Option<u8>,
+    /// Line segment overcut: at a sharp corner the blade runs on past it by this, mm, and back,
+    /// so the corner is cut clean (0: off; 0–2).
+    pub corner_overcut_mm: f64,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
 
+impl Default for ToolSettings {
+    /// The cutting operation's defaults.
+    fn default() -> Self {
+        ToolSettings::with_force(0.3)
+    }
+}
+
 impl ToolSettings {
-    const KEYS: [&'static str; 4] = ["force", "speedMmS", "passes", "overcutMm"];
+    const KEYS: [&'static str; 7] = ["force", "speedMmS", "passes", "overcutMm", "depth", "accel", "cornerOvercutMm"];
 
     /// The ranges settings are read into and a job is checked against ([`crate::CutJob::validate`]).
     pub const FORCE: (f64, f64) = (0.0, 1.0);
     pub const SPEED_MM_S: (f64, f64) = (1.0, 2_000.0);
     pub const PASSES: (u8, u8) = (1, 10);
     pub const OVERCUT_MM: (f64, f64) = (0.0, 5.0);
+    pub const DEPTH: (u8, u8) = (1, 10);
+    pub const ACCEL: (u8, u8) = (1, 3);
+    pub const CORNER_OVERCUT_MM: (f64, f64) = (0.0, 2.0);
 
     fn with_force(force: f64) -> Self {
-        ToolSettings { force, speed_mm_s: 100.0, passes: 1, overcut_mm: 0.0, extra: Map::new() }
+        ToolSettings { force, speed_mm_s: 100.0, passes: 1, overcut_mm: 0.0, depth: None, accel: None, corner_overcut_mm: 0.0, extra: Map::new() }
     }
 
     /// Settings read leniently from `m` (as the document's are), else `default`.
@@ -143,6 +169,9 @@ impl ToolSettings {
             speed_mm_s: num(m, "speedMmS", Self::SPEED_MM_S.0, Self::SPEED_MM_S.1, default.speed_mm_s),
             passes: u8::try_from(passes).unwrap_or(default.passes),
             overcut_mm: num(m, "overcutMm", Self::OVERCUT_MM.0, Self::OVERCUT_MM.1, default.overcut_mm),
+            depth: optional_step(m, "depth", Self::DEPTH, default.depth),
+            accel: optional_step(m, "accel", Self::ACCEL, default.accel),
+            corner_overcut_mm: num(m, "cornerOvercutMm", Self::CORNER_OVERCUT_MM.0, Self::CORNER_OVERCUT_MM.1, default.corner_overcut_mm),
             extra: unknown(m, &Self::KEYS),
         }
     }
@@ -158,6 +187,12 @@ impl ToolSettings {
             Some("passes")
         } else if !within(self.overcut_mm, Self::OVERCUT_MM) {
             Some("overcutMm")
+        } else if self.depth.is_some_and(|d| !(Self::DEPTH.0..=Self::DEPTH.1).contains(&d)) {
+            Some("depth")
+        } else if self.accel.is_some_and(|a| !(Self::ACCEL.0..=Self::ACCEL.1).contains(&a)) {
+            Some("accel")
+        } else if !within(self.corner_overcut_mm, Self::CORNER_OVERCUT_MM) {
+            Some("cornerOvercutMm")
         } else {
             None
         }
@@ -169,6 +204,9 @@ impl ToolSettings {
         m.insert("speedMmS".into(), json!(self.speed_mm_s));
         m.insert("passes".into(), json!(self.passes));
         m.insert("overcutMm".into(), json!(self.overcut_mm));
+        m.insert("depth".into(), json!(self.depth));
+        m.insert("accel".into(), json!(self.accel));
+        m.insert("cornerOvercutMm".into(), json!(self.corner_overcut_mm));
         Value::Object(m)
     }
 }
@@ -226,6 +264,8 @@ pub struct CuttingSettings {
     pub clip_to_mat: bool,
     /// The material the tool settings were last set from (C5.1), by name; none when set by hand.
     pub material: Option<String>,
+    /// Track enhancing: the machine grips the material harder as it feeds (C5.2).
+    pub track_enhancing: bool,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -245,6 +285,7 @@ impl Default for CuttingSettings {
             ordering: Ordering::InsideFirst,
             clip_to_mat: false,
             material: None,
+            track_enhancing: false,
             extra: Map::new(),
         }
     }
@@ -256,7 +297,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 12] = [
+    const KEYS: [&'static str; 13] = [
         "version",
         "mat",
         "customMatMm",
@@ -269,6 +310,7 @@ impl CuttingSettings {
         "ordering",
         "clipToMat",
         "material",
+        "trackEnhancing",
     ];
 
     /// The settings in `v` (a document's `unknown["cutting"]`, from a file): anything that isn't an
@@ -293,6 +335,7 @@ impl CuttingSettings {
             },
             ordering: choice(m, "ordering", &Ordering::CHOICES, d.ordering),
             clip_to_mat: flag(m, "clipToMat", d.clip_to_mat),
+            track_enhancing: flag(m, "trackEnhancing", d.track_enhancing),
             material: m.get("material").and_then(Value::as_str).and_then(crate::material::valid_name),
             extra: unknown(m, &Self::KEYS),
         }
@@ -315,6 +358,7 @@ impl CuttingSettings {
         m.insert("operations".into(), Value::Object(ops));
         m.insert("ordering".into(), json!(self.ordering.id()));
         m.insert("clipToMat".into(), json!(self.clip_to_mat));
+        m.insert("trackEnhancing".into(), json!(self.track_enhancing));
         if let Some(name) = &self.material {
             m.insert("material".into(), json!(name));
         }

@@ -14,6 +14,9 @@
   },
   "operations": [
     {
+      "accel": null,
+      "cornerOvercutMm": 0.0,
+      "depth": null,
       "force": 0.1,
       "kind": "score",
       "overcutMm": 0.0,
@@ -21,6 +24,9 @@
       "speedMmS": 100.0
     },
     {
+      "accel": null,
+      "cornerOvercutMm": 0.0,
+      "depth": null,
       "force": 0.3,
       "kind": "cut",
       "overcutMm": 0.0,
@@ -309,6 +315,7 @@
     "pointCount": 58,
     "travelMm": 154.847412
   },
+  "trackEnhancing": false,
   "version": 1,
   "warnings": []
 }

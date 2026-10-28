@@ -1,10 +1,9 @@
 use proptest::prelude::*;
-use serde_json::Map;
 
 use super::*;
 
 fn tool(passes: u8) -> ToolSettings {
-    ToolSettings { force: 0.3, speed_mm_s: 100.0, passes, overcut_mm: 0.0, extra: Map::new() }
+    ToolSettings { force: 0.3, speed_mm_s: 100.0, passes, overcut_mm: 0.0, ..ToolSettings::default() }
 }
 
 fn mat() -> JobMat {
@@ -23,6 +22,7 @@ fn job() -> CutJob {
         operations: vec![Operation { kind: OpKind::Score, tool: tool(1) }, Operation { kind: OpKind::Cut, tool: tool(2) }],
         paths: vec![path(1, true, &[[10.0, 10.0], [20.0, 10.0], [20.0, 20.0], [10.0, 20.0]]), path(0, false, &[[50.0, 10.0], [70.0, 10.0]])],
         warnings: vec![],
+        track_enhancing: false,
     }
 }
 
@@ -110,7 +110,7 @@ fn any_job() -> impl Strategy<Value = CutJob> {
         speed_mm_s,
         passes,
         overcut_mm,
-        extra: Map::new(),
+        ..ToolSettings::default()
     });
     let op = (any::<bool>(), tool).prop_map(|(cut, tool)| Operation { kind: if cut { OpKind::Cut } else { OpKind::Score }, tool });
     let path = (0usize..4, any::<bool>(), prop::collection::vec((coord(), coord()).prop_map(|(x, y)| [x, y]), 0..6))
@@ -121,6 +121,7 @@ fn any_job() -> impl Strategy<Value = CutJob> {
         operations,
         paths,
         warnings: vec![],
+        track_enhancing: false,
     })
 }
 
