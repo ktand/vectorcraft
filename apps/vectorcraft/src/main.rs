@@ -28,6 +28,8 @@ mod clipboard;
 mod compositor_gpu;
 mod control_server;
 mod cursor_theme;
+// Fork: the cutting workspace.
+mod cutters;
 #[cfg(feature = "wgpu")]
 mod gpu;
 #[cfg(target_os = "linux")]
@@ -139,6 +141,8 @@ fn main() -> std::process::ExitCode {
     // Before any thread starts: the pointer must find a cursor theme on Wayland (#2450).
     #[cfg(target_os = "linux")]
     cursor_theme::apply();
+    // Fork: the USB cutters the cutting.* commands can send to.
+    cutters::install();
     // Validate roots before logging, font scans, preferences or the window: a missing value
     // must not clear an environment root and start the control channel without confinement.
     let mut control = automation_args::ControlArg::default();

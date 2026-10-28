@@ -20,6 +20,8 @@ windows7 = ["eframe/glow"]
 vectorcraft-engine = { workspace = true, features = ["bundled-fonts"] }
 vectorcraft-ui-egui = { workspace = true }
 vectorcraft-text = { workspace = true }
+# Fork: the cutting workspace: the USB cutters the app reaches (src/cutters.rs).
+vectorcraft-cutter = { workspace = true }
 # Shared across the Craft suite: decides who draws the window frame per desktop (compositor vs app)
 # so VectorCraft matches the rest on Linux. `egui` adds `craft_window::decorate`. See #217.
 craft-window = { workspace = true }
@@ -57,7 +59,9 @@ winsafe = { version = "0.0.29", default-features = false, features = ["user"], o
 # read a pen's barrel button from its pointer messages. Win32_UI_Input_Pointer has
 # `GetPointerPenInfo`, which it uses to read the pen's pressure and which end of the pen is down.
 [target.'cfg(all(windows, not(target_vendor = "win7")))'.dependencies]
-windows = { version = "0.62", features = ["Win32_Graphics_DirectWrite", "Win32_Graphics_Gdi", "Win32_UI_Input_Pointer", "Win32_UI_WindowsAndMessaging"] }
+# Fork: the cutting workspace (src/cutters.rs) opens USB cutters through the USB-printer device
+# interface: SetupDi listing, overlapped file I/O.
+windows = { version = "0.62", features = ["Win32_Graphics_DirectWrite", "Win32_Graphics_Gdi", "Win32_UI_Input_Pointer", "Win32_UI_WindowsAndMessaging", "Win32_Devices_DeviceAndDriverInstallation", "Win32_Storage_FileSystem", "Win32_System_IO", "Win32_System_Threading", "Win32_Security"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # The macOS menu bar (src/mac_menu.rs): Tauri's menu crate, AppKit menus behind a safe API (no GTK

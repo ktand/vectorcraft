@@ -188,6 +188,124 @@ fn playback_rows(ui: &mut Ui, sim: &vectorcraft_cutjob::Simulation) {
     set_playback(&ctx, p);
 }
 
+/// How each operation drives the blade: force (0–100 % of the machine's range), speed, passes and
+/// overcut, set through `cutting.settings.set` (values typed out of range are brought into it).
+fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
+    for (op, label) in [("cut", "Cut"), ("score", "Score")] {
+        let tool = &info["settings"]["operations"][op];
+        let get = |k: &str, d: f64| tool[k].as_f64().unwrap_or(d);
+        let set_tool = |app: &mut VectorcraftApp, key: &str, v: f64| set(app, json!({ "operations": { op: { key: v } } }));
+        ui.label(egui::RichText::new(tl!(label)).strong());
+        widgets::label_row(ui, tl!("Force"), LABEL_W, |ui| {
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "force"), get("force", 0.3) * 100.0, " %", 0, 64.0, 1.0, 0.0, &[]) {
+                set_tool(app, "force", (v.clamp(0.0, 100.0) / 100.0 * 100.0).round() / 100.0);
+            }
+        });
+        widgets::label_row(ui, tl!("Speed"), LABEL_W, |ui| {
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "speed"), get("speedMmS", 100.0), " mm/s", 0, 72.0, 10.0, 1.0, &[]) {
+                set_tool(app, "speedMmS", v.clamp(1.0, 2_000.0).round());
+            }
+        });
+        widgets::label_row(ui, tl!("Passes"), LABEL_W, |ui| {
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "passes"), get("passes", 1.0), "", 0, 48.0, 1.0, 1.0, &[]) {
+                set_tool(app, "passes", v.clamp(1.0, 10.0).round());
+            }
+        });
+        widgets::label_row(ui, tl!("Overcut"), LABEL_W, |ui| {
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "overcut"), get("overcutMm", 0.0), " mm", 1, 64.0, 0.5, 0.0, &[]) {
+                set_tool(app, "overcutMm", (v.clamp(0.0, 5.0) * 10.0).round() / 10.0);
+            }
+        });
+    }
+}
+
+/// The machines last found: (id, model), and the one chosen.
+#[derive(Clone, Debug, Default)]
+struct Machines {
+    found: Option<Vec<(String, String)>>,
+    chosen: usize,
+    /// What the last Send said: its warnings, or why it didn't start.
+    note: Option<(bool, String)>,
+}
+
+fn find_machines(app: &mut VectorcraftApp) -> Vec<(String, String)> {
+    let r = app.session.execute("cutting.devices", &json!({})).unwrap_or_default();
+    r["devices"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|d| Some((d["id"].as_str()?.to_string(), d["model"].as_str()?.to_string()))).collect())
+        .unwrap_or_default()
+}
+
+/// The machine to send to, sending and its progress (C4.5). The machines are looked for once and
+/// again on Find Cutters, not each frame (that asks the system for its USB devices).
+fn cutter_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut m: Machines = super::pstate(&ctx, "cutting-machines");
+    let found = match m.found.clone() {
+        Some(f) => f,
+        None => {
+            let f = find_machines(app);
+            m.found = Some(f.clone());
+            f
+        }
+    };
+    let status = app.session.execute("cutting.status", &json!({})).unwrap_or_default();
+    let sending = status["sending"].as_bool() == Some(true);
+    match found.len() {
+        0 => {
+            widgets::dim_label(ui, tl!("No cutter is connected."));
+        }
+        1 => {
+            ui.label(found.first().map(|(_, model)| model.as_str()).unwrap_or_default());
+        }
+        _ => {
+            let names: Vec<&str> = found.iter().map(|(_, model)| model.as_str()).collect();
+            let current = names.get(m.chosen).copied().unwrap_or_default();
+            if let Some(i) = widgets::dropdown_names(ui, ("cutting", "machine"), current, &names, 170.0) {
+                m.chosen = i;
+            }
+        }
+    }
+    let has_job = crate::cutting::job(app, &ctx).is_some_and(|j| j.as_ref().as_ref().is_ok_and(|made| !made.job.paths.is_empty()));
+    ui.horizontal(|ui| {
+        if ui.add_enabled(!found.is_empty() && has_job && !sending, egui::Button::new(tl!("Send to Cutter"))).clicked() {
+            let device = found.get(m.chosen).or(found.first()).map(|(id, _)| id.clone()).unwrap_or_default();
+            m.note = Some(match app.run("cutting.send", json!({ "device": device })) {
+                Ok(r) => {
+                    (false, r["warnings"].as_array().map(|w| w.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" ")).unwrap_or_default())
+                }
+                Err(e) => (true, e),
+            });
+        }
+        if sending && ui.button(tl!("Cancel")).clicked() {
+            let _ = app.run("cutting.cancel", json!({}));
+        }
+        if !sending && ui.button(tl!("Find Cutters")).clicked() {
+            m.found = None;
+            m.chosen = 0;
+        }
+    });
+    if sending {
+        let (sent, all) = (status["chunksSent"].as_u64().unwrap_or(0), status["chunks"].as_u64().unwrap_or(0));
+        widgets::dim_label(ui, &format!("{} {sent} / {all}", tl!("Sending:")));
+        ctx.request_repaint_after(std::time::Duration::from_millis(250));
+    } else if let Some(outcome) = status["outcome"].as_str() {
+        let (text, bad) = match outcome {
+            "done" => (tl!("Sent.").to_string(), false),
+            "cancelled" => (tl!("Cancelled.").to_string(), false),
+            other => (other.to_string(), true),
+        };
+        ui.label(egui::RichText::new(text).color(if bad { t.bleed } else { t.text_dim }));
+    }
+    if let Some((bad, note)) = &m.note
+        && !note.is_empty()
+    {
+        ui.label(egui::RichText::new(note).color(if *bad { t.bleed } else { t.text_dim }));
+    }
+    super::set_pstate(&ctx, "cutting-machines", m);
+}
+
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     let Ok(info) = app.session.execute("cutting.settings.get", &json!({})) else {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
@@ -198,8 +316,14 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::section_header(ui, tl!("Selection"));
     selection_rows(app, ui);
     widgets::divider(ui);
+    widgets::section_header(ui, tl!("Tool Settings"));
+    tool_rows(app, ui, &info);
+    widgets::divider(ui);
     widgets::section_header(ui, tl!("Job"));
     job_rows(app, ui);
+    widgets::divider(ui);
+    widgets::section_header(ui, tl!("Cutter"));
+    cutter_rows(app, ui);
     widgets::divider(ui);
     let view = app.ui.view.cutting;
     if widgets::check(ui, tl!("Cutting View"), view, true) {

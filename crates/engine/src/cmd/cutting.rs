@@ -14,11 +14,15 @@ use vectorcraft_doc::Document;
 
 use super::*;
 
+// Sending the job to a machine (C4.5).
+mod devices;
+
 const SETTINGS_SET: &str = "cutting.settings.set";
 const OP_SET: &str = "cutting.op.set";
 
 pub fn specs() -> Vec<CommandSpec> {
-    vec![
+    let mut v = devices::specs();
+    v.extend(vec![
         cmd!(
             query "cutting.settings.get",
             "Cutting Settings",
@@ -82,7 +86,8 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             preview_export
         ),
-    ]
+    ]);
+    v
 }
 
 fn preview_export(s: &mut Session, p: &Value) -> Result<Value> {
