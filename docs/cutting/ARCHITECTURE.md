@@ -203,9 +203,10 @@ pub struct JobStats { pub cut_mm: f64, pub travel_mm: f64, pub path_count: usize
 
 ```
 Document + CuttingSettings
-  1. select     the visible, printable objects on the chosen artboard (locked ones too); skip guides,
-                template layers and hidden layers; resolve each object's op (attribute → ancestors →
-                defaultOp); drop "none"
+  1. select     the visible objects on the chosen artboard (locked ones and non-printing layers too:
+                print-and-cut keeps cut lines on one); skip guides, clipping paths, template layers
+                and hidden layers; resolve each object's op (attribute → ancestors → defaultOp);
+                drop "none"; note the clip groups around each
   2. geometry   paths and compound paths after geometry effects (apply_geometry); type through its outlines,
                 symbols expanded (reshape); a stroke is cut on its centre line, not its outline;
                 images are skipped with a warning

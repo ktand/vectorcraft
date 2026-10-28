@@ -7,10 +7,12 @@
 //! - [`settings`] and [`set_settings`]: the document's [`CuttingSettings`], under
 //!   `Document::unknown["cutting"]`.
 //! - [`placement`]: where the settings' artboard lies on the mat, document points to mat mm.
+//! - [`select`]: which objects a job cuts, and with which operation.
 #![forbid(unsafe_code)]
 
 pub mod ops;
 pub mod placement;
+pub mod select;
 
 use vectorcraft_cutjob::{CuttingSettings, DOCUMENT_KEY};
 use vectorcraft_doc::Document;
