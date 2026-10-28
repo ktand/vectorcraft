@@ -16,6 +16,7 @@
   "operations": [
     {
       "accel": null,
+      "bladeOffsetMm": null,
       "cornerOvercutMm": 0.0,
       "depth": null,
       "force": 0.1,
@@ -26,6 +27,7 @@
     },
     {
       "accel": null,
+      "bladeOffsetMm": null,
       "cornerOvercutMm": 0.0,
       "depth": null,
       "force": 0.3,

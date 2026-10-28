@@ -69,6 +69,14 @@ Result:
 
 Result:
 
+## Step 4d: blade offset (C5.4)
+
+- A 20 mm square scored on paper with Blade offset 0.9 (the default), then 0.0: at 0.9 the corners should be
+  sharp; at 0.0 they come out rounded or with small loops. If 0.9 looks wrong, try 0.5 and 1.2 and note which
+  gives the sharpest corners for the blade fitted.
+
+Result:
+
 ## Step 5: a real cut
 
 - Only after steps 1–3 pass: the golden test file (`nested.svg`) cut through on paper with the cut force set as

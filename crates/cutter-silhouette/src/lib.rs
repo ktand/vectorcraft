@@ -37,8 +37,16 @@ pub const MODELS: [(u16, &str, f64); 6] = [
     (0x1141, "Cameo 5 Plus", 372.0),
 ];
 
-/// The blade's offset from its axis, machine units (0.9 mm).
-const BLADE_OFFSET: u32 = 18;
+/// The usual blade's offset from its axis, mm: the machine turns the blade round corners for
+/// it, so the job's paths are where the tip cuts.
+pub const BLADE_OFFSET_MM: f64 = 0.9;
+
+/// A blade offset (mm, `None`: the usual blade's) as the machine's units for `FC`.
+fn blade_offset_units(mm: Option<f64>) -> u32 {
+    let mm = mm.filter(|m| m.is_finite()).unwrap_or(BLADE_OFFSET_MM).clamp(0.0, 2.0);
+    // At most 40 after the clamp, so the conversion is exact.
+    (mm * 20.0).round() as u32
+}
 /// Force steps.
 pub const FORCE: (u32, u32) = (1, 33);
 /// Speed steps, and the mm/s one step is taken for until it is measured on a machine.
@@ -220,7 +228,7 @@ impl Silhouette {
                 c.cmd("J1");
                 c.cmd(&format!("FX{force}"));
                 c.cmd(&format!("!{speed}"));
-                c.cmd(&format!("FC{BLADE_OFFSET}"));
+                c.cmd(&format!("FC{}", blade_offset_units(op.tool.blade_offset_mm)));
                 if let Some(depth) = op.tool.depth {
                     c.cmd(&format!("TF{depth}"));
                 }

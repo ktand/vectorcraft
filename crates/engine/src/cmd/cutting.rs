@@ -31,7 +31,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Settings",
             [],
             None,
-            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm}}, ordering, clipToMat, trackEnhancing, grouping, material?}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
+            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}, ordering, clipToMat, trackEnhancing, grouping, material?}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
             has_doc,
             settings_get
         ),
@@ -40,7 +40,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Cutting Settings",
             [],
             None,
-            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none|outline (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5, depth?: 1–10 or null (an automatic blade's depth; null: the machine's own), accel?: 1–3 or null, cornerOvercutMm?: 0–2 (run past sharp corners and back)}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job), trackEnhancing?: bool (the machine grips the material harder), grouping?: none|layer|color (cut in groups, by top-level layer or by stroke colour, else fill, pausing before each group after the first so the tool or material can be changed)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
+            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none|outline (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5, depth?: 1–10 or null (an automatic blade's depth; null: the machine's own), accel?: 1–3 or null, cornerOvercutMm?: 0–2 (run past sharp corners and back), bladeOffsetMm?: 0–2 or null (how far the blade's tip trails its axis, for the machine to turn it round corners; 0: a pen; null: the usual blade's)}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job), trackEnhancing?: bool (the machine grips the material harder), grouping?: none|layer|color (cut in groups, by top-level layer or by stroke colour, else fill, pausing before each group after the first so the tool or material can be changed)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
             has_doc,
             settings_set
         ),
@@ -187,7 +187,7 @@ const TOP_KEYS: [&str; 12] = [
     "grouping",
 ];
 const OP_KEYS: [&str; 2] = ["cut", "score"];
-const TOOL_KEYS: [&str; 7] = ["force", "speedMmS", "passes", "overcutMm", "depth", "accel", "cornerOvercutMm"];
+const TOOL_KEYS: [&str; 8] = ["force", "speedMmS", "passes", "overcutMm", "depth", "accel", "cornerOvercutMm", "bladeOffsetMm"];
 
 /// `m`'s keys are all `allowed`; `at` names where `m` is, for the error.
 fn known_keys(m: &Map<String, Value>, allowed: &[&str], at: &str) -> Result<()> {
