@@ -24,7 +24,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Settings",
             [],
             None,
-            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm}}, ordering}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
+            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm}}, ordering, clipToMat}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
             has_doc,
             settings_get
         ),
@@ -33,7 +33,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Cutting Settings",
             [],
             None,
-            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5}}, ordering?: insideFirst|document} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
+            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
             has_doc,
             settings_set
         ),
@@ -55,7 +55,21 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             op_get
         ),
+        cmd!(
+            query "cutting.job",
+            "Cutting Job",
+            [],
+            None,
+            "{} the cut job the document makes with its cutting settings, in cutting order (the document isn't changed) → {job: {version, mat: {id, sizeMm, cutAreaMm}, operations: [{kind: score|cut, force, speedMmS, passes, overcutMm}], paths: [{op: index into operations, source: {node: object id, subpath}, closed, points: [[x, y] mm on the mat]}], warnings: [{source, message}]}, stats: {pathCount, pointCount, pathMm, bladeMm, travelMm}}; an error when art leaves the cut area (unless clipToMat) or the settings' artboard is missing",
+            has_doc,
+            job
+        ),
     ]
+}
+
+fn job(s: &mut Session, _: &Value) -> Result<Value> {
+    let job = vectorcraft_cutting::build_job(&s.doc()?.doc).map_err(|e| bad("cutting.job", e.to_string()))?;
+    Ok(json!({"job": job.to_value(), "stats": job.stats().to_value()}))
 }
 
 fn mat_json(m: &MatGeometry) -> Value {
@@ -87,7 +101,8 @@ fn settings_get(s: &mut Session, _: &Value) -> Result<Value> {
 }
 
 /// The keys `cutting.settings.set` takes at the top, in `operations` and in each tool's.
-const TOP_KEYS: [&str; 9] = ["mat", "customMatMm", "orientation", "artboard", "offsetMm", "defaultOp", "toleranceMm", "operations", "ordering"];
+const TOP_KEYS: [&str; 10] =
+    ["mat", "customMatMm", "orientation", "artboard", "offsetMm", "defaultOp", "toleranceMm", "operations", "ordering", "clipToMat"];
 const OP_KEYS: [&str; 2] = ["cut", "score"];
 const TOOL_KEYS: [&str; 4] = ["force", "speedMmS", "passes", "overcutMm"];
 

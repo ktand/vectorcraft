@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:cut="urn:vectorcraft:cutting:1" width="100mm" height="100mm" viewBox="0 0 100 100">
+  <!-- Written for the cutting golden test: an O (a square with a square counter, the counter drawn
+       last), a fold line to score, a circle, an object set to No Cut and a hidden one. -->
+  <path d="M10 10 H60 V60 H10 Z M25 25 H45 V45 H25 Z" fill="#000" fill-rule="evenodd"/>
+  <line x1="10" y1="80" x2="60" y2="80" stroke="#000" cut:op="score"/>
+  <circle cx="80" cy="80" r="10" fill="none" stroke="#000"/>
+  <rect x="70" y="10" width="20" height="20" fill="#ccc" cut:op="none"/>
+  <rect x="70" y="40" width="20" height="20" fill="#ccc" visibility="hidden"/>
+</svg>

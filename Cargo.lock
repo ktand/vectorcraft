@@ -6165,6 +6165,7 @@ dependencies = [
  "vectorcraft-doc",
  "vectorcraft-effects",
  "vectorcraft-geom",
+ "vectorcraft-svg",
  "vectorcraft-text",
 ]
 

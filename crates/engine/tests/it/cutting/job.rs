@@ -1,0 +1,69 @@
+//! C3.5: `cutting.job` makes the document's cut job, in cutting order, without changing it.
+
+use serde_json::{Value, json};
+use vectorcraft_engine::Session;
+
+const PT: f64 = 72.0 / 25.4;
+
+/// A square of `side` mm at (`x`, `y`) mm.
+fn square(s: &mut Session, x: f64, y: f64, side: f64) -> u64 {
+    s.execute("shape.rectangle", &json!({"x": x * PT, "y": y * PT, "width": side * PT, "height": side * PT})).unwrap()["id"].as_u64().unwrap()
+}
+
+fn job(s: &mut Session) -> Value {
+    s.execute("cutting.job", &json!({})).unwrap()
+}
+
+fn sources(j: &Value) -> Vec<u64> {
+    j["job"]["paths"].as_array().unwrap().iter().map(|p| p["source"]["node"].as_u64().unwrap()).collect()
+}
+
+fn new_doc() -> Session {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 200.0 * PT, "height": 200.0 * PT})).unwrap();
+    s
+}
+
+#[test]
+fn the_job_cuts_inner_shapes_first_and_scores_before_cutting() {
+    let mut s = new_doc();
+    let outer = square(&mut s, 10.0, 10.0, 50.0);
+    let inner = square(&mut s, 25.0, 25.0, 20.0);
+    let fold = square(&mut s, 100.0, 10.0, 30.0);
+    s.execute("cutting.op.set", &json!({"ids": [fold], "op": "score"})).unwrap();
+    let before = s.active().unwrap().doc.clone();
+    let j = job(&mut s);
+    assert!(std::sync::Arc::ptr_eq(&before, &s.active().unwrap().doc), "the document isn't changed");
+    assert_eq!(sources(&j), [fold, inner, outer]);
+    let ops = &j["job"]["operations"];
+    assert_eq!((ops[0]["kind"].clone(), ops[1]["kind"].clone()), (json!("score"), json!("cut")));
+    assert_eq!(j["job"]["paths"][0]["op"], 0);
+    // In millimetres on the mat: the inner square's corners at 25 and 45 mm.
+    let pts = j["job"]["paths"][1]["points"].as_array().unwrap();
+    let xs: Vec<f64> = pts.iter().map(|p| p[0].as_f64().unwrap()).collect();
+    assert!(xs.iter().all(|x| (x - 25.0).abs() < 1e-6 || (x - 45.0).abs() < 1e-6), "{xs:?}");
+    assert_eq!(j["stats"]["pathCount"], 3);
+    assert!((j["stats"]["pathMm"].as_f64().unwrap() - (200.0 + 80.0 + 120.0)).abs() < 1e-6);
+}
+
+#[test]
+fn art_off_the_mat_is_an_error_unless_clipped_to_it() {
+    let mut s = new_doc();
+    square(&mut s, 10.0, 10.0, 10.0);
+    s.execute("cutting.settings.set", &json!({"offsetMm": [290, 0]})).unwrap();
+    let e = s.execute("cutting.job", &json!({})).unwrap_err().to_string();
+    assert!(e.contains("cut area"), "{e}");
+    s.execute("cutting.settings.set", &json!({"clipToMat": true})).unwrap();
+    let j = job(&mut s);
+    assert!(j["job"]["warnings"].as_array().unwrap().iter().any(|w| w["message"].as_str().unwrap().contains("edge")));
+    assert!(j["stats"]["pathCount"].as_u64().unwrap() >= 1);
+    assert!(s.execute("cutting.settings.set", &json!({"clipToMat": "yes"})).is_err());
+}
+
+#[test]
+fn an_empty_document_makes_an_empty_job() {
+    let mut s = new_doc();
+    let j = job(&mut s);
+    assert_eq!(j["job"]["paths"], json!([]));
+    assert_eq!(j["stats"]["pathCount"], 0);
+}
