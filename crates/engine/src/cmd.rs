@@ -94,8 +94,8 @@ pub(crate) mod views;
 pub mod wand;
 pub mod webexport;
 mod xform;
-// Fork: the cutting workspace (docs/cutting/ARCHITECTURE.md).
-mod cutting;
+// Fork: the cutting workspace (docs/cutting/ARCHITECTURE.md); public for the materials store.
+pub mod cutting;
 
 use serde::Serialize;
 use serde_json::Value;

@@ -371,6 +371,8 @@ fn main() -> std::process::ExitCode {
                 // The profiles loaded before come back before the preferences name any of them.
                 prefs_dir::attach_profile_store(&mut session);
                 prefs_dir::attach_plugin_store(&mut session);
+                // Fork: the user's cutting materials.
+                prefs_dir::attach_cutting_materials();
                 let mut app = VectorcraftApp::new(session, services(cc.winit_window().cloned(), cc.egui_ctx.clone()));
                 app.set_startup_update_check(true);
                 load_prefs(&mut app, saved);

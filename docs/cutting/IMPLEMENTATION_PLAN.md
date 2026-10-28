@@ -76,9 +76,16 @@ These requirements come from the plan's §4 initial acceptance criteria. No hard
 | C4.6 | **Hardware validation** (person in the loop): cut the test sheet (100 mm square, 50 mm circle, 10 mm text, nested "O") on one Cameo model | Measured within ±0.3 mm (target to confirm); results recorded in `docs/cutting/hardware-validation.md` |
 | C4.7 | **Tool holders and Sketch** — each operation chooses its holder (the Cameo 4 has two: `J1`/`J2`), and a Sketch (pen) operation draws instead of cutting; after the machine checks, since it depends on how holder 2 behaves | Encoder golden bytes per holder; checked on the machine with a pen in holder 2 |
 
-## Phase 5 — Usability and reliability (outline; size later)
+## Phase 5 — Usability and reliability
 
-Material presets and saved device profiles · operation grouping by colour or layer (multi-colour cutting) ·
+| Id | Task | Acceptance |
+|---|---|---|
+| C5.1 | **Materials** — **done**: `Material` (name, cut and score tool settings) in `cutjob`; three built-in starting points of our own (light paper, cardstock, vinyl; no maker's table); the user's kept in `Cutting/Materials.json` next to the preferences (desktop app and CLI; read leniently, capped); `cutting.materials`, `cutting.material.apply` (one undo step), `.save`, `.delete`; the document remembers its material and whether it was changed by hand; the panel's Material row | Apply/undo, changed by hand, save to the file and read back, built-in names refused (engine test) |
+| C5.2 | **Machine steps and more settings** (owner decisions, 2026-10-28) — the panel shows force and speed in the machine's own steps (Silhouette: Force 1–33, Speed 1–30), the job stays machine-neutral underneath; per operation **blade depth** (AutoBlade 1–10, `TF`) and **acceleration** (1–3, `TJ`); per job **track enhancing** (`FY`); per operation **line segment overcut** (each segment run on past a sharp corner and back, our own geometry step) | Encoder golden bytes for each setting; the steps round-trip through the panel; corner overcut tests; all to confirm on the machine |
+
+Later in Phase 5 (outline; size later):
+
+Saved device profiles · operation grouping by colour or layer (multi-colour cutting) ·
 blade-offset compensation and overcut (R10) · better ordering (travel optimisation with a time budget) ·
 Print & Cut with registration marks (marks generated in code, no vendor artwork) · job history and error
 reports · more cutter families as their own `cutter-*` crates · upstream PRs for command and overlay

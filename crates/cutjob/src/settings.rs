@@ -130,6 +130,11 @@ impl ToolSettings {
         ToolSettings { force, speed_mm_s: 100.0, passes: 1, overcut_mm: 0.0, extra: Map::new() }
     }
 
+    /// Settings read leniently from `m` (as the document's are), else `default`.
+    pub(crate) fn read_lenient(m: Option<&Map<String, Value>>, default: ToolSettings) -> Self {
+        Self::read(m, default)
+    }
+
     fn read(m: Option<&Map<String, Value>>, default: ToolSettings) -> Self {
         let Some(m) = m else { return default };
         let passes = whole(m, "passes", u32::from(Self::PASSES.0), u32::from(Self::PASSES.1), u32::from(default.passes));
@@ -219,6 +224,8 @@ pub struct CuttingSettings {
     /// Paths that leave the cut area are cut up to its edge (with a warning) instead of stopping
     /// the job.
     pub clip_to_mat: bool,
+    /// The material the tool settings were last set from (C5.1), by name; none when set by hand.
+    pub material: Option<String>,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -237,6 +244,7 @@ impl Default for CuttingSettings {
             operations: Operations::default(),
             ordering: Ordering::InsideFirst,
             clip_to_mat: false,
+            material: None,
             extra: Map::new(),
         }
     }
@@ -248,8 +256,20 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 11] =
-        ["version", "mat", "customMatMm", "orientation", "artboard", "offsetMm", "defaultOp", "toleranceMm", "operations", "ordering", "clipToMat"];
+    const KEYS: [&'static str; 12] = [
+        "version",
+        "mat",
+        "customMatMm",
+        "orientation",
+        "artboard",
+        "offsetMm",
+        "defaultOp",
+        "toleranceMm",
+        "operations",
+        "ordering",
+        "clipToMat",
+        "material",
+    ];
 
     /// The settings in `v` (a document's `unknown["cutting"]`, from a file): anything that isn't an
     /// object gives the defaults. Never fails.
@@ -273,6 +293,7 @@ impl CuttingSettings {
             },
             ordering: choice(m, "ordering", &Ordering::CHOICES, d.ordering),
             clip_to_mat: flag(m, "clipToMat", d.clip_to_mat),
+            material: m.get("material").and_then(Value::as_str).and_then(crate::material::valid_name),
             extra: unknown(m, &Self::KEYS),
         }
     }
@@ -294,6 +315,9 @@ impl CuttingSettings {
         m.insert("operations".into(), Value::Object(ops));
         m.insert("ordering".into(), json!(self.ordering.id()));
         m.insert("clipToMat".into(), json!(self.clip_to_mat));
+        if let Some(name) = &self.material {
+            m.insert("material".into(), json!(name));
+        }
         Value::Object(m)
     }
 

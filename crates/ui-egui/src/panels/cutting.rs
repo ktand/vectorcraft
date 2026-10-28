@@ -188,9 +188,60 @@ fn playback_rows(ui: &mut Ui, sim: &vectorcraft_cutjob::Simulation) {
     set_playback(&ctx, p);
 }
 
+/// The material the tool settings come from (C5.1): built-in starting points and the user's own,
+/// whether they were changed by hand since, and saving them as a material of the user's.
+fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let Ok(info) = app.session.execute("cutting.materials", &json!({})) else { return };
+    let list: Vec<(String, bool)> = info["materials"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|m| Some((m["name"].as_str()?.to_string(), m["builtin"].as_bool()?))).collect())
+        .unwrap_or_default();
+    let current = info["current"].as_str().map(str::to_string);
+    let names: Vec<&str> = list.iter().map(|(n, _)| n.as_str()).collect();
+    let shown = current.as_deref().unwrap_or(tl!("None"));
+    widgets::label_row(ui, tl!("Material"), LABEL_W, |ui| {
+        if let Some(i) = widgets::dropdown_names(ui, ("cutting", "material"), shown, &names, 170.0)
+            && let Some((name, _)) = list.get(i)
+        {
+            let _ = app.run("cutting.material.apply", json!({ "name": name }));
+        }
+    });
+    if info["changed"].as_bool() == Some(true) {
+        widgets::dim_label(ui, tl!("Changed since the material was chosen."));
+    } else if current.as_deref().is_some_and(|c| list.iter().any(|(n, b)| n == c && *b)) {
+        widgets::dim_label(ui, tl!("A starting point: make a test cut first."));
+    }
+    let mut name: String = super::pstate(&ctx, "cutting-material-name");
+    let mut error: Option<String> = super::pstate(&ctx, "cutting-material-error");
+    ui.horizontal(|ui| {
+        ui.add(egui::TextEdit::singleline(&mut name).hint_text(tl!("Material name")).desired_width(120.0));
+        if ui.add_enabled(!name.trim().is_empty(), egui::Button::new(tl!("Save as Material"))).clicked() {
+            error = app.run("cutting.material.save", json!({ "name": name.trim() })).err();
+            if error.is_none() {
+                name.clear();
+            }
+        }
+        let own = current.as_deref().is_some_and(|c| list.iter().any(|(n, b)| n == c && !*b));
+        if own
+            && ui.button(tl!("Delete")).clicked()
+            && let Some(c) = &current
+        {
+            error = app.run("cutting.material.delete", json!({ "name": c })).err();
+        }
+    });
+    if let Some(e) = &error {
+        ui.label(egui::RichText::new(e).color(t.bleed));
+    }
+    super::set_pstate(&ctx, "cutting-material-name", name);
+    super::set_pstate(&ctx, "cutting-material-error", error);
+}
+
 /// How each operation drives the blade: force (0–100 % of the machine's range), speed, passes and
 /// overcut, set through `cutting.settings.set` (values typed out of range are brought into it).
 fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
+    material_rows(app, ui);
     for (op, label) in [("cut", "Cut"), ("score", "Score")] {
         let tool = &info["settings"]["operations"][op];
         let get = |k: &str, d: f64| tool[k].as_f64().unwrap_or(d);

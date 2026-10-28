@@ -202,6 +202,8 @@ fn with_stores(mut h: Headless) -> Headless {
     prefs_dir::attach_profile_store(&mut h.session);
     prefs_dir::attach_plugin_store(&mut h.session);
     prefs_dir::attach_pdf_preset_store(&mut h.session);
+    // Fork: the user's cutting materials.
+    prefs_dir::attach_cutting_materials();
     h
 }
 

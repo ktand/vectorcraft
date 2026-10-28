@@ -54,6 +54,7 @@ fn every_setting_round_trips() {
         },
         ordering: Ordering::Document,
         clip_to_mat: true,
+        material: Some("Cardstock".into()),
         extra: Map::new(),
     };
     assert_eq!(read(s.to_value()), s);

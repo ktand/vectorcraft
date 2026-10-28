@@ -49,6 +49,14 @@ pub fn attach_plugin_store(session: &mut vectorcraft_engine::Session) {
     }
 }
 
+/// Fork: keep the user's cutting materials (C5.1) in `Cutting/Materials.json`, and take the ones
+/// already there.
+pub fn attach_cutting_materials() {
+    if let Some(dir) = store_dir("Cutting") {
+        vectorcraft_engine::cmd::cutting::materials::attach(dir.join("Materials.json"));
+    }
+}
+
 /// Take the saved PDF presets from the `PDF Presets` folder (#2168), and keep the ones saved from
 /// now on there. After the preferences were restored: the folder is the one place the presets live.
 pub fn attach_pdf_preset_store(session: &mut vectorcraft_engine::Session) {

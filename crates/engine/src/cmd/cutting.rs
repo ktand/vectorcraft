@@ -16,12 +16,15 @@ use super::*;
 
 // Sending the job to a machine (C4.5).
 mod devices;
+// Materials: named tool settings (C5.1).
+pub mod materials;
 
 const SETTINGS_SET: &str = "cutting.settings.set";
 const OP_SET: &str = "cutting.op.set";
 
 pub fn specs() -> Vec<CommandSpec> {
     let mut v = devices::specs();
+    v.extend(materials::specs());
     v.extend(vec![
         cmd!(
             query "cutting.settings.get",
