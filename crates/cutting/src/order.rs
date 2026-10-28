@@ -4,8 +4,11 @@
 //! move. Within each operation, with [`Ordering::InsideFirst`], a path inside a closed path is cut
 //! before it (the counter of an O before the O), so the piece around it is still held by the mat;
 //! among the paths that may go next, the nearest one does, a closed path starting at its point
-//! nearest the blade and an open one from whichever end is nearer. Past [`MAX_OPTIMIZED`] paths
-//! the search would take too long: inner paths still go first, in the document's order.
+//! nearest the blade and an open one from whichever end is nearer. That order is then shortened
+//! (C5.6, [`improve`]): stretches of it turned round where the blade travels less up, and each
+//! closed path started where it suits the paths either side, inner paths still first, within a
+//! work budget so the same document always gives the same job. Past [`MAX_OPTIMIZED`] paths the
+//! search would take too long: inner paths still go first, in the document's order.
 //! [`Ordering::Document`] keeps the document's paint order.
 
 use vectorcraft_cutjob::{Ordering, RectMm};
@@ -30,7 +33,7 @@ pub fn order(mut paths: Vec<Polyline>, ordering: Ordering, origin: [f64; 2]) -> 
         while let Some(p) = rest.next_if(|p| p.op == group[0].op) {
             group.push(p);
         }
-        let ordered = order_group(group, at);
+        let ordered = order_group(group, at, MAX_IMPROVE_WORK);
         if let Some(end) = ordered.last().and_then(end_of) {
             at = end;
         }
@@ -120,8 +123,8 @@ fn nearest_start(p: &Polyline, at: [f64; 2]) -> (f64, Option<usize>, bool) {
     }
 }
 
-/// One operation's paths in order, from `at`.
-fn order_group(paths: Vec<Polyline>, at: [f64; 2]) -> Vec<Polyline> {
+/// One operation's paths in order, from `at`, shortened with at most `work` moves weighed.
+fn order_group(paths: Vec<Polyline>, at: [f64; 2], work: usize) -> Vec<Polyline> {
     let b: Vec<RectMm> = paths.iter().map(bounds).collect();
     if paths.len() > MAX_OPTIMIZED {
         // Too many to compare each pair: the innermost first by area, a cheap stand-in for depth.
@@ -132,6 +135,8 @@ fn order_group(paths: Vec<Polyline>, at: [f64; 2]) -> Vec<Polyline> {
     let (mut waiting_inside, containers) = inner_counts(&paths, &b);
     let mut slots: Vec<Option<Polyline>> = paths.into_iter().map(Some).collect();
     let mut out = Vec::with_capacity(slots.len());
+    let mut ids = Vec::with_capacity(slots.len());
+    let origin = at;
     let mut at = at;
     loop {
         // The nearest path with nothing left to cut inside it.
@@ -163,11 +168,134 @@ fn order_group(paths: Vec<Polyline>, at: [f64; 2]) -> Vec<Polyline> {
             at = e;
         }
         out.push(p);
+        ids.push(i);
     }
     // Containment needs a smaller box, so it can't go round in a circle and nothing is left;
     // anything that were would still be cut, last.
-    out.extend(slots.into_iter().flatten());
+    for (i, p) in slots.into_iter().enumerate() {
+        if let Some(p) = p {
+            out.push(p);
+            ids.push(i);
+        }
+    }
+    let mut work = work;
+    improve(&mut out, &mut ids, &containers, origin, &mut work);
     out
+}
+
+/// Most moves the travel improvement weighs for one operation's paths: a work budget rather than a
+/// clock, so the same document always gives the same job (a few hundred milliseconds at most).
+pub const MAX_IMPROVE_WORK: usize = 20_000_000;
+
+/// Where the blade goes down for `p`.
+fn start_of(p: &Polyline) -> Option<[f64; 2]> {
+    p.points.first().copied()
+}
+
+/// Where `p` would start and end cut the other way round: an open path swaps its ends; a closed
+/// one starts and ends where it did.
+fn reversed_ends(p: &Polyline) -> Option<([f64; 2], [f64; 2])> {
+    let (first, last) = (p.points.first().copied()?, p.points.last().copied()?);
+    Some(if p.closed { (first, first) } else { (last, first) })
+}
+
+/// Shortens the blade's travel up through `paths` (in cutting order, from `origin`) without
+/// cutting a path before one inside it: segments of the order turned round where that shortens it
+/// (2-opt; an open path in one is cut the other way), and each closed path started at the point
+/// that suits its neighbours, until neither helps or `work` runs out. `ids[k]` is the original
+/// index of `paths[k]` and `containers[i]` the original indices of the paths around path `i`.
+fn improve(paths: &mut [Polyline], ids: &mut [usize], containers: &[Vec<usize>], origin: [f64; 2], work: &mut usize) {
+    let n = paths.len();
+    let mut pos = vec![0usize; n];
+    for (k, &id) in ids.iter().enumerate() {
+        if let Some(p) = pos.get_mut(id) {
+            *p = k;
+        }
+    }
+    let end = |p: &Polyline| end_of(p).unwrap_or(origin);
+    let start = |p: &Polyline| start_of(p).unwrap_or(origin);
+    for _round in 0..8 {
+        let mut improved = false;
+        // Segment turns.
+        let mut i = 0;
+        while i < n {
+            let prev = if i == 0 { origin } else { paths.get(i - 1).map_or(origin, end) };
+            let Some((_, first_rev_end)) = paths.get(i).and_then(reversed_ends) else {
+                i += 1;
+                continue;
+            };
+            let Some(first_start) = paths.get(i).map(start) else { break };
+            let mut turned = false;
+            for j in i..n {
+                if *work == 0 {
+                    return;
+                }
+                *work -= 1;
+                let (Some(last), Some((last_rev_start, _))) = (paths.get(j), paths.get(j).and_then(reversed_ends)) else { continue };
+                let next = paths.get(j + 1).map(start);
+                let old = dist(prev, first_start) + next.map_or(0.0, |s| dist(end(last), s));
+                let new = dist(prev, last_rev_start) + next.map_or(0.0, |s| dist(first_rev_end, s));
+                if new < old - 1e-9 && turn_keeps_inner_first(ids, containers, &pos, i, j) {
+                    turn(paths, ids, &mut pos, i, j);
+                    improved = true;
+                    turned = true;
+                    break;
+                }
+            }
+            if !turned {
+                i += 1;
+            }
+        }
+        // Closed paths' starts.
+        for k in 0..n {
+            let prev = if k == 0 { origin } else { paths.get(k - 1).map_or(origin, end) };
+            let next = paths.get(k + 1).map(start);
+            let Some(p) = paths.get_mut(k) else { continue };
+            if !p.closed {
+                continue;
+            }
+            *work = work.saturating_sub(p.points.len());
+            let cost = |q: [f64; 2]| dist(prev, q) + next.map_or(0.0, |s| dist(q, s));
+            let best = p.points.iter().enumerate().map(|(i, q)| (cost(*q), i)).min_by(|a, b| a.0.total_cmp(&b.0));
+            if let (Some((c, b)), Some(&now)) = (best, p.points.first())
+                && b != 0
+                && c < cost(now) - 1e-9
+            {
+                p.points.rotate_left(b);
+                improved = true;
+            }
+        }
+        if !improved || *work == 0 {
+            return;
+        }
+    }
+}
+
+/// Turning `paths[i..=j]` round keeps every path before the ones around it: none of a path's
+/// containers is in the segment too.
+fn turn_keeps_inner_first(ids: &[usize], containers: &[Vec<usize>], pos: &[usize], i: usize, j: usize) -> bool {
+    ids.get(i..=j)
+        .unwrap_or_default()
+        .iter()
+        .all(|&id| containers.get(id).into_iter().flatten().all(|c| pos.get(*c).is_none_or(|p| *p > j || *p < i)))
+}
+
+/// `paths[i..=j]` cut in the reverse order, each open one the other way.
+fn turn(paths: &mut [Polyline], ids: &mut [usize], pos: &mut [usize], i: usize, j: usize) {
+    if let Some(seg) = paths.get_mut(i..=j) {
+        seg.reverse();
+        for p in seg.iter_mut().filter(|p| !p.closed) {
+            p.points.reverse();
+        }
+    }
+    if let Some(seg) = ids.get_mut(i..=j) {
+        seg.reverse();
+        for (k, &id) in seg.iter().enumerate() {
+            if let Some(p) = pos.get_mut(id) {
+                *p = i + k;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

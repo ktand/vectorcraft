@@ -94,3 +94,65 @@ fn points_in_polygons() {
     assert!(!in_polygon([15.0, 5.0], &sq));
     assert!(!in_polygon([5.0, 5.0], &[]));
 }
+
+/// C5.6: nearest-next alone goes 51 → 48 → 44 → 53.5 (17.5 mm up); the shortened order goes
+/// out and back once instead (13 mm).
+#[test]
+fn the_order_is_shortened_where_nearest_next_isnt_best() {
+    let dash = |node, x: f64| poly(node, OpKind::Cut, false, &[[x, 0.0], [x + 0.001, 0.0]]);
+    let v = vec![dash(1, 51.0), dash(2, 48.0), dash(3, 44.0), dash(4, 53.5)];
+    let out = order(v, Ordering::InsideFirst, [50.0, 0.0]);
+    let t = travel(&out, [50.0, 0.0]);
+    assert!(t < 13.1, "{t} mm up: {:?}", nodes(&out));
+    assert_eq!(nodes(&out), [1, 4, 2, 3]);
+}
+
+/// Shortening never cuts a path before one inside it, and every path is still cut once.
+#[test]
+fn shortening_keeps_inner_paths_first() {
+    // Rings of squares round a common centre, and loose dashes around them.
+    let mut v = vec![];
+    for (k, side) in [80.0, 60.0, 40.0, 20.0].iter().enumerate() {
+        let o = (100.0 - side) / 2.0;
+        v.push(square(k as u64 + 1, 100.0 + o, o, *side));
+    }
+    for k in 0..30u64 {
+        let x = (k * 37 % 200) as f64;
+        let y = (k * 53 % 120) as f64 + 120.0;
+        v.push(poly(100 + k, OpKind::Cut, false, &[[x, y], [x + 3.0, y + 1.0]]));
+    }
+    let out = order(v.clone(), Ordering::InsideFirst, [0.0, 0.0]);
+    let n = nodes(&out);
+    let pos = |id| n.iter().position(|x| *x == id).unwrap();
+    assert!(pos(4) < pos(3) && pos(3) < pos(2) && pos(2) < pos(1), "inside first: {n:?}");
+    let mut sorted = n.clone();
+    sorted.sort();
+    let mut want = nodes(&v);
+    want.sort();
+    assert_eq!(sorted, want, "each path once");
+}
+
+/// C5.6: the most paths the search orders, scattered: the shortening stays within its work
+/// budget (a fraction of a second in a release build) and only ever shortens.
+#[test]
+fn many_scattered_paths_are_shortened_within_the_budget() {
+    let mut seed = 12345u64;
+    let mut next = || {
+        seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        (seed >> 33) as f64 / f64::from(u32::MAX >> 1)
+    };
+    let v: Vec<Polyline> = (0..MAX_OPTIMIZED as u64)
+        .map(|k| {
+            let (x, y) = (next() * 290.0, next() * 290.0);
+            poly(k, OpKind::Cut, false, &[[x, y], [x + 2.0, y + 1.0]])
+        })
+        .collect();
+    let started = std::time::Instant::now();
+    let nearest = order_group(v.clone(), [0.0, 0.0], 0);
+    let took_nearest = started.elapsed();
+    let out = order_group(v.clone(), [0.0, 0.0], MAX_IMPROVE_WORK);
+    let (before, after) = (travel(&nearest, [0.0, 0.0]), travel(&out, [0.0, 0.0]));
+    eprintln!("nearest next {took_nearest:?}, {before:.0} mm up; shortened {:?} in all, {after:.0} mm up", started.elapsed() - took_nearest);
+    assert_eq!(out.len(), v.len());
+    assert!(after < before, "shortened: {after} < {before}");
+}
