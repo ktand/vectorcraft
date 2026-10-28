@@ -73,7 +73,38 @@ pub fn specs() -> Vec<CommandSpec> {
             has_doc,
             simulate
         ),
+        cmd!(
+            query "cutting.preview.export",
+            "Export Cutting Preview",
+            [],
+            None,
+            "{path?, format?: svg (default)|json} the cut job as an SVG at the mat's size (mm user units: the mat, the travel dashed, each path in its operation's colour with data-order and data-op, numbered) or as cutting.job's JSON; with path, written there → {path, bytes}; without → {text, name: <document>-cut.svg|json}",
+            has_doc,
+            preview_export
+        ),
     ]
+}
+
+fn preview_export(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "cutting.preview.export";
+    let d = &s.doc()?.doc;
+    let job = vectorcraft_cutting::build_job(d).map_err(|e| bad(CMD, e.to_string()))?;
+    let (text, ext) = match str_param(p, "format").unwrap_or("svg") {
+        "svg" => (vectorcraft_cutting::preview::to_svg(&job), "svg"),
+        "json" => {
+            let v = json!({"job": job.to_value(), "stats": job.stats().to_value()});
+            (serde_json::to_string_pretty(&v).map_err(|e| bad(CMD, e.to_string()))?, "json")
+        }
+        other => return Err(bad(CMD, format!("format must be svg or json, not {other:?}"))),
+    };
+    let name = super::fileio::default_name(d, ext).replacen(&format!(".{ext}"), &format!("-cut.{ext}"), 1);
+    match str_param(p, "path") {
+        Some(path) => {
+            super::fileio::write_file(path, text.as_bytes())?;
+            Ok(json!({"path": path, "bytes": text.len()}))
+        }
+        None => Ok(json!({"text": text, "name": name})),
+    }
 }
 
 fn simulate(s: &mut Session, p: &Value) -> Result<Value> {

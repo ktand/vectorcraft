@@ -11,6 +11,7 @@
 //! - [`geometry`]: the outlines each of them cuts along, as drawn.
 //! - [`prepare`]: those outlines on the mat, in millimetres, flattened.
 //! - [`order`]: the order they are cut in.
+//! - [`preview`]: a job as an SVG at the mat's size.
 //! - [`build_job`]: all of it, a document to a validated [`CutJob`]. The document isn't changed:
 //!   the job is made from it each time.
 #![forbid(unsafe_code)]
@@ -20,6 +21,7 @@ pub mod ops;
 pub mod order;
 pub mod placement;
 pub mod prepare;
+pub mod preview;
 pub mod select;
 
 use vectorcraft_cutjob::{CutJob, CuttingSettings, DOCUMENT_KEY, JOB_VERSION, JobError, JobMat, OpKind, Operation, Toolpath};

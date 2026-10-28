@@ -90,3 +90,22 @@ fn an_empty_document_makes_an_empty_job() {
     assert_eq!(j["job"]["paths"], json!([]));
     assert_eq!(j["stats"]["pathCount"], 0);
 }
+
+/// C3.8: the preview as an SVG opens at the mat's size; as JSON it is cutting.job.
+#[test]
+fn the_preview_exports_as_svg_and_json() {
+    let mut s = new_doc();
+    square(&mut s, 10.0, 10.0, 10.0);
+    let svg = s.execute("cutting.preview.export", &json!({})).unwrap();
+    assert_eq!(svg["name"], json!("Untitled-1-cut.svg"));
+    let text = svg["text"].as_str().unwrap().to_string();
+    assert!(text.contains(r#"data-order="1" data-op="cut""#));
+    s.execute("document.open", &json!({"name": "preview.svg", "dataBase64": vectorcraft_format::base64_encode(text.as_bytes())})).unwrap();
+    let ab = s.active().unwrap().doc.artboards[0].rect;
+    assert!((ab.width() / PT - 304.8).abs() < 1e-3 && (ab.height() / PT - 304.8).abs() < 1e-3, "{ab:?}");
+    s.execute("document.activate", &json!({"index": 0})).unwrap();
+    let as_json = s.execute("cutting.preview.export", &json!({"format": "json"})).unwrap();
+    let v: Value = serde_json::from_str(as_json["text"].as_str().unwrap()).unwrap();
+    assert_eq!(v, job(&mut s));
+    assert!(s.execute("cutting.preview.export", &json!({"format": "pdf"})).is_err());
+}
