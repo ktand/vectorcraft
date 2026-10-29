@@ -4,6 +4,8 @@
 //! and not when the selection does. It is kept in the egui context's memory, with the document
 //! it was made from, as is the playback of the run (C3.7).
 
+pub(crate) mod send_window;
+
 use std::sync::Arc;
 
 use vectorcraft_cutjob::{CutJob, JobStats, Simulation};

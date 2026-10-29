@@ -159,6 +159,7 @@ pub fn run_ui_command(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<R
         "view.pixelPreview" => flag(&mut app.ui.view.pixel_preview),
         "view.trimView" => flag(&mut app.ui.view.trim_view),
         "view.cutting" => flag(&mut app.ui.view.cutting),
+        crate::cutting::send_window::COMMAND => crate::cutting::send_window::open(app),
         "view.cornerWidget" => flag(&mut app.ui.view.corner_widgets),
         // New View: the engine stores the current zoom, centre and rotation under the given name.
         "view.saved.new" if p.get("zoom").is_none() => {

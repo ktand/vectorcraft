@@ -1,7 +1,8 @@
-//! Fork: the Cutting panel (`docs/cutting/ARCHITECTURE.md`): the document's cutting settings
-//! (mat, orientation, artboard, offset, default operation, Clip to Mat), the selection's
-//! operation, and the cut job those make (counts and lengths, or why there is none). It reads
-//! the engine's `cutting.*` queries and acts through `app.run`, as every panel does.
+//! Fork: the Cutting panel (`docs/cutting/ARCHITECTURE.md`): the job in a line with Send to
+//! Cutter… (the Send window, C7.1, runs the cut), the document's cutting settings (mat,
+//! orientation, artboard, offset, default operation, Clip to Mat, groups), the selection's
+//! operation, the material and tool settings, and Print & Cut. It reads the engine's `cutting.*`
+//! queries and acts through `app.run`, as every panel does.
 
 use egui::Ui;
 use serde_json::{Value, json};
@@ -18,8 +19,6 @@ pub const ID: &str = "cutting";
 /// Points per millimetre: the number fields take points and show millimetres.
 const PT: f64 = 72.0 / 25.4;
 const LABEL_W: f32 = 80.0;
-/// Most of a job's warnings the panel lists.
-const SHOWN_WARNINGS: usize = 3;
 
 fn set(app: &mut VectorcraftApp, p: Value) {
     // A refusal (a value out of range) leaves the settings as they were; the field shows them.
@@ -140,67 +139,36 @@ fn selection_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
 }
 
-fn job_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+/// The job in a line and the Send window a click away (C7.1); while a cut runs, how far it has got,
+/// so it shows with the window closed.
+fn send_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
-    let Some(job) = crate::cutting::job(app, ui.ctx()) else { return };
-    match &*job {
-        Ok(made) => {
-            let (j, s) = (&made.job, &made.stats);
-            ui.label(format!("{}: {}", tl!("Paths"), s.path_count));
-            ui.label(format!("{}: {:.0} mm", tl!("Cut length"), s.blade_mm));
-            ui.label(format!("{}: {:.0} mm", tl!("Travel"), s.travel_mm));
-            ui.label(format!("{}: {:.0} s", tl!("Estimated time"), made.sim.total_seconds));
-            for w in j.warnings.iter().take(SHOWN_WARNINGS) {
-                ui.label(egui::RichText::new(&w.message).color(t.text_dim));
+    let ctx = ui.ctx().clone();
+    match crate::cutting::job(app, &ctx).as_deref() {
+        Some(Ok(made)) => {
+            let warnings = made.job.warnings.len();
+            let mut line = format!("{} {} · {:.0} mm · {:.0} s", made.stats.path_count, tl!("paths"), made.stats.blade_mm, made.sim.total_seconds);
+            if warnings > 0 {
+                line = format!("{line} · {warnings} {}", tl!("warnings"));
             }
-            if j.warnings.len() > SHOWN_WARNINGS {
-                widgets::dim_label(ui, &format!("{} {}", j.warnings.len() - SHOWN_WARNINGS, tl!("more warnings")));
-            }
-            if !j.paths.is_empty() {
-                playback_rows(ui, &made.sim);
-            }
+            ui.label(egui::RichText::new(line).color(if warnings > 0 { t.warning } else { t.text_dim }));
         }
-        Err(e) => {
+        Some(Err(e)) => {
             ui.label(egui::RichText::new(e).color(t.bleed));
         }
+        None => {}
     }
-}
-
-/// Play the blade's run, step from path to path, or scrub along it (C3.7); the canvas shows it.
-fn playback_rows(ui: &mut Ui, sim: &vectorcraft_cutjob::Simulation) {
-    use crate::cutting::{Playback, playback, set_playback};
-    let ctx = ui.ctx().clone();
-    let mut p = playback(&ctx);
-    let total = sim.total_mm;
-    let at = p.mm.unwrap_or(total);
-    let starts = sim.path_starts_mm();
-    ui.horizontal(|ui| {
-        let play = if p.playing { tl!("Pause") } else { tl!("Play") };
-        if ui.button(play).clicked() {
-            // Playing from the end starts again.
-            let from = if at >= total { 0.0 } else { at };
-            p = Playback { mm: Some(from), playing: !p.playing, last: ctx.input(|i| i.time) };
-        }
-        if ui.button(tl!("Previous")).clicked() {
-            let prev = starts.iter().rev().find(|s| **s < at - 1e-6).copied().unwrap_or(0.0);
-            p = Playback { mm: Some(prev), playing: false, ..p };
-        }
-        if ui.button(tl!("Next")).clicked() {
-            let next = starts.iter().find(|s| **s > at + 1e-6).copied().unwrap_or(total);
-            p = Playback { mm: Some(next), playing: false, ..p };
-        }
-        if p.mm.is_some() && ui.button(tl!("Done")).clicked() {
-            p = Playback::default();
-        }
-    });
-    let mut v = p.mm.unwrap_or(total);
-    if widgets::slider(ui, egui::Slider::new(&mut v, 0.0..=total.max(f64::MIN_POSITIVE)).show_value(false)).changed() {
-        p = Playback { mm: Some(v), playing: false, ..p };
+    let status = app.session.execute("cutting.status", &json!({})).unwrap_or_default();
+    if let Some(group) = status["waitingFor"].as_str() {
+        ui.label(egui::RichText::new(format!("{} {group}.", tl!("Paused before"))).color(t.text_strong));
+    } else if status["sending"].as_bool() == Some(true) {
+        let (sent, all) = (status["chunksSent"].as_u64().unwrap_or(0), status["chunks"].as_u64().unwrap_or(0));
+        widgets::dim_label(ui, &format!("{} {sent} / {all}", tl!("Sending:")));
+        ctx.request_repaint_after(std::time::Duration::from_millis(250));
     }
-    let blade = sim.at_mm(p.mm.unwrap_or(total));
-    let path = blade.path.map_or(String::new(), |i| format!(" · {} {}", tl!("path"), i + 1));
-    widgets::dim_label(ui, &format!("{:.0} / {:.0} s{path} (×{})", blade.done_seconds, sim.total_seconds, crate::cutting::SPEEDUP));
-    set_playback(&ctx, p);
+    if widgets::primary_button(ui, "Send to Cutter…").clicked() {
+        crate::cutting::send_window::set_open(&ctx, true);
+    }
 }
 
 /// The material the tool settings come from (C5.1): built-in starting points and the user's own,
@@ -325,110 +293,6 @@ fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     }
 }
 
-/// The machines last found: (id, model), and the one chosen.
-#[derive(Clone, Debug, Default)]
-struct Machines {
-    found: Option<Vec<(String, String)>>,
-    chosen: usize,
-    /// What the last Send said: its warnings, or why it didn't start.
-    note: Option<(bool, String)>,
-}
-
-fn find_machines(app: &mut VectorcraftApp) -> Vec<(String, String)> {
-    let r = app.session.execute("cutting.devices", &json!({})).unwrap_or_default();
-    r["devices"]
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|d| {
-                    let model = d["model"].as_str()?;
-                    // A machine that isn't there says so wherever it is named.
-                    let label = if d["simulated"] == true { format!("{model} {}", tl!("(simulated)")) } else { model.to_string() };
-                    Some((d["id"].as_str()?.to_string(), label))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-/// The machine to send to, sending and its progress (C4.5). The machines are looked for once and
-/// again on Find Cutters, not each frame (that asks the system for its USB devices).
-fn cutter_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
-    let t = Tokens::get(ui.ctx());
-    let ctx = ui.ctx().clone();
-    let mut m: Machines = super::pstate(&ctx, "cutting-machines");
-    let found = match m.found.clone() {
-        Some(f) => f,
-        None => {
-            let f = find_machines(app);
-            m.found = Some(f.clone());
-            f
-        }
-    };
-    let status = app.session.execute("cutting.status", &json!({})).unwrap_or_default();
-    let sending = status["sending"].as_bool() == Some(true);
-    let waiting = status["waitingFor"].as_str();
-    match found.len() {
-        0 => {
-            widgets::dim_label(ui, tl!("No cutter is connected."));
-        }
-        1 => {
-            ui.label(found.first().map(|(_, model)| model.as_str()).unwrap_or_default());
-        }
-        _ => {
-            let names: Vec<&str> = found.iter().map(|(_, model)| model.as_str()).collect();
-            let current = names.get(m.chosen).copied().unwrap_or_default();
-            if let Some(i) = widgets::dropdown_names(ui, ("cutting", "machine"), current, &names, 170.0) {
-                m.chosen = i;
-            }
-        }
-    }
-    let has_job = crate::cutting::job(app, &ctx).is_some_and(|j| j.as_ref().as_ref().is_ok_and(|made| !made.job.paths.is_empty()));
-    ui.horizontal(|ui| {
-        if ui.add_enabled(!found.is_empty() && has_job && !sending, egui::Button::new(tl!("Send to Cutter"))).clicked() {
-            let device = found.get(m.chosen).or(found.first()).map(|(id, _)| id.clone()).unwrap_or_default();
-            m.note = Some(match app.run("cutting.send", json!({ "device": device })) {
-                Ok(r) => {
-                    (false, r["warnings"].as_array().map(|w| w.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" ")).unwrap_or_default())
-                }
-                Err(e) => (true, e),
-            });
-        }
-        if waiting.is_some() && ui.button(tl!("Continue")).clicked() {
-            let _ = app.run("cutting.continue", json!({}));
-        }
-        if sending && ui.button(tl!("Cancel")).clicked() {
-            let _ = app.run("cutting.cancel", json!({}));
-        }
-        if !sending && ui.button(tl!("Find Cutters")).clicked() {
-            m.found = None;
-            m.chosen = 0;
-        }
-    });
-    if let Some(group) = waiting {
-        let text = format!("{} {group}. {}", tl!("Paused before"), tl!("Change the tool or material, then Continue."));
-        ui.label(egui::RichText::new(text).color(t.text));
-        ctx.request_repaint_after(std::time::Duration::from_millis(250));
-    } else if sending {
-        let (sent, all) = (status["chunksSent"].as_u64().unwrap_or(0), status["chunks"].as_u64().unwrap_or(0));
-        widgets::dim_label(ui, &format!("{} {sent} / {all}", tl!("Sending:")));
-        ctx.request_repaint_after(std::time::Duration::from_millis(250));
-    } else if let Some(outcome) = status["outcome"].as_str() {
-        let (text, bad) = match outcome {
-            "done" => (tl!("Sent.").to_string(), false),
-            "cancelled" => (tl!("Cancelled.").to_string(), false),
-            other => (other.to_string(), true),
-        };
-        ui.label(egui::RichText::new(text).color(if bad { t.bleed } else { t.text_dim }));
-    }
-    if let Some((bad, note)) = &m.note
-        && !note.is_empty()
-    {
-        ui.label(egui::RichText::new(note).color(if *bad { t.bleed } else { t.text_dim }));
-    }
-    super::set_pstate(&ctx, "cutting-machines", m);
-}
-
 /// Print & Cut (C6.1): the switch, how far in the registration marks go, and the marks layer
 /// added, replaced or removed.
 fn print_and_cut_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
@@ -471,6 +335,8 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
         return;
     };
+    send_rows(app, ui);
+    widgets::divider(ui);
     settings_rows(app, ui, &info);
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Selection"));
@@ -481,12 +347,6 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Print & Cut"));
     print_and_cut_rows(app, ui, &info);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Job"));
-    job_rows(app, ui);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Cutter"));
-    cutter_rows(app, ui);
     widgets::divider(ui);
     let view = app.ui.view.cutting;
     if widgets::check(ui, tl!("Cutting View"), view, true) {
@@ -532,52 +392,18 @@ mod tests {
             .collect()
     }
 
-    /// C4.8 and C5.3: a simulated cutter is named as one, and a send cut by layer that has paused
-    /// before the second says so and offers Continue. The only test here that installs machines.
+    /// C7.1: the panel sums the job up and opens the Send window; the cutter is chosen there.
     #[test]
-    fn a_paused_send_offers_continue() {
-        use std::sync::Arc;
-        use std::time::Duration;
-        use vectorcraft_cutter::simulated::{Behaviour, SIMULATED_ID_PREFIX, Sent, SimulatedMachine};
-        let quick = SimulatedMachine {
-            info: vectorcraft_cutter::DeviceInfo {
-                id: format!("{SIMULATED_ID_PREFIX}quick"),
-                vendor_id: vectorcraft_cutter_silhouette::VENDOR_ID,
-                product_id: 0x1137,
-                name: "Simulated cutter".into(),
-            },
-            behaviour: Behaviour {
-                query: vec![0x1B, 0x05],
-                ready: b"0".to_vec(),
-                moving: b"1".to_vec(),
-                busy_per_write: Duration::ZERO,
-                busy_per_byte: Duration::ZERO,
-                answers: vec![],
-            },
-            sent: Sent::default(),
-        };
-        vectorcraft_cutter::registry::install(Some(Arc::new(quick)));
+    fn the_panel_opens_the_send_window() {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
-        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
-        app.run("layer.new", json!({"name": "Gold"})).unwrap();
-        app.run("shape.rectangle", json!({"x": 100, "y": 100, "width": 50, "height": 50})).unwrap();
-        app.run("cutting.settings.set", json!({"grouping": "layer"})).unwrap();
         let texts = panel_texts(&mut app, &ctx);
-        assert!(texts.iter().any(|t| t == "Cameo 4 (simulated)"), "{texts:?}");
-        app.run("cutting.send", json!({})).unwrap();
-        for _ in 0..500 {
-            if app.session.execute("cutting.status", &json!({})).unwrap()["waitingFor"] == "Gold" {
-                break;
-            }
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        let texts = panel_texts(&mut app, &ctx);
-        assert!(texts.iter().any(|t| t.starts_with("Paused before Gold.")), "{texts:?}");
-        assert!(texts.iter().any(|t| t == "Continue") && texts.iter().any(|t| t == "Cancel"), "{texts:?}");
-        app.run("cutting.cancel", json!({})).unwrap();
-        vectorcraft_cutter::registry::install(None);
+        assert!(texts.iter().any(|t| t.starts_with("1 paths · ")), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "Send to Cutter…"), "{texts:?}");
+        assert!(!texts.iter().any(|t| t == "Find Cutters" || t == "Cut length: 159 mm"), "the window's now: {texts:?}");
+        assert!(!crate::cutting::send_window::is_open(&ctx));
     }
 
     /// C6.1: Print & Cut on, the panel adds the marks and then offers to update or remove them.
