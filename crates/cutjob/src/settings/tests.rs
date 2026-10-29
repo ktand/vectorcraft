@@ -34,7 +34,11 @@ fn the_defaults_round_trip_as_documented() {
             "trackEnhancing": false,
             "grouping": "none",
             "printAndCut": false,
-            "markInsetMm": 10.0
+            "markInsetMm": 10.0,
+            "weedBox": false,
+            "weedMarginMm": 3.0,
+            "weedLines": false,
+            "weedLineSpacingMm": 0.0
         })
     );
     assert_eq!(read(v), d);
@@ -72,6 +76,10 @@ fn every_setting_round_trips() {
             },
         )]
         .into(),
+        weed_box: true,
+        weed_margin_mm: 5.5,
+        weed_lines: true,
+        weed_line_spacing_mm: 25.0,
         extra: Map::new(),
     };
     assert_eq!(read(s.to_value()), s);
