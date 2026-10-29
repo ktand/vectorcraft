@@ -192,7 +192,10 @@ fn groups_pause_between_them() {
         vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]]), path(0, false, &[[5.0, 5.0], [6.0, 6.0]])],
         "silhouette.12x12",
     );
-    j.groups = vec![vectorcraft_cutjob::JobGroup { name: "Red".into(), start: 0 }, vectorcraft_cutjob::JobGroup { name: "Blue".into(), start: 1 }];
+    j.groups = vec![
+        vectorcraft_cutjob::JobGroup { name: "Red".into(), start: 0, material: None },
+        vectorcraft_cutjob::JobGroup { name: "Blue".into(), start: 1, material: None },
+    ];
     let e = Silhouette.encode(&j, &cameo4()).unwrap();
     assert_eq!(e.pauses.len(), 1);
     let (at, name) = &e.pauses[0];
@@ -202,6 +205,28 @@ fn groups_pause_between_them() {
     assert!(after.contains("M100,100\u{3}"), "the second path after the pause: {after:?}");
     let before = String::from_utf8_lossy(&e.chunks[..*at].concat()).to_string();
     assert!(before.contains("M20,20\u{3}") && !before.contains("M100,100"), "{before:?}");
+}
+
+/// C7.4: each group is sent with its own operation's settings: a second group cut with a heavier
+/// setup gets its force after the pause, the first group never sees it.
+#[test]
+fn each_group_gets_its_own_settings() {
+    let mut j = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }, Operation { kind: OpKind::Cut, tool: tool(1.0, 100.0, 2, 0.0) }],
+        vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]]), path(1, false, &[[5.0, 5.0], [6.0, 6.0]])],
+        "silhouette.12x12",
+    );
+    j.groups = vec![
+        vectorcraft_cutjob::JobGroup { name: "Paper".into(), start: 0, material: None },
+        vectorcraft_cutjob::JobGroup { name: "Card".into(), start: 1, material: Some("Cardstock".into()) },
+    ];
+    let e = Silhouette.encode(&j, &cameo4()).unwrap();
+    let at = e.pauses[0].0;
+    let (before, after) =
+        (String::from_utf8_lossy(&e.chunks[..at].concat()).to_string(), String::from_utf8_lossy(&e.chunks[at..].concat()).to_string());
+    assert!(before.contains("FX17\u{3}") && !before.contains("FX33\u{3}"), "{before:?}");
+    assert!(after.starts_with("J1\u{3}FX33\u{3}") && !after.contains("FX17\u{3}"), "{after:?}");
+    assert_eq!(after.matches("M100,100\u{3}").count(), 2, "two passes: {after:?}");
 }
 
 /// C5.4: the blade offset is the machine's to turn the blade by: `FC` in its units (20 a mm),

@@ -64,7 +64,7 @@ fn all() -> Vec<Material> {
     v
 }
 
-fn find(name: &str) -> Option<Material> {
+pub(super) fn find(name: &str) -> Option<Material> {
     all().into_iter().find(|m| m.name.eq_ignore_ascii_case(name.trim()))
 }
 

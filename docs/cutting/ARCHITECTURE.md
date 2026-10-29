@@ -110,7 +110,8 @@ Name clash: VectorCraft already has *Cutting tools* (Mirror & Cut, Line Cut, Rec
     "cut":   {"force": 0.3, "speedMmS": 100, "passes": 1, "overcutMm": 0.0},
     "score": {"force": 0.1, "speedMmS": 100, "passes": 1, "overcutMm": 0.0}
   },
-  "ordering": "insideFirst"
+  "ordering": "insideFirst",
+  "colorSetups": {"#ff0000": {"material": "Cardstock", "cut": {"force": 0.45, "passes": 2}, "score": {"force": 0.15}}}
 }
 ```
 
@@ -150,6 +151,30 @@ it, `cutting.marks.remove` takes it out. Nothing else marks it.
 
 The cut job itself, flattened geometry, cut order, simulation state, and device connection state. All of them are
 derived, or they belong to the session.
+
+### 4.4 Each group's own setup (C7.4)
+
+Decided with the owner on 2026-10-29. When the job is cut in groups (by layer or by colour), a group may have a
+tool setup of its own, so that one sheet of several materials cuts each with its own. A group without one is
+cut with the document's setup (`operations`), as before, so older documents cut the same.
+
+- **What is kept:** a copy of the whole setup (cut and score: force, speed, passes, overcut, blade depth,
+  acceleration, corner overcut, blade offset) and the name of the material it came from, or none when it was
+  set by hand (`vectorcraft_cutjob::GroupSetup`). It's a copy, not a reference, so the document cuts the same
+  on another computer or after the material is edited or deleted. "Changed since the material" is worked out
+  against the material when it is shown, as it is for the document's own setup.
+- **Cut by layer:** on the layer, as a foreign attribute in the cutting namespace, `cut:setup`, whose value is
+  the setup as JSON (`{"material": "Cardstock", "cut": {…}, "score": {…}}`). It is renamed, copied and undone
+  with the layer. Layers of the same name are one group, and setting it sets it on each.
+- **Cut by colour:** a colour isn't an object, so the setup goes in the document's settings (4.1), in
+  `colorSetups`, keyed by the name the colour's group has: its swatch's name, or `#rrggbb` (at most 256 of
+  them). Recolouring the objects leaves the setup with the colour, and the new colour shows as a group without
+  one.
+- **The job:** each group's paths name operations that carry that group's settings. The Silhouette encoder
+  already sends the settings again at each group's start, so it needs no change. `JobGroup::material` names
+  the material to load, which the Send window's pause shows.
+- **Commands:** `cutting.groups` lists the groups in cutting order with their setups; `cutting.group.set`
+  sets one from a material or by hand, or clears it, one undo step each.
 
 ## 5. The machine-independent cut job (`vectorcraft-cutjob`)
 

@@ -65,6 +65,48 @@ impl Material {
     }
 }
 
+/// The tool setup one group of a job cut in groups is cut with (C7.4): a copy of the whole setup,
+/// so the document cuts the same wherever it is opened, and the name of the material it came from
+/// (none when set by hand). A group without one is cut with the document's setup.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GroupSetup {
+    pub material: Option<String>,
+    pub cut: ToolSettings,
+    pub score: ToolSettings,
+}
+
+impl GroupSetup {
+    /// As the document keeps it (the shape of a material in the user's file, its name optional).
+    pub fn to_value(&self) -> Value {
+        let mut v = json!({"cut": self.cut.to_value(), "score": self.score.to_value()});
+        if let (Some(name), Some(m)) = (&self.material, v.as_object_mut()) {
+            m.insert("material".into(), json!(name));
+        }
+        v
+    }
+
+    /// One read leniently from the document (as its settings are): anything that isn't an object
+    /// is none; missing settings are `defaults`'.
+    pub fn from_value(v: &Value, defaults: &crate::settings::Operations) -> Option<GroupSetup> {
+        let m = v.as_object()?;
+        Some(GroupSetup {
+            material: m.get("material").and_then(Value::as_str).and_then(valid_name),
+            cut: ToolSettings::read_lenient(object(m, "cut"), defaults.cut.clone()),
+            score: ToolSettings::read_lenient(object(m, "score"), defaults.score.clone()),
+        })
+    }
+
+    /// The setup `m` gives.
+    pub fn of_material(m: &Material) -> GroupSetup {
+        GroupSetup { material: Some(m.name.clone()), cut: m.cut.clone(), score: m.score.clone() }
+    }
+
+    /// The setup is no longer `m`'s.
+    pub fn differs_from(&self, m: &Material) -> bool {
+        !self.cut.same_setup(&m.cut) || !self.score.same_setup(&m.score)
+    }
+}
+
 /// The user's materials in `v` (their file's JSON): the valid ones, the first of each name, at
 /// most [`MAX_MATERIALS`]. Anything else in the file is left out.
 pub fn read_materials(v: &Value) -> Vec<Material> {
@@ -117,6 +159,22 @@ mod tests {
         assert!(read_materials(&json!({"not": "a list"})).is_empty());
         let many: Vec<Value> = (0..500).map(|i| json!({"name": format!("m{i}")})).collect();
         assert_eq!(read_materials(&Value::Array(many)).len(), MAX_MATERIALS);
+    }
+
+    /// C7.4: a group's setup round-trips, keeps its material's name, and reads leniently.
+    #[test]
+    fn group_setups_round_trip() {
+        let defaults = crate::settings::Operations::default();
+        let cardstock = builtin_materials().into_iter().find(|m| m.name == "Cardstock").unwrap();
+        let setup = GroupSetup::of_material(&cardstock);
+        assert_eq!(GroupSetup::from_value(&setup.to_value(), &defaults), Some(setup.clone()));
+        assert!(!setup.differs_from(&cardstock));
+        let by_hand = GroupSetup { material: None, cut: ToolSettings { passes: 3, ..setup.cut.clone() }, ..setup };
+        assert!(by_hand.differs_from(&cardstock));
+        assert_eq!(GroupSetup::from_value(&by_hand.to_value(), &defaults), Some(by_hand));
+        let damaged = GroupSetup::from_value(&json!({"material": "", "cut": {"force": 7}}), &defaults).unwrap();
+        assert_eq!((damaged.material, damaged.cut.force, damaged.score), (None, 1.0, defaults.score.clone()));
+        assert_eq!(GroupSetup::from_value(&json!("junk"), &defaults), None);
     }
 
     #[test]
