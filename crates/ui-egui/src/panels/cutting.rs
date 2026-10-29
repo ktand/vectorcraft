@@ -55,6 +55,83 @@ fn job_settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     });
 }
 
+/// A group row's material choices: the document's setup first, then every material.
+fn group_choices(app: &mut VectorcraftApp) -> Vec<String> {
+    let listed = app.session.execute("cutting.materials", &json!({})).unwrap_or_default();
+    let names = listed["materials"].as_array().into_iter().flatten().filter_map(|m| m["name"].as_str().map(str::to_string));
+    std::iter::once(tl!("Document's setup").to_string()).chain(names).collect()
+}
+
+/// Choice `i` of [`group_choices`] for group `group`: the first goes back to the document's setup,
+/// the others copy that material's in.
+fn choose_group_material(app: &mut VectorcraftApp, group: &str, choices: &[String], i: usize) -> Result<Value, String> {
+    match (i, choices.get(i)) {
+        (0, _) => app.run("cutting.group.set", json!({ "group": group, "clear": true })),
+        (_, Some(name)) => app.run("cutting.group.set", json!({ "group": group, "material": name })),
+        (_, None) => Err("no such material".into()),
+    }
+}
+
+/// Cut in groups (C7.5): one row for each group, in the order they are cut: its name, the
+/// material its setup came from (or the document's setup), and the cut's force and passes. A
+/// change sets that group's own setup (`cutting.group.set`); the rest of its setup is in the
+/// material. Groups without one are cut with the tool settings below.
+fn group_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
+    let t = Tokens::get(ui.ctx());
+    let Ok(listed) = app.session.execute("cutting.groups", &json!({})) else { return };
+    let groups = listed["groups"].as_array().cloned().unwrap_or_default();
+    if groups.is_empty() {
+        widgets::dim_label(ui, tl!("Nothing to cut yet."));
+        return;
+    }
+    let choices = group_choices(app);
+    let names: Vec<&str> = choices.iter().map(String::as_str).collect();
+    let doc_cut = &info["settings"]["operations"]["cut"];
+    let mut error = None;
+    // A grid, so the numbers line up under their headings: a group's name on a row of its own,
+    // its material, force and passes on the next.
+    egui::Grid::new(("cutting", "groups")).num_columns(3).spacing([6.0, 3.0]).show(ui, |ui| {
+        for heading in ["Material", "Force", "Passes"] {
+            widgets::dim_label(ui, tl!(heading));
+        }
+        ui.end_row();
+        for (i, g) in groups.iter().enumerate() {
+            let Some(name) = g["name"].as_str() else { continue };
+            let setup = &g["setup"];
+            ui.label(egui::RichText::new(format!("{}. {name}", i + 1)).strong());
+            if setup["changed"] == true {
+                widgets::dim_label(ui, tl!("changed"));
+            }
+            ui.end_row();
+            let shown = if setup.is_null() {
+                choices.first().map(String::as_str).unwrap_or_default()
+            } else {
+                setup["material"].as_str().unwrap_or(tl!("Set by hand"))
+            };
+            let cut = if setup.is_null() { doc_cut } else { &setup["cut"] };
+            if let Some(k) = widgets::dropdown_names(ui, ("cutting", "group", i, "material"), shown, &names, 130.0) {
+                error = choose_group_material(app, name, &choices, k).err();
+            }
+            let (f_lo, f_hi) = silhouette::FORCE;
+            let step = silhouette::force_step(cut["force"].as_f64().unwrap_or(0.3));
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", "group", i, "force"), f64::from(step), "", 0, 44.0, 1.0, f64::from(f_lo), &[]) {
+                let force = silhouette::force_from_step(v.clamp(f64::from(f_lo), f64::from(f_hi)).round() as u32);
+                error = app.run("cutting.group.set", json!({ "group": name, "operations": { "cut": { "force": force } } })).err();
+            }
+            let passes = cut["passes"].as_f64().unwrap_or(1.0);
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", "group", i, "passes"), passes, "", 0, 44.0, 1.0, 1.0, &[]) {
+                error =
+                    app.run("cutting.group.set", json!({ "group": name, "operations": { "cut": { "passes": v.clamp(1.0, 10.0).round() } } })).err();
+            }
+            ui.end_row();
+        }
+    });
+    if let Some(e) = error {
+        ui.label(egui::RichText::new(e).color(t.bleed));
+    }
+    widgets::dim_label(ui, tl!("Force and passes of the cut; groups on the document's setup use the tool settings below."));
+}
+
 /// Cut, Score, No Cut or the group's or layer's, for the selected objects.
 fn selection_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let objects = app.session.execute("cutting.op.get", &json!({})).ok().and_then(|r| r["objects"].as_array().cloned()).unwrap_or_default();
@@ -276,6 +353,11 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::divider(ui);
     job_settings_rows(app, ui, &info);
     widgets::divider(ui);
+    if info["settings"]["grouping"] != "none" {
+        widgets::section_header(ui, tl!("Groups"));
+        group_rows(app, ui, &info);
+        widgets::divider(ui);
+    }
     widgets::section_header(ui, tl!("Selection"));
     selection_rows(app, ui);
     widgets::divider(ui);
@@ -351,6 +433,33 @@ mod tests {
             })
             .collect();
         assert!(texts.iter().any(|t| t == "Groups") && texts.iter().any(|t| t == "By Colour"), "{texts:?}");
+    }
+
+    /// C7.5: cut by layer, a row for each layer in cutting order; a material chosen on a row is
+    /// that group's setup, the first choice the document's again.
+    #[test]
+    fn the_groups_table_sets_each_groups_material() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        app.run("layer.new", json!({"name": "Gold"})).unwrap();
+        app.run("shape.rectangle", json!({"x": 100, "y": 100, "width": 50, "height": 50})).unwrap();
+        assert!(!panel_texts(&mut app, &ctx).iter().any(|t| t == "2. Gold"), "not cut in groups");
+        app.run("cutting.settings.set", json!({"grouping": "layer"})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "2. Gold"), "{texts:?}");
+        assert_eq!(texts.iter().filter(|t| *t == "Document's setup").count(), 2, "{texts:?}");
+        let choices = group_choices(&mut app);
+        let card = choices.iter().position(|c| c == "Cardstock").unwrap();
+        choose_group_material(&mut app, "Gold", &choices, card).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Cardstock") && !texts.iter().any(|t| t == "changed"), "{texts:?}");
+        app.run("cutting.group.set", json!({"group": "Gold", "operations": {"cut": {"passes": 4}}})).unwrap();
+        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "changed"));
+        choose_group_material(&mut app, "Gold", &choices, 0).unwrap();
+        let groups = app.session.execute("cutting.groups", &json!({})).unwrap();
+        assert!(groups["groups"][1]["setup"].is_null(), "back to the document's");
     }
 
     /// C7.2: the settings most cuts leave alone are behind Advanced, closed at first.
