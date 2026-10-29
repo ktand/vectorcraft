@@ -134,3 +134,25 @@ fn playback_moves_the_blade_and_stops_at_the_end() {
     let p = playback(&ctx);
     assert!(!p.playing && p.mm == Some(sim.total_mm), "{p:?}");
 }
+
+/// C7.3: in Cutting View with the toolpaths shown, a bar at the foot of the canvas plays the
+/// blade's run; it says where the shared playback is, and hides with the toolpaths and the view.
+#[test]
+fn the_playback_bar_shows_over_the_canvas_in_cutting_view() {
+    let mut app = app();
+    app.run("shape.rectangle", json!({"x": 20, "y": 20, "width": 100, "height": 80})).unwrap();
+    let ctx = egui::Context::default();
+    let twice = |app: &mut VectorcraftApp| {
+        frame_texts(app, &ctx);
+        frame_texts(app, &ctx)
+    };
+    assert!(!twice(&mut app).iter().any(|t| t == "Play"), "not in Cutting View");
+    app.run("view.cutting", json!({})).unwrap();
+    let texts = twice(&mut app);
+    assert!(texts.iter().any(|t| t == "Play") && texts.iter().any(|t| t == "Next"), "{texts:?}");
+    crate::cutting::set_playback(&ctx, crate::cutting::Playback { mm: Some(1.0), ..Default::default() });
+    let texts = twice(&mut app);
+    assert!(texts.iter().any(|t| t.contains("· path 1")) && texts.iter().any(|t| t == "Done"), "the shared playback: {texts:?}");
+    crate::cutting::set_shows_toolpaths(&ctx, false);
+    assert!(!twice(&mut app).iter().any(|t| t == "Play"), "hidden with the toolpaths");
+}

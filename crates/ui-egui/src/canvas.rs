@@ -565,6 +565,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
     if app.ui.view.cutting {
         cutting_overlay::cutting_overlay(app, &painter, &xf);
+        cutting_overlay::playback_bar(app, ui.ctx(), &xf);
     }
     original_path_overlay(app, &painter, &xf);
 
