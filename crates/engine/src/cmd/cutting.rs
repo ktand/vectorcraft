@@ -20,6 +20,8 @@ mod devices;
 pub mod materials;
 // Each group's own setup when cut in groups (C7.4).
 mod groups;
+// Job history: each send kept, a report for one that failed (C8.4).
+pub mod history;
 
 const SETTINGS_SET: &str = "cutting.settings.set";
 const OP_SET: &str = "cutting.op.set";
@@ -28,6 +30,7 @@ pub fn specs() -> Vec<CommandSpec> {
     let mut v = devices::specs();
     v.extend(materials::specs());
     v.extend(groups::specs());
+    v.extend(history::specs());
     v.extend(vec![
         cmd!(
             query "cutting.settings.get",

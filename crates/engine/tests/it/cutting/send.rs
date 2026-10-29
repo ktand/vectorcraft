@@ -35,6 +35,10 @@ fn finished(s: &mut Session) -> Value {
 
 #[test]
 fn the_job_goes_to_the_cutter_in_the_background() {
+    // C8.4: every send below is kept in a history file of the test's own.
+    let dir = std::env::temp_dir().join(format!("vectorcraft-history-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    vectorcraft_engine::cmd::cutting::history::attach(dir.join("History.json"));
     let mut s = Session::new();
     s.execute("file.new", &json!({"width": 300, "height": 300})).unwrap();
 
@@ -150,4 +154,40 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     assert_eq!(j["job"]["paths"].as_array().unwrap().len(), 2);
     registry::install(None);
     assert!(s.execute("cutting.test", &json!({})).unwrap_err().to_string().contains("no cutter is connected"));
+
+    // C8.4: the history, newest first: the test cuts, the Print & Cut that didn't find its marks
+    // with a report to share, the sends before; kept in the file, and read back from it.
+    let h = s.execute("cutting.history", &json!({})).unwrap();
+    let entries = h["entries"].as_array().unwrap().clone();
+    assert!(entries.len() >= 5, "{h}");
+    let newest = &entries[0];
+    assert_eq!((newest["test"].clone(), newest["outcome"].clone(), newest["machine"].clone()), (json!(true), json!("done"), json!("Cameo 4")));
+    assert!(newest["shownTime"].as_str().unwrap().ends_with(" UTC") && newest["seconds"].is_number(), "{newest}");
+    let failed = entries.iter().find(|e| e["outcome"].as_str().unwrap().contains("didn't find the registration marks")).unwrap();
+    let report = std::fs::read_to_string(failed["report"].as_str().unwrap()).unwrap();
+    assert!(
+        report.contains("cutting report") && report.contains("didn't find the registration marks") && report.contains("\"printAndCut\": true"),
+        "{report}"
+    );
+    assert!(entries.iter().all(|e| e["outcome"] != "sending"), "every send has finished");
+    let on_disk: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.join("History.json")).unwrap()).unwrap();
+    assert_eq!(on_disk.as_array().unwrap().len(), entries.len());
+    vectorcraft_engine::cmd::cutting::history::attach(dir.join("History.json"));
+    assert_eq!(s.execute("cutting.history", &json!({})).unwrap()["entries"].as_array().unwrap().len(), entries.len(), "read back");
+
+    // Use the settings an entry was cut with: one undo step.
+    let index = failed["index"].clone();
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"passes": 5}}})).unwrap();
+    let r = s.execute("cutting.history.apply", &json!({"index": index})).unwrap();
+    assert_eq!(r["settings"]["operations"]["cut"]["passes"], json!(1));
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"]["passes"], json!(5));
+    assert!(s.execute("cutting.history.apply", &json!({"index": 999})).is_err());
+
+    // A damaged file gives what it can.
+    std::fs::write(dir.join("History.json"), b"[{\"outcome\": \"done\"}, 7, \"junk\"]").unwrap();
+    vectorcraft_engine::cmd::cutting::history::attach(dir.join("History.json"));
+    assert_eq!(s.execute("cutting.history", &json!({})).unwrap()["entries"].as_array().unwrap().len(), 1);
+    assert_eq!(s.execute("cutting.history.clear", &json!({})).unwrap()["cleared"], json!(1));
+    let _ = std::fs::remove_dir_all(&dir);
 }
