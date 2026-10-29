@@ -27,6 +27,7 @@ pub mod corners;
 pub mod geometry;
 pub mod group;
 pub mod marks;
+pub mod nest;
 pub mod ops;
 pub mod order;
 pub mod placement;
