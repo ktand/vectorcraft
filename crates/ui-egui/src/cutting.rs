@@ -31,6 +31,38 @@ struct Cached {
     job: Arc<JobResult>,
 }
 
+/// The Cutting workspace's panels (C7.2): the dock's main column keeps Properties · Layers ·
+/// Libraries (Layers in front: a cut by layer is set up there) and gains Cut Settings and Cutting
+/// Mat below it, taken out of the icon column, so the settings show without opening anything.
+pub(crate) fn workspace_layout() -> craft_ui::docking::Layout<String> {
+    use craft_ui::docking::{Group, Node};
+    let ui = crate::state::UiState { dock_tab: crate::state::DockTab::Layers, ..Default::default() };
+    let mut layout = crate::panel_docking::default_layout(&ui);
+    let ours = [crate::panels::cutting::ID, crate::panels::cutting::mat::ID];
+    if let Some(Node::Split { second, .. }) = layout.root.as_mut()
+        && let Node::Dock { columns, .. } = second.as_mut()
+    {
+        for column in columns.iter_mut() {
+            for group in column.groups.iter_mut() {
+                group.panels.retain(|p| !ours.contains(&p.as_str()));
+                group.active = group.active.min(group.panels.len().saturating_sub(1));
+            }
+            column.groups.retain(|g| !g.panels.is_empty());
+        }
+        columns.retain(|c| !c.groups.is_empty());
+        if let Some(main) = columns.first_mut() {
+            if let Some(tabs) = main.groups.first_mut() {
+                tabs.height = Some(LAYERS_HEIGHT);
+            }
+            main.groups.extend(ours.iter().map(|p| Group::new(vec![p.to_string()], 0)));
+        }
+    }
+    layout
+}
+
+/// The height Layers starts at in the Cutting workspace, points.
+const LAYERS_HEIGHT: f32 = 200.0;
+
 fn key() -> egui::Id {
     egui::Id::unique("cutting-job")
 }

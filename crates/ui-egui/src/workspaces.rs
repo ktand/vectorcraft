@@ -138,13 +138,13 @@ pub fn builtins() -> Vec<Workspace> {
         w(CUTTING, &|x| {
             x.control_bar = true;
             x.rulers = true;
-            x.open_panel = Some(crate::panels::cutting::ID.into());
+            x.dock_tab = DockTab::Layers;
         }),
     ]
 }
 
-/// Fork: the Cutting workspace (Window → Workspace → Cutting): the mat over the art, the Cutting
-/// panel open; every other workspace hides the mat.
+/// Fork: the Cutting workspace (Window → Workspace → Cutting): the mat over the art, Cut Settings
+/// and Cutting Mat docked under Layers; every other workspace hides the mat.
 pub const CUTTING: &str = "Cutting";
 
 /// Preferences › Devices › Enable Touch Workspace (#394): on, a touch screen switches to the Touch
@@ -223,8 +223,12 @@ pub fn apply(ui: &mut UiState, w: &Workspace) {
     ui.dock_width = w.dock_width;
     crate::state::sanitize_toolbar_pos(&mut ui.toolbar_pos);
     ui.flyout = None;
-    // Fork: the Cutting workspace is the cutting mode.
+    // Fork: the Cutting workspace is the cutting mode; until its panels are rearranged, they are
+    // the cutting panels' layout (also over a layout remembered before there was one).
     ui.view.cutting = w.name.eq_ignore_ascii_case(CUTTING);
+    if ui.view.cutting && ui.docking.is_none() {
+        ui.docking = Some(crate::cutting::workspace_layout());
+    }
     ui.workspace = w.name.clone();
 }
 

@@ -1,8 +1,9 @@
-//! Fork: the Cutting panel (`docs/cutting/ARCHITECTURE.md`): the job in a line with Send to
-//! Cutter… (the Send window, C7.1, runs the cut), the document's cutting settings (mat,
-//! orientation, artboard, offset, default operation, Clip to Mat, groups), the selection's
-//! operation, the material and tool settings, and Print & Cut. It reads the engine's `cutting.*`
-//! queries and acts through `app.run`, as every panel does.
+//! Fork: the Cut Settings panel (`docs/cutting/ARCHITECTURE.md`; the id is still `cutting`, so
+//! saved workspaces open it): the job in a line with Send to Cutter… (the Send window, C7.1, runs
+//! the cut), the document's default operation and groups, the selection's operation, the
+//! material and tool settings, the rarely changed ones behind Advanced (C7.2). The mat and Print &
+//! Cut are the Cutting Mat panel's ([`mat`]). It reads the engine's `cutting.*` queries and acts
+//! through `app.run`, as every panel does.
 
 use egui::Ui;
 use serde_json::{Value, json};
@@ -13,6 +14,8 @@ use vectorcraft_cutter_silhouette as silhouette;
 use crate::VectorcraftApp;
 use crate::theme::Tokens;
 use crate::widgets;
+
+pub mod mat;
 
 pub const ID: &str = "cutting";
 
@@ -29,60 +32,9 @@ fn mm_field(ui: &mut Ui, id: &'static str, mm: f64, min_mm: f64) -> Option<f64> 
     widgets::spin_field(ui, ("cutting", id), Some(mm * PT), Unit::Millimeters, 64.0, PT, min_mm * PT, &[]).map(|pt| pt / PT)
 }
 
-fn settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
-    let t = Tokens::get(ui.ctx());
+/// What the document cuts by default and how it groups the cut.
+fn job_settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let s = &info["settings"];
-    let mats: Vec<&Value> = info["mats"].as_array().map(|a| a.iter().collect()).unwrap_or_default();
-    let mat = s["mat"].as_str().unwrap_or_default();
-    let custom = mat == "custom";
-    let mut labels: Vec<&str> = mats.iter().map(|m| m["label"].as_str().unwrap_or_default()).collect();
-    labels.push(tl!("Custom"));
-    let current = if custom { tl!("Custom") } else { mats.iter().find(|m| m["id"] == mat).and_then(|m| m["label"].as_str()).unwrap_or(mat) };
-    widgets::label_row(ui, tl!("Mat"), LABEL_W, |ui| {
-        if let Some(i) = widgets::dropdown_names(ui, ("cutting", "mat"), current, &labels, 170.0) {
-            let id = mats.get(i).and_then(|m| m["id"].as_str()).unwrap_or("custom");
-            set(app, json!({ "mat": id }));
-        }
-    });
-    if custom {
-        let size = |i: usize| s["customMatMm"][i].as_f64().unwrap_or(304.8);
-        widgets::label_row(ui, tl!("Size"), LABEL_W, |ui| {
-            if let Some(w) = mm_field(ui, "mat-w", size(0), 10.0) {
-                set(app, json!({ "customMatMm": [w, size(1)] }));
-            }
-            if let Some(h) = mm_field(ui, "mat-h", size(1), 10.0) {
-                set(app, json!({ "customMatMm": [size(0), h] }));
-            }
-        });
-    } else if info["mat"]["approximate"].as_bool() == Some(true) {
-        widgets::dim_label(ui, tl!("The cut area isn't from the maker's specifications: check it on the mat."));
-    }
-    let orientations = ["Portrait", "Landscape"];
-    let landscape = s["orientation"] == "landscape";
-    widgets::label_row(ui, tl!("Orientation"), LABEL_W, |ui| {
-        if let Some(i) = widgets::dropdown(ui, ("cutting", "orientation"), orientations[usize::from(landscape)], &orientations, 120.0) {
-            set(app, json!({ "orientation": if i == 1 { "landscape" } else { "portrait" } }));
-        }
-    });
-    let artboards: Vec<String> = app.session.active().map(|st| st.doc.artboards.iter().map(|a| a.name.clone()).collect()).unwrap_or_default();
-    if artboards.len() > 1 {
-        let names: Vec<&str> = artboards.iter().map(String::as_str).collect();
-        let i = s["artboard"].as_u64().and_then(|i| usize::try_from(i).ok()).unwrap_or(0);
-        widgets::label_row(ui, tl!("Artboard"), LABEL_W, |ui| {
-            if let Some(i) = widgets::dropdown_names(ui, ("cutting", "artboard"), names.get(i).copied().unwrap_or_default(), &names, 140.0) {
-                set(app, json!({ "artboard": i }));
-            }
-        });
-    }
-    let offset = |i: usize| s["offsetMm"][i].as_f64().unwrap_or(0.0);
-    widgets::label_row(ui, tl!("Offset"), LABEL_W, |ui| {
-        if let Some(x) = mm_field(ui, "offset-x", offset(0), -3_000.0) {
-            set(app, json!({ "offsetMm": [x, offset(1)] }));
-        }
-        if let Some(y) = mm_field(ui, "offset-y", offset(1), -3_000.0) {
-            set(app, json!({ "offsetMm": [offset(0), y] }));
-        }
-    });
     let ops = ["Cut", "Cut Outline", "Score", "No Cut"];
     let op_ids = ["cut", "outline", "score", "none"];
     let default = op_ids.iter().position(|o| s["defaultOp"] == *o).unwrap_or(0);
@@ -101,23 +53,6 @@ fn settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             set(app, json!({ "grouping": grouping_ids.get(i).copied().unwrap_or("none") }));
         }
     });
-    let clip = s["clipToMat"].as_bool() == Some(true);
-    if widgets::check(ui, tl!("Clip to Mat"), clip, true) {
-        set(app, json!({ "clipToMat": !clip }));
-    }
-    let track = s["trackEnhancing"].as_bool() == Some(true);
-    if widgets::check(ui, tl!("Track Enhancing"), track, true) {
-        set(app, json!({ "trackEnhancing": !track }));
-    }
-    match info["placement"]["fits"].as_bool() {
-        Some(true) => {
-            widgets::dim_label(ui, tl!("The artboard fits the mat."));
-        }
-        Some(false) => {
-            ui.label(egui::RichText::new(tl!("The artboard goes off the mat.")).color(t.bleed));
-        }
-        None => {}
-    }
 }
 
 /// Cut, Score, No Cut or the group's or layer's, for the selected objects.
@@ -139,6 +74,66 @@ fn selection_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
 }
 
+/// The settings most cuts leave alone, behind a fold that starts closed: each operation's
+/// acceleration, corner overcut and blade offset, and the job's track enhancing.
+fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
+    if !fold(ui, "cutting-advanced", tl!("Advanced")) {
+        return;
+    }
+    for (op, label) in [("cut", "Cut"), ("score", "Score")] {
+        let tool = &info["settings"]["operations"][op];
+        let get = |k: &str, d: f64| tool[k].as_f64().unwrap_or(d);
+        let set_tool = |app: &mut VectorcraftApp, key: &str, v: f64| set(app, json!({ "operations": { op: { key: v } } }));
+        ui.label(egui::RichText::new(tl!(label)).strong());
+        widgets::label_row(ui, tl!("Accel."), LABEL_W, |ui| {
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "accel"), get("accel", 0.0), " (0: machine's)", 0, 72.0, 1.0, 0.0, &[]) {
+                set_optional(app, op, "accel", v, 3.0);
+            }
+        });
+        widgets::label_row(ui, tl!("Corners"), LABEL_W, |ui| {
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "corners"), get("cornerOvercutMm", 0.0), " mm past", 1, 72.0, 0.1, 0.0, &[]) {
+                set_tool(app, "cornerOvercutMm", (v.clamp(0.0, 2.0) * 10.0).round() / 10.0);
+            }
+        });
+        // The machine turns the blade round corners by this; the usual blade's until set.
+        let offset = tool["bladeOffsetMm"].as_f64().unwrap_or(silhouette::BLADE_OFFSET_MM);
+        widgets::label_row(ui, tl!("Blade offset"), LABEL_W, |ui| {
+            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "blade-offset"), offset, " mm", 2, 64.0, 0.05, 0.0, &[]) {
+                set_tool(app, "bladeOffsetMm", (v.clamp(0.0, 2.0) * 20.0).round() / 20.0);
+            }
+        });
+    }
+    let s = &info["settings"];
+    let track = s["trackEnhancing"].as_bool() == Some(true);
+    if widgets::check(ui, tl!("Track Enhancing"), track, true) {
+        set(app, json!({ "trackEnhancing": !track }));
+    }
+}
+
+/// 0: the machine's own setting, sent as nothing.
+fn set_optional(app: &mut VectorcraftApp, op: &str, key: &str, v: f64, hi: f64) {
+    let step = v.clamp(0.0, hi).round();
+    let value = if step < 1.0 { Value::Null } else { json!(step) };
+    set(app, json!({ "operations": { op: { key: value } } }));
+}
+
+/// A heading that opens and closes what follows (closed at first; kept for the session).
+fn fold(ui: &mut Ui, key: &str, label: &str) -> bool {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut open: bool = super::pstate(&ctx, key);
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 20.0), egui::Sense::click());
+    let chevron = egui::Rect::from_center_size(egui::pos2(rect.left() + 7.0, rect.center().y), egui::vec2(12.0, 12.0));
+    let color = if resp.hovered() { t.text_strong } else { t.text };
+    crate::icons::paint(ui, if open { "chevron-down" } else { "chevron-right" }, chevron, color);
+    ui.painter().text(egui::pos2(rect.left() + 18.0, rect.center().y), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(12.5), color);
+    if resp.clicked() {
+        open = !open;
+        super::set_pstate(&ctx, key, open);
+    }
+    open
+}
+
 /// The job in a line and the Send window a click away (C7.1); while a cut runs, how far it has got,
 /// so it shows with the window closed.
 fn send_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
@@ -147,7 +142,9 @@ fn send_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     match crate::cutting::job(app, &ctx).as_deref() {
         Some(Ok(made)) => {
             let warnings = made.job.warnings.len();
-            let mut line = format!("{} {} · {:.0} mm · {:.0} s", made.stats.path_count, tl!("paths"), made.stats.blade_mm, made.sim.total_seconds);
+            let n = made.stats.path_count;
+            let paths = if n == 1 { tl!("path") } else { tl!("paths") };
+            let mut line = format!("{n} {paths} · {:.0} mm · {:.0} s", made.stats.blade_mm, made.sim.total_seconds);
             if warnings > 0 {
                 line = format!("{line} · {warnings} {}", tl!("warnings"));
             }
@@ -221,9 +218,9 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     super::set_pstate(&ctx, "cutting-material-error", error);
 }
 
-/// How each operation drives the blade, force and speed in the machine's own steps (C5.2), passes,
-/// overcut, blade depth, acceleration, the corner overcut and the blade offset, set through `cutting.settings.set`
-/// (values typed out of range are brought into it).
+/// How each operation drives the blade: force and speed in the machine's own steps (C5.2),
+/// passes, overcut and blade depth, set through `cutting.settings.set` (values typed out of range
+/// are brought into it); the rest is in [`advanced_rows`].
 fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     material_rows(app, ui);
     for (op, label) in [("cut", "Cut"), ("score", "Score")] {
@@ -262,72 +259,12 @@ fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
                 set_tool(app, "overcutMm", (v.clamp(0.0, 5.0) * 10.0).round() / 10.0);
             }
         });
-        // 0: the machine's own setting, sent as nothing.
-        let set_optional = |app: &mut VectorcraftApp, key: &str, v: f64, hi: f64| {
-            let step = v.clamp(0.0, hi).round();
-            let value = if step < 1.0 { Value::Null } else { json!(step) };
-            set(app, json!({ "operations": { op: { key: value } } }));
-        };
         widgets::label_row(ui, tl!("Blade depth"), LABEL_W, |ui| {
             if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "depth"), get("depth", 0.0), " (0: machine's)", 0, 72.0, 1.0, 0.0, &[]) {
-                set_optional(app, "depth", v, 10.0);
-            }
-        });
-        widgets::label_row(ui, tl!("Accel."), LABEL_W, |ui| {
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "accel"), get("accel", 0.0), " (0: machine's)", 0, 72.0, 1.0, 0.0, &[]) {
-                set_optional(app, "accel", v, 3.0);
-            }
-        });
-        widgets::label_row(ui, tl!("Corners"), LABEL_W, |ui| {
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "corners"), get("cornerOvercutMm", 0.0), " mm past", 1, 72.0, 0.1, 0.0, &[]) {
-                set_tool(app, "cornerOvercutMm", (v.clamp(0.0, 2.0) * 10.0).round() / 10.0);
-            }
-        });
-        // The machine turns the blade round corners by this; the usual blade's until set.
-        let offset = tool["bladeOffsetMm"].as_f64().unwrap_or(silhouette::BLADE_OFFSET_MM);
-        widgets::label_row(ui, tl!("Blade offset"), LABEL_W, |ui| {
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "blade-offset"), offset, " mm", 2, 64.0, 0.05, 0.0, &[]) {
-                set_tool(app, "bladeOffsetMm", (v.clamp(0.0, 2.0) * 20.0).round() / 20.0);
+                set_optional(app, op, "depth", v, 10.0);
             }
         });
     }
-}
-
-/// Print & Cut (C6.1): the switch, how far in the registration marks go, and the marks layer
-/// added, replaced or removed.
-fn print_and_cut_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
-    let s = &info["settings"];
-    let on = s["printAndCut"].as_bool() == Some(true);
-    if widgets::check(ui, tl!("Print & Cut"), on, true) {
-        set(app, json!({ "printAndCut": !on }));
-    }
-    if !on {
-        widgets::dim_label(ui, tl!("Print the artboard with registration marks, then cut around the print."));
-        return;
-    }
-    let inset = s["markInsetMm"].as_f64().unwrap_or(vectorcraft_cutjob::marks::DEFAULT_INSET_MM);
-    widgets::label_row(ui, tl!("Marks inset"), LABEL_W, |ui| {
-        if let Some(v) = mm_field(ui, "mark-inset", inset, vectorcraft_cutjob::marks::INSET_MM.0) {
-            let (lo, hi) = vectorcraft_cutjob::marks::INSET_MM;
-            set(app, json!({ "markInsetMm": v.clamp(lo, hi) }));
-        }
-    });
-    let has_marks = app.session.active().is_some_and(|st| vectorcraft_cutting::marks::marks_layer(&st.doc).is_some());
-    ui.horizontal(|ui| {
-        let label = if has_marks { tl!("Update Marks") } else { tl!("Add Marks") };
-        if ui.button(label).clicked() {
-            let _ = app.run("cutting.marks.add", json!({}));
-        }
-        if has_marks && ui.button(tl!("Remove Marks")).clicked() {
-            let _ = app.run("cutting.marks.remove", json!({}));
-        }
-    });
-    let note = if has_marks {
-        tl!("Print the artboard, then put the sheet on the mat with the square mark at the top left.")
-    } else {
-        tl!("Add the marks, then print the artboard with them.")
-    };
-    widgets::dim_label(ui, note);
 }
 
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
@@ -337,25 +274,14 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     };
     send_rows(app, ui);
     widgets::divider(ui);
-    settings_rows(app, ui, &info);
+    job_settings_rows(app, ui, &info);
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Selection"));
     selection_rows(app, ui);
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Tool Settings"));
     tool_rows(app, ui, &info);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Print & Cut"));
-    print_and_cut_rows(app, ui, &info);
-    widgets::divider(ui);
-    let view = app.ui.view.cutting;
-    if widgets::check(ui, tl!("Cutting View"), view, true) {
-        let _ = app.run("view.cutting", json!({}));
-    }
-    let paths = crate::cutting::shows_toolpaths(ui.ctx());
-    if widgets::check(ui, tl!("Show Toolpaths"), paths, view) {
-        crate::cutting::set_shows_toolpaths(ui.ctx(), !paths);
-    }
+    advanced_rows(app, ui, &info);
 }
 
 #[cfg(test)]
@@ -400,24 +326,10 @@ mod tests {
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
         let texts = panel_texts(&mut app, &ctx);
-        assert!(texts.iter().any(|t| t.starts_with("1 paths · ")), "{texts:?}");
+        assert!(texts.iter().any(|t| t.starts_with("1 path · ")), "{texts:?}");
         assert!(texts.iter().any(|t| t == "Send to Cutter…"), "{texts:?}");
         assert!(!texts.iter().any(|t| t == "Find Cutters" || t == "Cut length: 159 mm"), "the window's now: {texts:?}");
         assert!(!crate::cutting::send_window::is_open(&ctx));
-    }
-
-    /// C6.1: Print & Cut on, the panel adds the marks and then offers to update or remove them.
-    #[test]
-    fn print_and_cut_adds_the_marks() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
-        let ctx = egui::Context::default();
-        app.run("file.new", json!({"width": 612, "height": 792})).unwrap();
-        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Print & Cut"));
-        app.run("cutting.settings.set", json!({"printAndCut": true})).unwrap();
-        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Add Marks"));
-        app.run("cutting.marks.add", json!({})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
-        assert!(texts.iter().any(|t| t == "Update Marks") && texts.iter().any(|t| t == "Remove Marks"), "{texts:?}");
     }
 
     /// C5.3: the Groups choice shows what the document cuts by.
@@ -441,15 +353,45 @@ mod tests {
         assert!(texts.iter().any(|t| t == "Groups") && texts.iter().any(|t| t == "By Colour"), "{texts:?}");
     }
 
-    /// Window → Workspace → Cutting is the cutting mode: the mat shows and the Cutting panel opens;
-    /// another workspace hides the mat.
+    /// C7.2: the settings most cuts leave alone are behind Advanced, closed at first.
+    #[test]
+    fn advanced_settings_start_folded() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Advanced") && texts.iter().any(|t| t == "Force"), "{texts:?}");
+        assert!(
+            !texts.iter().any(|t| t == "Blade offset" || t == "Track Enhancing" || t == "Mat"),
+            "folded, and the mat is the other panel's: {texts:?}"
+        );
+        super::super::set_pstate(&ctx, "cutting-advanced", true);
+        let texts = panel_texts(&mut app, &ctx);
+        assert_eq!(texts.iter().filter(|t| *t == "Blade offset").count(), 2, "cut and score: {texts:?}");
+        assert!(texts.iter().any(|t| t == "Track Enhancing"), "{texts:?}");
+    }
+
+    /// Window → Workspace → Cutting is the cutting mode: the mat shows, and Cut Settings and
+    /// Cutting Mat are docked open under Layers (not in the icon column); another workspace hides
+    /// the mat.
     #[test]
     fn the_cutting_workspace_is_the_cutting_mode() {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         assert!(!app.ui.view.cutting);
         crate::workspaces::switch(&mut app.ui, crate::workspaces::CUTTING).unwrap();
         assert!(app.ui.view.cutting);
-        assert_eq!(app.ui.open_panel.as_deref(), Some(crate::panels::cutting::ID));
+        let layout = app.ui.docking.clone().expect("the workspace's own layout");
+        assert!(crate::panel_docking::valid(&layout));
+        for panel in [ID, mat::ID] {
+            assert!(layout.contains(&panel.to_string()) && !crate::panel_docking::in_iconic_column(&layout, panel), "{panel} docked open");
+        }
+        assert_eq!(app.ui.dock_tab, crate::state::DockTab::Layers);
+        // A Cutting workspace remembered before it had a layout of its own gets it too.
+        let mut old = crate::workspaces::capture(&app.ui, crate::workspaces::CUTTING);
+        old.docking = None;
+        old.open_panel = Some(ID.into());
+        crate::workspaces::apply(&mut app.ui, &old);
+        assert!(app.ui.docking.as_ref().is_some_and(|l| !crate::panel_docking::in_iconic_column(l, ID)));
         crate::workspaces::switch(&mut app.ui, crate::workspaces::ESSENTIALS).unwrap();
         assert!(!app.ui.view.cutting);
     }

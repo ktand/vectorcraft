@@ -197,7 +197,8 @@ pub const ICON_PANELS: &[(&str, &str, &str)] = &[
     (crate::panels::asset_export::ID, "Asset Export", "share-2"),
     (crate::panels::css_properties::ID, "CSS Properties", "globe"),
     // Fork: the cutting workspace.
-    (crate::panels::cutting::ID, "Cutting", "scissors"),
+    (crate::panels::cutting::ID, "Cut Settings", "scissors"),
+    (crate::panels::cutting::mat::ID, "Cutting Mat", "grid-3x3"),
     (crate::panels::variables::ID, "Variables", "chart-column"),
 ];
 
@@ -217,7 +218,7 @@ pub const ICON_PANEL_GROUPS: &[&[&str]] = &[
     &["history", "actions", "info", "navigator"],
     &["variables"],
     // Fork: the cutting workspace (the Cutting workspace opens it from here).
-    &[crate::panels::cutting::ID],
+    &[crate::panels::cutting::ID, crate::panels::cutting::mat::ID],
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
