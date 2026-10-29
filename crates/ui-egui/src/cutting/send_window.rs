@@ -102,6 +102,8 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
                     job_rows(app, ui);
                     widgets::divider(ui);
                     cutter_rows(app, ui, &status);
+                    widgets::divider(ui);
+                    test_rows(app, ui, &status);
                 });
             });
         });
@@ -146,6 +148,94 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
             ui.label(egui::RichText::new(e).color(t.bleed));
         }
     }
+}
+
+/// The test cut's warnings, and the document, corner and group they were worked out for.
+type Ahead = (std::sync::Arc<vectorcraft_doc::Document>, usize, Option<usize>, Vec<String>);
+
+/// The test cut's corner and the setup it tests (C8.1).
+#[derive(Clone, Debug, Default)]
+struct TestChoice {
+    corner: usize,
+    /// Index into the groups; none: the document's setup.
+    group: Option<usize>,
+    note: Option<(bool, String)>,
+    /// What the test would warn about, and what it was worked out for (the document, held so a
+    /// new one at a freed address can't pass for it; the corner; the group), so the design's job
+    /// isn't made again each frame.
+    ahead: Option<Ahead>,
+}
+
+/// The test cut (C8.1): a small shape at a corner of the mat with the setup a real cut would
+/// use (the document's, or one group's), to check the blade before the sheet; it says first when
+/// the test would land on the design.
+fn test_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
+    use vectorcraft_cutting::test_cut::Corner;
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut c: TestChoice = crate::panels::pstate(&ctx, "cutting-test");
+    let m: Machines = crate::panels::pstate(&ctx, "cutting-machines");
+    let found = m.found.clone().unwrap_or_default();
+    let corners = ["Top Left", "Top Right", "Bottom Left", "Bottom Right"];
+    widgets::label_row(ui, tl!("Test at"), 60.0, |ui| {
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "test", "corner"), corners.get(c.corner).copied().unwrap_or(corners[0]), &corners, 140.0) {
+            c.corner = i;
+        }
+    });
+    let groups: Vec<String> = app
+        .session
+        .execute("cutting.groups", &json!({}))
+        .ok()
+        .and_then(|g| g["groups"].as_array().map(|a| a.iter().filter_map(|g| g["name"].as_str().map(str::to_string)).collect()))
+        .unwrap_or_default();
+    if !groups.is_empty() {
+        let mut names: Vec<&str> = vec![tl!("Document's setup")];
+        names.extend(groups.iter().map(String::as_str));
+        let shown = c.group.and_then(|g| groups.get(g)).map_or(names[0], String::as_str);
+        widgets::label_row(ui, tl!("Setup"), 60.0, |ui| {
+            if let Some(i) = widgets::dropdown_names(ui, ("cutting", "test", "group"), shown, &names, 140.0) {
+                c.group = i.checked_sub(1);
+            }
+        });
+    }
+    let corner = Corner::CHOICES.get(c.corner).map_or(Corner::TopLeft, |(_, k)| *k);
+    let group = c.group.and_then(|g| groups.get(g)).cloned();
+    let mut p = json!({ "corner": corner.id() });
+    if let Some(g) = &group {
+        p["group"] = json!(g);
+    }
+    // Said before cutting, not after.
+    let doc = app.session.active().map(|st| st.doc.clone());
+    let fresh = match (&c.ahead, &doc) {
+        (Some((d, corner, g, _)), Some(now)) => std::sync::Arc::ptr_eq(d, now) && *corner == c.corner && *g == c.group,
+        _ => false,
+    };
+    if !fresh && let Some(now) = doc {
+        let warnings = app
+            .session
+            .execute("cutting.test.job", &p)
+            .map(|j| j["warnings"].as_array().map(|w| w.iter().filter_map(Value::as_str).map(str::to_string).collect()).unwrap_or_default())
+            .unwrap_or_else(|e| vec![e.to_string()]);
+        c.ahead = Some((now, c.corner, c.group, warnings));
+    }
+    let ahead = c.ahead.as_ref().map(|a| a.3.clone()).unwrap_or_default();
+    for w in &ahead {
+        ui.label(egui::RichText::new(w).color(t.warning));
+    }
+    let sending = status["sending"].as_bool() == Some(true);
+    if ui.add_enabled(!found.is_empty() && !sending, egui::Button::new(tl!("Test Cut"))).clicked() {
+        if let Some((id, _)) = found.get(m.chosen).or(found.first()) {
+            p["device"] = json!(id);
+        }
+        c.note = Some(match app.run("cutting.test", p) {
+            Ok(_) => (false, tl!("Cutting the test: the triangle should lift out and the square stay.").to_string()),
+            Err(e) => (true, e),
+        });
+    }
+    if let Some((bad, note)) = &c.note {
+        ui.label(egui::RichText::new(note).color(if *bad { t.bleed } else { t.text_dim }));
+    }
+    crate::panels::set_pstate(&ctx, "cutting-test", c);
 }
 
 /// The machine to send to, sending and its progress (C4.5), the pause between groups (C5.3).
@@ -308,6 +398,25 @@ mod tests {
         let texts = window_texts(&mut app, &ctx);
         assert!(!texts.iter().any(|t| t.starts_with("Paths")), "no job: {texts:?}");
         assert!(texts.iter().any(|t| t == "Send"), "{texts:?}");
+    }
+
+    /// C8.1: the test cut's choices show, and say ahead when the test would land on the design.
+    #[test]
+    fn the_window_offers_a_test_cut() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        app.run("shape.rectangle", json!({"x": 0, "y": 0, "width": 100, "height": 100})).unwrap();
+        set_open(&ctx, true);
+        let texts = window_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Test Cut") && texts.iter().any(|t| t == "Top Left"), "{texts:?}");
+        assert!(texts.iter().any(|t| t.contains("lands on the design")), "{texts:?}");
+        crate::panels::set_pstate(&ctx, "cutting-test", TestChoice { corner: 3, ..Default::default() });
+        let texts = window_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Bottom Right") && !texts.iter().any(|t| t.contains("lands on the design")), "{texts:?}");
+        assert!(!texts.iter().any(|t| t == "Setup"), "not cut in groups");
+        app.run("cutting.settings.set", json!({"grouping": "layer"})).unwrap();
+        assert!(window_texts(&mut app, &ctx).iter().any(|t| t == "Setup"));
     }
 
     /// C4.8 and C5.3: a simulated cutter is named as one, and a send cut by layer that has paused

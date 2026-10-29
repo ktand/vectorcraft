@@ -34,6 +34,7 @@ pub mod prepare;
 pub mod preview;
 pub mod select;
 pub mod setups;
+pub mod test_cut;
 pub mod weld;
 
 use vectorcraft_cutjob::{CutJob, CuttingSettings, DOCUMENT_KEY, JOB_VERSION, JobError, JobMat, OpKind, Operation, Toolpath};
@@ -60,6 +61,8 @@ pub enum BuildError {
     Invalid(JobError),
     /// Print & Cut can't be laid out (why).
     PrintAndCut(String),
+    /// The test cut can't be made (why).
+    TestCut(String),
 }
 
 impl std::fmt::Display for BuildError {
@@ -69,6 +72,7 @@ impl std::fmt::Display for BuildError {
             BuildError::Prepare(e) => e.fmt(f),
             BuildError::Invalid(e) => write!(f, "the job isn't valid: {e}"),
             BuildError::PrintAndCut(e) => e.fmt(f),
+            BuildError::TestCut(e) => e.fmt(f),
         }
     }
 }

@@ -131,5 +131,23 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     s.execute("cutting.send", &json!({})).unwrap();
     assert_eq!(finished(&mut s)["outcome"], json!("done"));
     assert!(sent.bytes().ends_with(b"SO0"));
+
+    // C8.1: the test cut, on the simulated machine: the two shapes at the corner asked for, the
+    // design's own paths left alone; at the corner the design is in, a warning first.
+    s.execute("file.new", &json!({"width": 300, "height": 300})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 0, "y": 0, "width": 100, "height": 100})).unwrap();
+    let before = sent.bytes().len();
+    let r = s.execute("cutting.test", &json!({"corner": "bottomRight"})).unwrap();
+    assert!(!r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("lands on the design")), "{r}");
+    assert_eq!(finished(&mut s)["outcome"], json!("done"));
+    let cut = String::from_utf8_lossy(&sent.bytes()[before..]).to_string();
+    assert_eq!(cut.split('\u{3}').filter(|c| c.starts_with('D')).count(), 3 + 4, "the triangle's and the square's strokes: {cut:?}");
+    let r = s.execute("cutting.test", &json!({"corner": "topLeft"})).unwrap();
+    assert!(r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("lands on the design")), "{r}");
+    finished(&mut s);
+    assert!(s.execute("cutting.test", &json!({"corner": "middle"})).is_err());
+    let j = s.execute("cutting.test.job", &json!({"corner": "topRight"})).unwrap();
+    assert_eq!(j["job"]["paths"].as_array().unwrap().len(), 2);
     registry::install(None);
+    assert!(s.execute("cutting.test", &json!({})).unwrap_err().to_string().contains("no cutter is connected"));
 }
