@@ -41,6 +41,18 @@ pub fn select(d: &Document, s: &CuttingSettings) -> Vec<Item> {
     out
 }
 
+/// The objects `d` would cut with settings `s` wherever they lie, on the artboard or off it (for
+/// nesting, which brings them onto it).
+pub fn select_everywhere(d: &Document, s: &CuttingSettings) -> Vec<Item> {
+    let everywhere = Rect::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::INFINITY);
+    let mut out = vec![];
+    let mut clips = vec![];
+    for layer in &d.layers {
+        visit(layer, s.default_op, everywhere, &mut clips, &mut out);
+    }
+    out
+}
+
 /// Whether `n` clips its other children with its first one.
 fn clips_children(n: &Node) -> bool {
     matches!(n.kind, NodeKind::Group { clip: true, .. } | NodeKind::Layer { clip: true, .. })

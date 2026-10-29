@@ -136,6 +136,14 @@ Result:
 
 Result:
 
+## Step 4k: more than one sheet (C8.6)
+
+- More pieces than one mat holds; Nesting › **Onto New Sheets**, **Nest All**: Sheet 2 (and more) appear to the
+  right. Cut sheet 1, unload, load a fresh sheet, **Next Sheet**, Send: the second sheet's pieces are cut where
+  the preview shows them, from the mat's origin as for the first.
+
+Result:
+
 ## Step 5: a real cut
 
 - Only after steps 1–3 pass: the golden test file (`nested.svg`) cut through on paper with the cut force set as

@@ -101,6 +101,7 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
                     ui.set_width(SIDE_W);
                     job_rows(app, ui);
                     widgets::divider(ui);
+                    sheet_rows(app, ui, &status);
                     cutter_rows(app, ui, &status);
                     widgets::divider(ui);
                     test_rows(app, ui, &status);
@@ -289,6 +290,31 @@ fn test_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     crate::panels::set_pstate(&ctx, "cutting-test", c);
 }
 
+/// With more than one artboard, which sheet is on the mat (C8.6), and the next one once this is
+/// cut: each sheet is a send of its own, with the mat changed in between.
+fn sheet_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
+    let Some(st) = app.session.active() else { return };
+    let names: Vec<String> = st.doc.artboards.iter().map(|a| a.name.clone()).collect();
+    if names.len() < 2 {
+        return;
+    }
+    let at = usize::try_from(vectorcraft_cutting::settings(&st.doc).artboard).unwrap_or(0);
+    let name = names.get(at).cloned().unwrap_or_default();
+    ui.horizontal(|ui| {
+        ui.label(egui::RichText::new(format!("{} {} {} {}: {name}", tl!("Sheet"), at + 1, tl!("of"), names.len())).strong());
+        let sending = status["sending"].as_bool() == Some(true);
+        if at > 0 && !sending && ui.small_button(tl!("Previous Sheet")).clicked() {
+            let _ = app.run("cutting.settings.set", json!({ "artboard": at - 1 }));
+        }
+        if at + 1 < names.len() && !sending && ui.small_button(tl!("Next Sheet")).clicked() {
+            let _ = app.run("cutting.settings.set", json!({ "artboard": at + 1 }));
+        }
+    });
+    if status["outcome"] == "done" && at + 1 < names.len() {
+        widgets::dim_label(ui, tl!("Load the next sheet's material, then Next Sheet and Send."));
+    }
+}
+
 /// The machine to send to, sending and its progress (C4.5), the pause between groups (C5.3).
 /// The machines are looked for once and again on Find Cutters, not each frame (that asks the
 /// system for its USB devices).
@@ -468,6 +494,27 @@ mod tests {
         assert!(!texts.iter().any(|t| t == "Setup"), "not cut in groups");
         app.run("cutting.settings.set", json!({"grouping": "layer"})).unwrap();
         assert!(window_texts(&mut app, &ctx).iter().any(|t| t == "Setup"));
+    }
+
+    /// C8.6: with several sheets, the window says which is on the mat and moves to the next.
+    #[test]
+    fn the_window_steps_through_the_sheets() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        set_open(&ctx, true);
+        assert!(!window_texts(&mut app, &ctx).iter().any(|t| t.starts_with("Sheet ")), "one artboard: no sheets");
+        app.run("artboard.new", json!({"name": "Sheet 2"})).unwrap();
+        // The sheet buttons hide while a send runs; the machines are the process's, so another
+        // test's send may be running.
+        let idle = |app: &mut VectorcraftApp| app.session.execute("cutting.status", &json!({})).unwrap()["sending"] != true;
+        let texts = window_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Sheet 1 of 2: Artboard 1"), "{texts:?}");
+        assert!(!idle(&mut app) || texts.iter().any(|t| t == "Next Sheet"), "{texts:?}");
+        app.run("cutting.settings.set", json!({"artboard": 1})).unwrap();
+        let texts = window_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Sheet 2 of 2: Sheet 2"), "{texts:?}");
+        assert!(!idle(&mut app) || texts.iter().any(|t| t == "Previous Sheet"), "{texts:?}");
     }
 
     /// C4.8 and C5.3: a simulated cutter is named as one, and a send cut by layer that has paused

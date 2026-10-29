@@ -126,12 +126,14 @@ fn print_and_cut_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
 struct NestChoice {
     gap_mm: f64,
     rotate: bool,
+    /// What doesn't fit goes onto new sheets (C8.6).
+    sheets: bool,
     note: Option<(bool, String)>,
 }
 
 impl Default for NestChoice {
     fn default() -> Self {
-        NestChoice { gap_mm: 2.0, rotate: true, note: None }
+        NestChoice { gap_mm: 2.0, rotate: true, sheets: false, note: None }
     }
 }
 
@@ -149,15 +151,25 @@ fn nest_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     if widgets::check(ui, tl!("Turn Pieces"), c.rotate, true) {
         c.rotate = !c.rotate;
     }
+    if widgets::check(ui, tl!("Onto New Sheets"), c.sheets, true) {
+        c.sheets = !c.sheets;
+    }
     let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
     let label = if selected { "Nest Selected" } else { "Nest All" };
     if ui.button(tl!(label)).clicked() {
-        c.note = Some(match app.run("cutting.nest", json!({ "gapMm": c.gap_mm, "rotate": c.rotate })) {
+        c.note = Some(match app.run("cutting.nest", json!({ "gapMm": c.gap_mm, "rotate": c.rotate, "sheets": c.sheets })) {
             Ok(r) => {
                 let moved = r["moved"].as_array().map_or(0, Vec::len);
                 let left = r["unplaced"].as_array().map_or(0, Vec::len);
                 let used = r["usedLengthMm"].as_f64().unwrap_or(0.0);
-                if left > 0 {
+                let sheets = r["sheets"].as_array().map_or(0, Vec::len);
+                if c.sheets {
+                    let mut text = format!("{moved} {} {sheets} {}", tl!("nested on"), tl!("sheets"));
+                    if left > 0 {
+                        text = format!("{text}; {left} {}", tl!("too large for a sheet stayed where they were"));
+                    }
+                    (left > 0, text)
+                } else if left > 0 {
                     (true, format!("{moved} {} {used:.0} mm; {left} {}", tl!("nested in"), tl!("didn't fit and stayed where they were")))
                 } else {
                     (false, format!("{moved} {} {used:.0} mm {}", tl!("nested in"), tl!("of the mat")))
