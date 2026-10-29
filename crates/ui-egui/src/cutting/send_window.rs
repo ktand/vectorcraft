@@ -104,6 +104,8 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
                     cutter_rows(app, ui, &status);
                     widgets::divider(ui);
                     test_rows(app, ui, &status);
+                    widgets::divider(ui);
+                    history_rows(app, ui);
                 });
             });
         });
@@ -147,6 +149,55 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
         Err(e) => {
             ui.label(egui::RichText::new(e).color(t.bleed));
         }
+    }
+}
+
+/// Most history entries the window lists.
+const SHOWN_HISTORY: usize = 8;
+
+/// Job history (C8.4), folded at first: the latest sends, newest first, what they were cut with
+/// and how they ended; the settings of one that went well put back on the document; a failed
+/// one's report to share.
+fn history_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
+    if !crate::panels::cutting::fold(ui, "cutting-history", tl!("History")) {
+        return;
+    }
+    let t = Tokens::get(ui.ctx());
+    let listed = app.session.execute("cutting.history", &json!({})).unwrap_or_default();
+    let entries = listed["entries"].as_array().cloned().unwrap_or_default();
+    if entries.is_empty() {
+        widgets::dim_label(ui, tl!("Nothing sent yet."));
+        return;
+    }
+    egui::ScrollArea::vertical().max_height(180.0).id_salt("cutting-history").show(ui, |ui| {
+        for e in entries.iter().take(SHOWN_HISTORY) {
+            let text = |k: &str| e[k].as_str().unwrap_or_default().to_string();
+            let test = if e["test"] == true { format!(" · {}", tl!("test cut")) } else { String::new() };
+            ui.label(egui::RichText::new(format!("{} · {}{test}", text("shownTime"), text("document"))).strong());
+            let outcome = text("outcome");
+            let (shown, bad) = match outcome.as_str() {
+                "done" => (tl!("cut").to_string(), false),
+                "cancelled" => (tl!("cancelled").to_string(), false),
+                "sending" => (tl!("sending").to_string(), false),
+                other => (other.to_string(), true),
+            };
+            let material = e["material"].as_str().map_or_else(|| tl!("no material").to_string(), str::to_string);
+            let took = e["seconds"].as_f64().map_or(String::new(), |s| format!(" · {s:.0} s"));
+            ui.label(egui::RichText::new(format!("{material} · {shown}{took}")).color(if bad { t.bleed } else { t.text_dim }));
+            ui.horizontal(|ui| {
+                if let Some(i) = e["index"].as_u64()
+                    && ui.small_button(tl!("Use Settings")).clicked()
+                {
+                    let _ = app.run("cutting.history.apply", json!({ "index": i }));
+                }
+                if let Some(report) = e["report"].as_str() {
+                    widgets::dim_label(ui, &format!("{} {report}", tl!("Report:")));
+                }
+            });
+        }
+    });
+    if ui.small_button(tl!("Clear History")).clicked() {
+        let _ = app.run("cutting.history.clear", json!({}));
     }
 }
 
@@ -465,6 +516,11 @@ mod tests {
         wait_for(&mut app, "outcome");
         let texts = window_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t == "Sent."), "{texts:?}");
+        // C8.4: the send is in the history, with what it was cut with and how it ended.
+        crate::panels::set_pstate(&ctx, "cutting-history", true);
+        let texts = window_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t.starts_with("no material · cut")), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "Use Settings") && texts.iter().any(|t| t == "Clear History"), "{texts:?}");
         vectorcraft_cutter::registry::install(None);
     }
 }

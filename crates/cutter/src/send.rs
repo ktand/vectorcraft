@@ -35,6 +35,8 @@ pub struct Progress {
     pub outcome: Option<Result<(), SendError>>,
     /// Paused before this group, until told to go on ([`Controls::resume`]).
     pub waiting: Option<String>,
+    /// Once it has stopped, how long it ran, seconds (pauses included; set by [`spawn`]).
+    pub seconds: Option<f64>,
 }
 
 /// What a send is told while it runs: stop, or go on after a pause.
@@ -213,8 +215,12 @@ pub fn spawn(mut t: Box<dyn Transport>, driver: Arc<dyn Driver>, job: Encoded, p
     std::thread::Builder::new()
         .name("cutter-send".into())
         .spawn(move || {
+            let started = std::time::Instant::now();
             // The outcome is kept in `progress`, where the app reads it.
             let _ = send(t.as_mut(), driver.as_ref(), &job, patience, &controls, &progress);
+            if let Ok(mut p) = progress.lock() {
+                p.seconds = Some(started.elapsed().as_secs_f64());
+            }
         })
         .map_err(|e| format!("couldn't start sending: {e}"))?;
     Ok(running)

@@ -50,10 +50,11 @@ pub fn attach_plugin_store(session: &mut vectorcraft_engine::Session) {
 }
 
 /// Fork: keep the user's cutting materials (C5.1) in `Cutting/Materials.json`, and take the ones
-/// already there.
+/// already there; keep the job history (C8.4) in `Cutting/History.json`.
 pub fn attach_cutting_materials() {
     if let Some(dir) = store_dir("Cutting") {
         vectorcraft_engine::cmd::cutting::materials::attach(dir.join("Materials.json"));
+        vectorcraft_engine::cmd::cutting::history::attach(dir.join("History.json"));
     }
 }
 

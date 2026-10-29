@@ -226,7 +226,7 @@ fn set_optional(app: &mut VectorcraftApp, op: &str, key: &str, v: f64, hi: f64) 
 }
 
 /// A heading that opens and closes what follows (closed at first; kept for the session).
-fn fold(ui: &mut Ui, key: &str, label: &str) -> bool {
+pub(crate) fn fold(ui: &mut Ui, key: &str, label: &str) -> bool {
     let t = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
     let mut open: bool = super::pstate(&ctx, key);

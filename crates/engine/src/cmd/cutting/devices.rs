@@ -118,7 +118,7 @@ fn machine(p: &Value, cmd: &str) -> Result<(DeviceInfo, Arc<dyn Driver>)> {
 }
 
 /// Sends `job` to the machine `p` names, in the background; `before` are warnings of its own.
-fn start(job: &vectorcraft_cutjob::CutJob, p: &Value, cmd: &str, before: Vec<String>) -> Result<Value> {
+fn start(s: &Session, job: &vectorcraft_cutjob::CutJob, p: &Value, cmd: &str, before: Vec<String>, test: bool) -> Result<Value> {
     let (device, driver) = machine(p, cmd)?;
     if job.paths.is_empty() {
         return Err(bad(cmd, "the job has nothing to cut"));
@@ -130,7 +130,8 @@ fn start(job: &vectorcraft_cutjob::CutJob, p: &Value, cmd: &str, before: Vec<Str
     let warnings: Vec<String> = before.into_iter().chain(encoded.warnings.iter().cloned()).collect();
     let model = driver.model(&device);
     let running = vectorcraft_cutter::send::spawn(transport, driver, encoded, Patience::default()).map_err(|e| bad(cmd, e))?;
-    registry::start(device.clone(), running).map_err(|e| bad(cmd, e))?;
+    registry::start(device.clone(), running.clone()).map_err(|e| bad(cmd, e))?;
+    super::history::begin(super::history::entry(s, job, &model, test), running);
     Ok(json!({"device": device.id, "model": model, "chunks": chunks, "warnings": warnings}))
 }
 
@@ -138,7 +139,7 @@ fn send(s: &mut Session, p: &Value) -> Result<Value> {
     // Which machine first: without one, that is the answer whatever the document.
     machine(p, SEND)?;
     let job = vectorcraft_cutting::build_job(&s.doc()?.doc).map_err(|e| bad(SEND, e.to_string()))?;
-    start(&job, p, SEND, vec![])
+    start(s, &job, p, SEND, vec![], false)
 }
 
 /// The test cut's job for `p`'s corner and group.
@@ -156,7 +157,7 @@ fn test_cut(s: &mut Session, p: &Value) -> Result<Value> {
     machine(p, CMD)?;
     let job = test_job(s, p, CMD)?;
     let own = job.warnings.iter().map(|w| w.message.clone()).collect();
-    start(&job, p, CMD, own)
+    start(s, &job, p, CMD, own, true)
 }
 
 fn test_cut_job(s: &mut Session, p: &Value) -> Result<Value> {
@@ -165,6 +166,8 @@ fn test_cut_job(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 fn status(_: &mut Session, _: &Value) -> Result<Value> {
+    // A send that has stopped finishes its history entry.
+    super::history::resolve();
     let Some((device, running)) = registry::current() else {
         return Ok(json!({"sending": false, "device": null, "chunksSent": 0, "chunks": 0, "waitingFor": null, "outcome": null}));
     };

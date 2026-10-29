@@ -120,6 +120,14 @@ Result:
 
 Result:
 
+## Step 4i: job history (C8.4)
+
+- After the steps above, open the Send window's **History**: every send and test cut should be there with its
+  time, material and how it ended, and the failed ones (the turned Print & Cut sheet) with a report in
+  `Cutting/Reports/` next to the preferences. **Use Settings** on a good one puts its settings back.
+
+Result:
+
 ## Step 5: a real cut
 
 - Only after steps 1–3 pass: the golden test file (`nested.svg`) cut through on paper with the cut force set as
