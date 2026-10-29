@@ -161,6 +161,12 @@ pub const UI_COMMANDS: &[(&str, &str, &str, &str)] = &[
     ("view.trimView", "Trim View", "", "{} toggle: hide everything outside the artboards"),
     // Fork: the cutting workspace.
     ("view.cutting", "Cutting View", "", "{} toggle: draw the cutting mat (cutting.settings.get) over the art, with a millimetre grid"),
+    (
+        "cutting.sendWindow",
+        "Send to Cutter…",
+        "Cmd+Alt+Shift+C",
+        "{} open the Send window (not modal) over the active document: the mat with the job's toolpaths, its numbers and warnings, the cutter, Send (cutting.send), progress, Continue and Cancel",
+    ),
     ("view.cornerWidget", "Hide Corner Widget", "", "{} toggle the live corner widgets"),
     ("view.snapToPixel", "Snap to Pixel", "", "{} toggle: drawing and moving land on whole pixels"),
     ("view.snapToGlyph", "Snap to Glyph", "", "{} toggle: drawing snaps to live-text baselines and glyph bounds"),

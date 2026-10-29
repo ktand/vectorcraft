@@ -74,6 +74,8 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
                 c("File Info…", "file.info"),
                 Sep,
                 c("Print…", "file.print"),
+                // Fork: the cutting workspace.
+                c("Send to Cutter…", "cutting.sendWindow"),
                 Sep,
                 c("Exit", "app.quit"),
             ],

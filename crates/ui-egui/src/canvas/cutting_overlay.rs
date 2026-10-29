@@ -187,6 +187,62 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
     }
 }
 
+/// The size [`preview`] fills at most `width` wide and `max_height` high: the plate's proportions.
+pub(crate) fn preview_size(app: &VectorcraftApp, width: f32, max_height: f32) -> egui::Vec2 {
+    let Some(pl) = placed(app) else { return egui::vec2(width, width) };
+    let [w, h] = pl.mat.size_mm;
+    let [ml, mt, mr, mb] = pl.mat.plate_margin_mm;
+    let (full_w, full_h) = (w + ml + mr, h + mt + mb);
+    let aspect = if full_w > 0.0 && full_h.is_finite() { (full_h / full_w) as f32 } else { 1.0 };
+    let height = (width * aspect).clamp(width * 0.25, max_height);
+    egui::vec2((height / aspect).min(width), height)
+}
+
+/// The mat as the machine takes it, fitted into `rect` (the Send window, C7.1): the plate, the
+/// cut area and origin, and the job's toolpaths with their playback, whatever Show Toolpaths and
+/// the view say. The mat is drawn upright, its feed edge at the top, however the artboard lies on
+/// it.
+pub(crate) fn preview(app: &VectorcraftApp, p: &egui::Painter, rect: egui::Rect) {
+    let Some(pl) = placed(app) else { return };
+    let to_doc = pl.mat_to_doc();
+    let [w, h] = pl.mat.size_mm;
+    let [ml, mt, mr, mb] = pl.mat.plate_margin_mm;
+    let (full_w, full_h) = (w + ml + mr, h + mt + mb);
+    if !(full_w > 0.0 && full_h > 0.0) {
+        return;
+    }
+    let px_per_mm = (f64::from(rect.width()) / full_w).min(f64::from(rect.height()) / full_h);
+    let [a, b, ..] = to_doc.as_coeffs();
+    let xf = Xf {
+        rect,
+        zoom: px_per_mm * MM_PER_PT,
+        center: to_doc * Point::new((w + mr - ml) / 2.0, (h + mb - mt) / 2.0),
+        // The mat's x axis back along the screen's.
+        rot: -b.atan2(a),
+    };
+    if !(xf.zoom.is_finite() && xf.zoom > 0.0) {
+        return;
+    }
+    let p = p.with_clip_rect(rect);
+    mat_plate(app, &p, &xf);
+    let screen = |x: f64, y: f64| xf.to_screen(to_doc * Point::new(x, y));
+    let t = Tokens::get(p.ctx());
+    let cut = pl.mat.cut_area_mm;
+    if cut != (RectMm { x0: 0.0, y0: 0.0, x1: w, y1: h }) {
+        let q = [screen(cut.x0, cut.y0), screen(cut.x1, cut.y0), screen(cut.x1, cut.y1), screen(cut.x0, cut.y1)];
+        let ring: Vec<Pos2> = q.iter().chain(q.first()).copied().collect();
+        p.extend(Shape::dashed_line(&ring, Stroke::new(1.0, t.accent), 5.0, 3.0));
+    }
+    if let Some(job) = crate::cutting::job(app, p.ctx())
+        && let Ok(made) = &*job
+    {
+        toolpaths(&p, &made.job, &screen, &t);
+        if let Some(mm) = crate::cutting::tick(p.ctx(), &made.sim).mm {
+            playback(&p, &made.sim, mm, &screen, &t);
+        }
+    }
+}
+
 /// Most toolpath points one frame draws: past them the rest of a large job isn't drawn.
 const MAX_DRAWN_POINTS: usize = 400_000;
 /// Jobs of more paths than this aren't numbered.

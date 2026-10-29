@@ -18,7 +18,7 @@ mod artboards;
 mod context;
 mod cursor;
 // Fork: the cutting workspace.
-mod cutting_overlay;
+pub(crate) mod cutting_overlay;
 mod drag;
 mod grid;
 mod home;

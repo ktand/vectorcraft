@@ -476,6 +476,8 @@ impl VectorcraftApp {
         // The canvas and the panels: one docking layout. Tab hides the panels but not the canvas.
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(t.pasteboard)).show(ui, |ui| panel_docking::show(self, ui));
         dialogs::show(self, &ctx);
+        // Fork: the cutting workspace's Send window.
+        crate::cutting::send_window::show(self, &ctx);
         updates_ui::show(self, &ctx);
         export_progress::show(self, &ctx);
         plugin_runs::show(self, &ctx);
