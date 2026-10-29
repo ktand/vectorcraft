@@ -128,6 +128,14 @@ Result:
 
 Result:
 
+## Step 4j: nesting (C8.5)
+
+- A few shapes of different sizes (one with a hole) spread over and off the artboard; Cutting Mat › Nesting ›
+  **Nest All**: they should come onto the mat close together from the top left, none closer than the gap. Cut
+  them on paper and check the pieces come free whole and the gap between neighbours is at least what was set.
+
+Result:
+
 ## Step 5: a real cut
 
 - Only after steps 1–3 pass: the golden test file (`nested.svg`) cut through on paper with the cut force set as

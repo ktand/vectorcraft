@@ -120,12 +120,67 @@ fn print_and_cut_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     widgets::dim_label(ui, note);
 }
 
+/// What the Nesting section keeps between frames: the gap and turns asked for, and what the last
+/// Nest said.
+#[derive(Clone, Debug)]
+struct NestChoice {
+    gap_mm: f64,
+    rotate: bool,
+    note: Option<(bool, String)>,
+}
+
+impl Default for NestChoice {
+    fn default() -> Self {
+        NestChoice { gap_mm: 2.0, rotate: true, note: None }
+    }
+}
+
+/// Nesting (C8.5): the pieces placed close together on the mat by their true shapes, the selected
+/// ones or all, one undo step (`cutting.nest`).
+fn nest_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut c: NestChoice = crate::panels::pstate(&ctx, "cutting-nest");
+    widgets::label_row(ui, tl!("Gap"), LABEL_W, |ui| {
+        if let Some(v) = mm_field(ui, "nest-gap", c.gap_mm, 0.0) {
+            c.gap_mm = v.clamp(0.0, 50.0);
+        }
+    });
+    if widgets::check(ui, tl!("Turn Pieces"), c.rotate, true) {
+        c.rotate = !c.rotate;
+    }
+    let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
+    let label = if selected { "Nest Selected" } else { "Nest All" };
+    if ui.button(tl!(label)).clicked() {
+        c.note = Some(match app.run("cutting.nest", json!({ "gapMm": c.gap_mm, "rotate": c.rotate })) {
+            Ok(r) => {
+                let moved = r["moved"].as_array().map_or(0, Vec::len);
+                let left = r["unplaced"].as_array().map_or(0, Vec::len);
+                let used = r["usedLengthMm"].as_f64().unwrap_or(0.0);
+                if left > 0 {
+                    (true, format!("{moved} {} {used:.0} mm; {left} {}", tl!("nested in"), tl!("didn't fit and stayed where they were")))
+                } else {
+                    (false, format!("{moved} {} {used:.0} mm {}", tl!("nested in"), tl!("of the mat")))
+                }
+            }
+            Err(e) => (true, e),
+        });
+    }
+    if let Some((bad, note)) = &c.note {
+        ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
+    }
+    crate::panels::set_pstate(&ctx, "cutting-nest", c);
+}
+
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     let Ok(info) = app.session.execute("cutting.settings.get", &json!({})) else {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
         return;
     };
     mat_rows(app, ui, &info);
+    widgets::divider(ui);
+    widgets::section_header(ui, tl!("Nesting"));
+    nest_rows(app, ui);
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Print & Cut"));
     print_and_cut_rows(app, ui, &info);
@@ -169,6 +224,22 @@ mod tests {
             assert!(t.iter().any(|x| x == label), "{label}: {t:?}");
         }
         assert!(!t.iter().any(|x| x == "Force" || x == "Send to Cutter…"), "{t:?}");
+    }
+
+    /// C8.5: the Nesting section nests every piece, or the selection when there is one.
+    #[test]
+    fn the_panel_nests_the_pieces() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 1200, "height": 300})).unwrap();
+        app.run("shape.rectangle", json!({"x": 1000, "y": 20, "width": 100, "height": 100})).unwrap();
+        assert!(texts(&mut app, &ctx).iter().any(|t| t == "Nest Selected"), "the new rectangle is selected");
+        app.run("select.none", json!({})).unwrap();
+        let t = texts(&mut app, &ctx);
+        assert!(t.iter().any(|x| x == "Nest All") && t.iter().any(|x| x == "Turn Pieces") && t.iter().any(|x| x == "Gap"), "{t:?}");
+        assert!(app.run("cutting.job", json!({})).is_err(), "off the mat");
+        app.run("cutting.nest", json!({})).unwrap();
+        assert!(app.run("cutting.job", json!({})).is_ok(), "nested onto it");
     }
 
     /// C6.1: Print & Cut on, the panel adds the marks and then offers to update or remove them.
