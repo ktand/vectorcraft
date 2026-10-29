@@ -117,6 +117,8 @@ impl JobRegistration {
 #[derive(Clone, Debug, PartialEq)]
 pub struct JobGroup {
     pub name: String,
+    /// The material its own setup came from (C7.4), to say what to load before it.
+    pub material: Option<String>,
     /// Index of its first path; its paths run to the next group's start.
     pub start: usize,
 }
@@ -311,7 +313,7 @@ impl CutJob {
         json!({
             "version": self.version,
             "trackEnhancing": self.track_enhancing,
-            "groups": self.groups.iter().map(|g| json!({"name": g.name, "start": g.start})).collect::<Vec<_>>(),
+            "groups": self.groups.iter().map(|g| json!({"name": g.name, "start": g.start, "material": g.material})).collect::<Vec<_>>(),
             "registration": self.registration.map(|r| json!({"originMm": r.origin_mm, "sizeMm": r.size_mm})),
             "mat": {"id": self.mat.id, "sizeMm": self.mat.size_mm, "cutAreaMm": [a.x0, a.y0, a.x1, a.y1]},
             "operations": self.operations.iter().map(|o| json!({

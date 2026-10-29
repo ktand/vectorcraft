@@ -33,6 +33,7 @@ pub mod placement;
 pub mod prepare;
 pub mod preview;
 pub mod select;
+pub mod setups;
 pub mod weld;
 
 use vectorcraft_cutjob::{CutJob, CuttingSettings, DOCUMENT_KEY, JOB_VERSION, JobError, JobMat, OpKind, Operation, Toolpath};
@@ -113,39 +114,53 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
             b.push(p);
         }
     }
-    let mut ordered = vec![];
+    // Each group's own setup (C7.4), if it has one; else the document's.
+    let setups: Vec<Option<vectorcraft_cutjob::GroupSetup>> = names.iter().map(|n| setups::setup_of(d, &s, n)).collect();
+    // The paths in order, each with the group whose setup it is cut with (none: the document's).
+    let mut ordered: Vec<(prepare::Polyline, Option<usize>)> = vec![];
     let mut groups = vec![];
     let mut at = [area.x0, area.y0];
     for (g, bucket) in buckets.into_iter().enumerate() {
         if bucket.is_empty() {
             continue;
         }
+        let setup = setups.get(g).and_then(Option::as_ref);
         if s.grouping != vectorcraft_cutjob::Grouping::None {
-            groups.push(vectorcraft_cutjob::JobGroup { name: names.get(g).cloned().unwrap_or_default(), start: ordered.len() });
+            let (name, material) = (names.get(g).cloned().unwrap_or_default(), setup.and_then(|x| x.material.clone()));
+            groups.push(vectorcraft_cutjob::JobGroup { name, start: ordered.len(), material });
         }
         let these = order::order(bucket, s.ordering, at);
         if let Some(last) = these.last().and_then(|p| if p.closed { p.points.first() } else { p.points.last() }) {
             at = *last;
         }
-        ordered.extend(these);
+        let slot = setup.map(|_| g);
+        ordered.extend(these.into_iter().map(|p| (p, slot)));
     }
-    // One operation for each kind the job uses, scored first.
-    let mut kinds: Vec<OpKind> = ordered.iter().map(|p| p.op).collect();
-    kinds.sort();
-    kinds.dedup();
-    let operations: Vec<Operation> = kinds
+    // One operation for each kind and setup the job uses, scored first.
+    let mut keys: Vec<(OpKind, Option<usize>)> = ordered.iter().map(|(p, slot)| (p.op, *slot)).collect();
+    keys.sort();
+    keys.dedup();
+    let operations: Vec<Operation> = keys
         .iter()
-        .map(|&kind| {
-            let tool = match kind {
-                OpKind::Cut => s.operations.cut.clone(),
-                OpKind::Score => s.operations.score.clone(),
+        .map(|&(kind, slot)| {
+            let own = slot.and_then(|g| setups.get(g)).and_then(Option::as_ref);
+            let tool = match (kind, own) {
+                (OpKind::Cut, Some(x)) => x.cut.clone(),
+                (OpKind::Score, Some(x)) => x.score.clone(),
+                (OpKind::Cut, None) => s.operations.cut.clone(),
+                (OpKind::Score, None) => s.operations.score.clone(),
             };
             Operation { kind, tool }
         })
         .collect();
     let paths = ordered
         .into_iter()
-        .map(|p| Toolpath { op: kinds.iter().position(|k| *k == p.op).unwrap_or(0), source: p.source, closed: p.closed, points: p.points })
+        .map(|(p, slot)| Toolpath {
+            op: keys.iter().position(|k| *k == (p.op, slot)).unwrap_or(0),
+            source: p.source,
+            closed: p.closed,
+            points: p.points,
+        })
         .collect();
     let mut job = CutJob {
         version: JOB_VERSION,
@@ -209,6 +224,47 @@ mod tests {
         // Without grouping: one group, the squares in travel order.
         set_settings(&mut d, &CuttingSettings::default());
         assert!(build_job(&d).unwrap().groups.is_empty());
+    }
+
+    /// C7.4: a group with a setup of its own is cut with it, the others with the document's; the
+    /// job names the material to load before it. By layer from the layer, by colour from the
+    /// settings.
+    #[test]
+    fn each_group_is_cut_with_its_own_setup() {
+        use vectorcraft_color::{Color, Paint};
+        use vectorcraft_cutjob::{GroupSetup, Grouping, builtin_materials};
+        use vectorcraft_doc::{Appearance, LayerColor, Node};
+        use vectorcraft_geom::{Rect, shapes};
+        let mut d = Document::new(500.0, 500.0);
+        let bottom = d.layers[0].id;
+        let gold = Node::layer(d.alloc_id(), "Gold", LayerColor::Preset(1));
+        let gold = d.insert(None, usize::MAX, gold).unwrap();
+        let red = Appearance::basic(Paint::None, Paint::solid(Color::rgb(1.0, 0.0, 0.0)), 1.0);
+        for (layer, x) in [(bottom, 10.0), (gold, 100.0), (gold, 200.0)] {
+            let sq = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(x, 10.0, x + 20.0, 30.0)), red.clone());
+            d.insert(Some(layer), usize::MAX, sq).unwrap();
+        }
+        let card = builtin_materials().into_iter().find(|m| m.name == "Cardstock").unwrap();
+        setups::set_layer_setup(d.node_mut(gold).unwrap(), Some(&GroupSetup::of_material(&card)));
+        let by_layer = CuttingSettings { grouping: Grouping::Layer, ..CuttingSettings::default() };
+        set_settings(&mut d, &by_layer);
+        let job = build_job(&d).unwrap();
+        assert_eq!(job.operations.len(), 2, "the document's cut and Gold's: {:?}", job.operations);
+        let tool = |i: usize| &job.operations[job.paths[i].op].tool;
+        assert!(tool(0).same_setup(&by_layer.operations.cut), "the first layer: the document's");
+        assert!(tool(1).same_setup(&card.cut) && tool(2).same_setup(&card.cut), "Gold's own");
+        let materials: Vec<Option<&str>> = job.groups.iter().map(|g| g.material.as_deref()).collect();
+        assert_eq!(materials, [None, Some("Cardstock")]);
+        // Cut by colour, the layer's setup isn't used; the colour's is.
+        let mut by_colour = CuttingSettings { grouping: Grouping::Color, ..CuttingSettings::default() };
+        set_settings(&mut d, &by_colour);
+        let job = build_job(&d).unwrap();
+        assert_eq!(job.operations.len(), 1, "one colour, the document's setup");
+        by_colour.color_setups.insert("#ff0000".into(), GroupSetup::of_material(&card));
+        set_settings(&mut d, &by_colour);
+        let job = build_job(&d).unwrap();
+        assert!(job.operations.len() == 1 && job.operations[0].tool.same_setup(&card.cut));
+        assert_eq!(job.groups[0].material.as_deref(), Some("Cardstock"));
     }
 
     #[test]

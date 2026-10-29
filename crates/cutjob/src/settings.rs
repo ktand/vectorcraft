@@ -304,6 +304,11 @@ impl Operations {
     }
 }
 
+/// Most colours with a setup of their own a document keeps.
+pub const MAX_GROUP_SETUPS: usize = 256;
+/// Longest group name a setup is kept under.
+pub const MAX_GROUP_NAME: usize = 256;
+
 /// What a document keeps for cutting (ARCHITECTURE.md › 4.1).
 #[derive(Clone, Debug, PartialEq)]
 pub struct CuttingSettings {
@@ -339,6 +344,10 @@ pub struct CuttingSettings {
     pub print_and_cut: bool,
     /// How far in from the artboard's edges the marks go, mm ([`crate::marks::INSET_MM`]).
     pub mark_inset_mm: f64,
+    /// Cut by colour (C7.4): each colour's own setup, by the name its group has (a swatch's name
+    /// or `#rrggbb`); colours without one are cut with [`Self::operations`]. A layer's own setup is
+    /// on the layer (`vectorcraft_cutting::setups`).
+    pub color_setups: std::collections::BTreeMap<String, crate::GroupSetup>,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -362,6 +371,7 @@ impl Default for CuttingSettings {
             grouping: Grouping::None,
             print_and_cut: false,
             mark_inset_mm: crate::marks::DEFAULT_INSET_MM,
+            color_setups: Default::default(),
             extra: Map::new(),
         }
     }
@@ -373,7 +383,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 16] = [
+    const KEYS: [&'static str; 17] = [
         "version",
         "mat",
         "customMatMm",
@@ -390,6 +400,7 @@ impl CuttingSettings {
         "grouping",
         "printAndCut",
         "markInsetMm",
+        "colorSetups",
     ];
 
     /// The settings in `v` (a document's `unknown["cutting"]`, from a file): anything that isn't an
@@ -419,6 +430,16 @@ impl CuttingSettings {
             print_and_cut: flag(m, "printAndCut", d.print_and_cut),
             mark_inset_mm: num(m, "markInsetMm", crate::marks::INSET_MM.0, crate::marks::INSET_MM.1, d.mark_inset_mm),
             material: m.get("material").and_then(Value::as_str).and_then(crate::material::valid_name),
+            color_setups: object(m, "colorSetups")
+                .map(|c| {
+                    let defaults = Operations::default();
+                    c.iter()
+                        .filter(|(k, _)| !k.is_empty() && k.chars().count() <= MAX_GROUP_NAME)
+                        .filter_map(|(k, v)| Some((k.clone(), crate::GroupSetup::from_value(v, &defaults)?)))
+                        .take(MAX_GROUP_SETUPS)
+                        .collect()
+                })
+                .unwrap_or_default(),
             extra: unknown(m, &Self::KEYS),
         }
     }
@@ -446,6 +467,10 @@ impl CuttingSettings {
         m.insert("markInsetMm".into(), json!(self.mark_inset_mm));
         if let Some(name) = &self.material {
             m.insert("material".into(), json!(name));
+        }
+        if !self.color_setups.is_empty() {
+            let c: Map<String, Value> = self.color_setups.iter().map(|(k, v)| (k.clone(), v.to_value())).collect();
+            m.insert("colorSetups".into(), Value::Object(c));
         }
         Value::Object(m)
     }

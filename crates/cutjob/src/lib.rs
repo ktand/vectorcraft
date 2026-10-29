@@ -27,6 +27,8 @@ pub use job::{
 };
 pub use marks::{Mark, MarkLayout};
 pub use mat::{MAT_PRESETS, MatGeometry, RectMm};
-pub use material::{MAX_MATERIALS, MAX_NAME, Material, builtin_materials, read_materials, valid_name};
-pub use settings::{CuttingSettings, DOCUMENT_KEY, Grouping, Op, Operations, Ordering, Orientation, SETTINGS_VERSION, ToolSettings};
+pub use material::{GroupSetup, MAX_MATERIALS, MAX_NAME, Material, builtin_materials, read_materials, valid_name};
+pub use settings::{
+    CuttingSettings, DOCUMENT_KEY, Grouping, MAX_GROUP_NAME, MAX_GROUP_SETUPS, Op, Operations, Ordering, Orientation, SETTINGS_VERSION, ToolSettings,
+};
 pub use simulate::{BladeAt, Move, Simulation, TRAVEL_MM_S};

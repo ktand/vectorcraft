@@ -18,6 +18,8 @@ use super::*;
 mod devices;
 // Materials: named tool settings (C5.1).
 pub mod materials;
+// Each group's own setup when cut in groups (C7.4).
+mod groups;
 
 const SETTINGS_SET: &str = "cutting.settings.set";
 const OP_SET: &str = "cutting.op.set";
@@ -25,6 +27,7 @@ const OP_SET: &str = "cutting.op.set";
 pub fn specs() -> Vec<CommandSpec> {
     let mut v = devices::specs();
     v.extend(materials::specs());
+    v.extend(groups::specs());
     v.extend(vec![
         cmd!(
             query "cutting.settings.get",

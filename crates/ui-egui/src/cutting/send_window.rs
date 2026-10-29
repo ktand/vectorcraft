@@ -241,7 +241,15 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
         }
     });
     if let Some(group) = waiting {
-        let text = format!("{} {group}. {}", tl!("Paused before"), tl!("Change the tool or material, then Continue."));
+        // The material its own setup came from (C7.4), when it has one.
+        let material = crate::cutting::job(app, &ctx).and_then(|j| {
+            j.as_ref().as_ref().ok().and_then(|made| made.job.groups.iter().find(|g| g.name == group).and_then(|g| g.material.clone()))
+        });
+        let then = match material {
+            Some(m) => format!("{} {m}, {}", tl!("Load"), tl!("then Continue.")),
+            None => tl!("Change the tool or material, then Continue.").to_string(),
+        };
+        let text = format!("{} {group}. {then}", tl!("Paused before"));
         ui.label(egui::RichText::new(text).color(t.text_strong));
     } else if sending {
         let (sent, all) = (status["chunksSent"].as_u64().unwrap_or(0), status["chunks"].as_u64().unwrap_or(0));
@@ -364,6 +372,7 @@ mod tests {
         };
         vectorcraft_cutter::registry::install(Some(Arc::new(quick)));
         let mut app = app_with_two_layers();
+        app.run("cutting.group.set", json!({"group": "Gold", "material": "Cardstock"})).unwrap();
         let ctx = egui::Context::default();
         set_open(&ctx, true);
         let texts = window_texts(&mut app, &ctx);
@@ -379,7 +388,7 @@ mod tests {
         };
         wait_for(&mut app, "waitingFor");
         let texts = window_texts(&mut app, &ctx);
-        assert!(texts.iter().any(|t| t.starts_with("Paused before Gold.")), "{texts:?}");
+        assert!(texts.iter().any(|t| t.starts_with("Paused before Gold. Load Cardstock, then Continue.")), "{texts:?}");
         assert!(texts.iter().any(|t| t == "Continue") && texts.iter().any(|t| t == "Cancel"), "{texts:?}");
         app.run("cutting.continue", json!({})).unwrap();
         wait_for(&mut app, "outcome");

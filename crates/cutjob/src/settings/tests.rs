@@ -63,6 +63,15 @@ fn every_setting_round_trips() {
         grouping: Grouping::Color,
         print_and_cut: true,
         mark_inset_mm: 12.5,
+        color_setups: [(
+            "Gold".to_string(),
+            crate::GroupSetup {
+                material: Some("Vinyl".into()),
+                cut: ToolSettings { passes: 2, ..ToolSettings::default() },
+                score: ToolSettings::default(),
+            },
+        )]
+        .into(),
         extra: Map::new(),
     };
     assert_eq!(read(s.to_value()), s);
