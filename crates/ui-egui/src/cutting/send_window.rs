@@ -139,51 +139,13 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
                 });
             }
             if !j.paths.is_empty() {
-                playback_rows(ui, &made.sim);
+                crate::cutting::playback_controls(ui, &made.sim, false);
             }
         }
         Err(e) => {
             ui.label(egui::RichText::new(e).color(t.bleed));
         }
     }
-}
-
-/// Play the blade's run, step from path to path, or scrub along it (C3.7); the preview and the
-/// canvas show it.
-fn playback_rows(ui: &mut egui::Ui, sim: &vectorcraft_cutjob::Simulation) {
-    use crate::cutting::{Playback, playback, set_playback};
-    let ctx = ui.ctx().clone();
-    let mut p = playback(&ctx);
-    let total = sim.total_mm;
-    let at = p.mm.unwrap_or(total);
-    let starts = sim.path_starts_mm();
-    ui.horizontal(|ui| {
-        let play = if p.playing { tl!("Pause") } else { tl!("Play") };
-        if ui.button(play).clicked() {
-            // Playing from the end starts again.
-            let from = if at >= total { 0.0 } else { at };
-            p = Playback { mm: Some(from), playing: !p.playing, last: ctx.input(|i| i.time) };
-        }
-        if ui.button(tl!("Previous")).clicked() {
-            let prev = starts.iter().rev().find(|s| **s < at - 1e-6).copied().unwrap_or(0.0);
-            p = Playback { mm: Some(prev), playing: false, ..p };
-        }
-        if ui.button(tl!("Next")).clicked() {
-            let next = starts.iter().find(|s| **s > at + 1e-6).copied().unwrap_or(total);
-            p = Playback { mm: Some(next), playing: false, ..p };
-        }
-        if p.mm.is_some() && ui.button(tl!("Done")).clicked() {
-            p = Playback::default();
-        }
-    });
-    let mut v = p.mm.unwrap_or(total);
-    if widgets::slider(ui, egui::Slider::new(&mut v, 0.0..=total.max(f64::MIN_POSITIVE)).show_value(false)).changed() {
-        p = Playback { mm: Some(v), playing: false, ..p };
-    }
-    let blade = sim.at_mm(p.mm.unwrap_or(total));
-    let path = blade.path.map_or(String::new(), |i| format!(" · {} {}", tl!("path"), i + 1));
-    widgets::dim_label(ui, &format!("{:.0} / {:.0} s{path} (×{})", blade.done_seconds, sim.total_seconds, crate::cutting::SPEEDUP));
-    set_playback(&ctx, p);
 }
 
 /// The machine to send to, sending and its progress (C4.5), the pause between groups (C5.3).

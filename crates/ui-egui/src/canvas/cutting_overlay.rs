@@ -198,6 +198,36 @@ pub(crate) fn preview_size(app: &VectorcraftApp, width: f32, max_height: f32) ->
     egui::vec2((height / aspect).min(width), height)
 }
 
+/// The playback bar (C7.3): in Cutting View with the toolpaths shown, the blade's run played,
+/// stepped and scrubbed from a bar at the foot of the canvas, so the cutting order can be checked
+/// while editing. It moves the same playback as the Send window's.
+pub(super) fn playback_bar(app: &VectorcraftApp, ctx: &egui::Context, xf: &Xf) {
+    if !crate::cutting::shows_toolpaths(ctx) {
+        return;
+    }
+    let Some(job) = crate::cutting::job(app, ctx) else { return };
+    let Ok(made) = &*job else { return };
+    if made.job.paths.is_empty() {
+        return;
+    }
+    let t = Tokens::get(ctx);
+    let id = egui::Id::unique("cutting-playback-bar");
+    // Centred at the foot of the canvas, by its size last frame (a guess before the first).
+    let size = ctx.memory(|m| m.area_rect(id)).map_or(vec2(560.0, 40.0), |r| r.size());
+    let pos = pos2(xf.rect.center().x - size.x / 2.0, xf.rect.bottom() - size.y - BAR_MARGIN);
+    egui::Area::new(id).order(egui::Order::Middle).fixed_pos(pos).show(ctx, |ui| {
+        egui::Frame::NONE
+            .fill(t.panel)
+            .stroke(Stroke::new(1.0, t.tool_active))
+            .corner_radius(egui::CornerRadius::same(5))
+            .inner_margin(egui::Margin::symmetric(8, 6))
+            .show(ui, |ui| crate::cutting::playback_controls(ui, &made.sim, true));
+    });
+}
+
+/// How far above the canvas's foot the playback bar sits, px.
+const BAR_MARGIN: f32 = 12.0;
+
 /// The mat as the machine takes it, fitted into `rect` (the Send window, C7.1): the plate, the
 /// cut area and origin, and the job's toolpaths with their playback, whatever Show Toolpaths and
 /// the view say. The mat is drawn upright, its feed edge at the top, however the artboard lies on

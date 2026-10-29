@@ -146,3 +146,59 @@ pub(crate) fn tick(ctx: &egui::Context, sim: &Simulation) -> Playback {
     set_playback(ctx, p);
     p
 }
+
+/// Play the blade's run, step from path to path, or scrub along it (C3.7): the Send window's
+/// controls under its preview, and (`compact`, one row) the bar over the canvas in Cutting View
+/// (C7.3). Both move the one playback the canvas and the preview draw.
+pub(crate) fn playback_controls(ui: &mut egui::Ui, sim: &Simulation, compact: bool) {
+    let ctx = ui.ctx().clone();
+    let mut p = playback(&ctx);
+    let total = sim.total_mm;
+    let at = p.mm.unwrap_or(total);
+    let starts = sim.path_starts_mm();
+    let buttons = |ui: &mut egui::Ui, p: &mut Playback| {
+        let play = if p.playing { tl!("Pause") } else { tl!("Play") };
+        if ui.button(play).clicked() {
+            // Playing from the end starts again.
+            let from = if at >= total { 0.0 } else { at };
+            *p = Playback { mm: Some(from), playing: !p.playing, last: ctx.input(|i| i.time) };
+        }
+        if ui.button(tl!("Previous")).clicked() {
+            let prev = starts.iter().rev().find(|s| **s < at - 1e-6).copied().unwrap_or(0.0);
+            *p = Playback { mm: Some(prev), playing: false, ..*p };
+        }
+        if ui.button(tl!("Next")).clicked() {
+            let next = starts.iter().find(|s| **s > at + 1e-6).copied().unwrap_or(total);
+            *p = Playback { mm: Some(next), playing: false, ..*p };
+        }
+        if p.mm.is_some() && ui.button(tl!("Done")).clicked() {
+            *p = Playback::default();
+        }
+    };
+    let slider = |ui: &mut egui::Ui, p: &mut Playback, width: f32| {
+        let mut v = p.mm.unwrap_or(total);
+        ui.spacing_mut().slider_width = width;
+        if crate::widgets::slider(ui, egui::Slider::new(&mut v, 0.0..=total.max(f64::MIN_POSITIVE)).show_value(false)).changed() {
+            *p = Playback { mm: Some(v), playing: false, ..*p };
+        }
+    };
+    if compact {
+        ui.horizontal(|ui| {
+            buttons(ui, &mut p);
+            slider(ui, &mut p, 220.0);
+            playback_label(ui, sim, &p);
+        });
+    } else {
+        ui.horizontal(|ui| buttons(ui, &mut p));
+        slider(ui, &mut p, ui.spacing().slider_width);
+        playback_label(ui, sim, &p);
+    }
+    set_playback(&ctx, p);
+}
+
+/// How far the playback is: seconds of the machine's, and the path the blade is on.
+fn playback_label(ui: &mut egui::Ui, sim: &Simulation, p: &Playback) {
+    let blade = sim.at_mm(p.mm.unwrap_or(sim.total_mm));
+    let path = blade.path.map_or(String::new(), |i| format!(" · {} {}", tl!("path"), i + 1));
+    crate::widgets::dim_label(ui, &format!("{:.0} / {:.0} s{path} (×{SPEEDUP})", blade.done_seconds, sim.total_seconds));
+}
