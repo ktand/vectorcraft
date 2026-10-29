@@ -55,6 +55,37 @@ fn job_settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     });
 }
 
+/// Weeding (C8.2, C8.3): a box round the design and lines from it in to the design, cut by the
+/// job (not added to the art), so vinyl's waste comes away easily.
+fn weeding_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
+    let s = &info["settings"];
+    let boxed = s["weedBox"].as_bool() == Some(true);
+    if widgets::check(ui, tl!("Weed Box"), boxed, true) {
+        set(app, json!({ "weedBox": !boxed }));
+    }
+    if boxed {
+        let margin = s["weedMarginMm"].as_f64().unwrap_or(3.0);
+        widgets::label_row(ui, tl!("Margin"), LABEL_W, |ui| {
+            if let Some(v) = mm_field(ui, "weed-margin", margin, 0.0) {
+                set(app, json!({ "weedMarginMm": v.clamp(0.0, 50.0) }));
+            }
+        });
+    }
+    let lines = s["weedLines"].as_bool() == Some(true);
+    if widgets::check(ui, tl!("Weed Lines"), lines, true) {
+        set(app, json!({ "weedLines": !lines }));
+    }
+    if lines {
+        let spacing = s["weedLineSpacingMm"].as_f64().unwrap_or(0.0);
+        widgets::label_row(ui, tl!("Every"), LABEL_W, |ui| {
+            if let Some(v) = mm_field(ui, "weed-spacing", spacing, 0.0) {
+                set(app, json!({ "weedLineSpacingMm": v.clamp(0.0, 200.0) }));
+            }
+        });
+        widgets::dim_label(ui, tl!("0: one line in from the middle of each side."));
+    }
+}
+
 /// A group row's material choices: the document's setup first, then every material.
 fn group_choices(app: &mut VectorcraftApp) -> Vec<String> {
     let listed = app.session.execute("cutting.materials", &json!({})).unwrap_or_default();
@@ -358,6 +389,9 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         group_rows(app, ui, &info);
         widgets::divider(ui);
     }
+    widgets::section_header(ui, tl!("Weeding"));
+    weeding_rows(app, ui, &info);
+    widgets::divider(ui);
     widgets::section_header(ui, tl!("Selection"));
     selection_rows(app, ui);
     widgets::divider(ui);
@@ -460,6 +494,21 @@ mod tests {
         choose_group_material(&mut app, "Gold", &choices, 0).unwrap();
         let groups = app.session.execute("cutting.groups", &json!({})).unwrap();
         assert!(groups["groups"][1]["setup"].is_null(), "back to the document's");
+    }
+
+    /// C8.2, C8.3: the weeding switches, their numbers shown once they are on.
+    #[test]
+    fn the_panel_switches_weeding_on() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Weed Box") && texts.iter().any(|t| t == "Weed Lines"), "{texts:?}");
+        assert!(!texts.iter().any(|t| t == "Margin" || t == "Every"), "off: no numbers");
+        app.run("cutting.settings.set", json!({"weedBox": true, "weedLines": true, "weedMarginMm": 5})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Margin") && texts.iter().any(|t| t == "Every"), "{texts:?}");
+        assert!(app.run("cutting.settings.set", json!({"weedMarginMm": 80})).is_err(), "out of range");
     }
 
     /// C7.2: the settings most cuts leave alone are behind Advanced, closed at first.

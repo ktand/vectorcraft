@@ -348,6 +348,13 @@ pub struct CuttingSettings {
     /// or `#rrggbb`); colours without one are cut with [`Self::operations`]. A layer's own setup is
     /// on the layer (`vectorcraft_cutting::setups`).
     pub color_setups: std::collections::BTreeMap<String, crate::GroupSetup>,
+    /// Weeding (C8.2): a box cut round the design (each group's) this far from it, mm.
+    pub weed_box: bool,
+    pub weed_margin_mm: f64,
+    /// Weeding (C8.3): lines from the box in to the design; one from the middle of each side
+    /// (spacing 0), or one every this many mm.
+    pub weed_lines: bool,
+    pub weed_line_spacing_mm: f64,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -372,6 +379,10 @@ impl Default for CuttingSettings {
             print_and_cut: false,
             mark_inset_mm: crate::marks::DEFAULT_INSET_MM,
             color_setups: Default::default(),
+            weed_box: false,
+            weed_margin_mm: 3.0,
+            weed_lines: false,
+            weed_line_spacing_mm: 0.0,
             extra: Map::new(),
         }
     }
@@ -383,7 +394,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 17] = [
+    const KEYS: [&'static str; 21] = [
         "version",
         "mat",
         "customMatMm",
@@ -401,7 +412,15 @@ impl CuttingSettings {
         "printAndCut",
         "markInsetMm",
         "colorSetups",
+        "weedBox",
+        "weedMarginMm",
+        "weedLines",
+        "weedLineSpacingMm",
     ];
+
+    /// The weed box's margin and the weed lines' spacing (0: one from each side's middle), mm.
+    pub const WEED_MARGIN_MM: (f64, f64) = (0.0, 50.0);
+    pub const WEED_LINE_SPACING_MM: (f64, f64) = (0.0, 200.0);
 
     /// The settings in `v` (a document's `unknown["cutting"]`, from a file): anything that isn't an
     /// object gives the defaults. Never fails.
@@ -440,6 +459,10 @@ impl CuttingSettings {
                         .collect()
                 })
                 .unwrap_or_default(),
+            weed_box: flag(m, "weedBox", d.weed_box),
+            weed_margin_mm: num(m, "weedMarginMm", Self::WEED_MARGIN_MM.0, Self::WEED_MARGIN_MM.1, d.weed_margin_mm),
+            weed_lines: flag(m, "weedLines", d.weed_lines),
+            weed_line_spacing_mm: num(m, "weedLineSpacingMm", Self::WEED_LINE_SPACING_MM.0, Self::WEED_LINE_SPACING_MM.1, d.weed_line_spacing_mm),
             extra: unknown(m, &Self::KEYS),
         }
     }
@@ -468,6 +491,10 @@ impl CuttingSettings {
         if let Some(name) = &self.material {
             m.insert("material".into(), json!(name));
         }
+        m.insert("weedBox".into(), json!(self.weed_box));
+        m.insert("weedMarginMm".into(), json!(self.weed_margin_mm));
+        m.insert("weedLines".into(), json!(self.weed_lines));
+        m.insert("weedLineSpacingMm".into(), json!(self.weed_line_spacing_mm));
         if !self.color_setups.is_empty() {
             let c: Map<String, Value> = self.color_setups.iter().map(|(k, v)| (k.clone(), v.to_value())).collect();
             m.insert("colorSetups".into(), Value::Object(c));

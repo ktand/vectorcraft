@@ -35,6 +35,7 @@ pub mod preview;
 pub mod select;
 pub mod setups;
 pub mod test_cut;
+pub mod weed;
 pub mod weld;
 
 use vectorcraft_cutjob::{CutJob, CuttingSettings, DOCUMENT_KEY, JOB_VERSION, JobError, JobMat, OpKind, Operation, Toolpath};
@@ -133,7 +134,15 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
             let (name, material) = (names.get(g).cloned().unwrap_or_default(), setup.and_then(|x| x.material.clone()));
             groups.push(vectorcraft_cutjob::JobGroup { name, start: ordered.len(), material });
         }
-        let these = order::order(bucket, s.ordering, at);
+        let mut these = order::order(bucket, s.ordering, at);
+        // Weeding after the group's own paths, within what may be cut (C8.2, C8.3).
+        let may_cut = registration.map_or(area, |r| {
+            let m = r.area();
+            vectorcraft_cutjob::RectMm { x0: m.x0.max(area.x0), y0: m.y0.max(area.y0), x1: m.x1.min(area.x1), y1: m.y1.min(area.y1) }
+        });
+        let (weeding, said) = weed::weeding(&these, may_cut, &s);
+        these.extend(weeding);
+        warnings.extend(said);
         if let Some(last) = these.last().and_then(|p| if p.closed { p.points.first() } else { p.points.last() }) {
             at = *last;
         }
@@ -269,6 +278,35 @@ mod tests {
         let job = build_job(&d).unwrap();
         assert!(job.operations.len() == 1 && job.operations[0].tool.same_setup(&card.cut));
         assert_eq!(job.groups[0].material.as_deref(), Some("Cardstock"));
+    }
+
+    /// C8.2, C8.3: weeding comes after each group's own paths, the box last, made by the job
+    /// (node 0), with that group's cut.
+    #[test]
+    fn weeding_follows_each_group() {
+        use vectorcraft_doc::{Appearance, LayerColor, Node};
+        use vectorcraft_geom::{Rect, shapes};
+        let mut d = Document::new(500.0, 500.0);
+        let bottom = d.layers[0].id;
+        let top = Node::layer(d.alloc_id(), "Second", LayerColor::Preset(1));
+        let top = d.insert(None, usize::MAX, top).unwrap();
+        for (layer, x) in [(bottom, 50.0), (top, 300.0)] {
+            let sq = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(x, 50.0, x + 60.0, 110.0)), Appearance::default());
+            d.insert(Some(layer), usize::MAX, sq).unwrap();
+        }
+        let s = CuttingSettings { grouping: vectorcraft_cutjob::Grouping::Layer, weed_box: true, weed_lines: true, ..CuttingSettings::default() };
+        set_settings(&mut d, &s);
+        let job = build_job(&d).unwrap();
+        // Each group: its square, four weed lines, its box.
+        assert_eq!(job.paths.len(), 2 * 6, "{:?}", job.paths.iter().map(|p| p.source.node).collect::<Vec<_>>());
+        assert_eq!(job.groups[1].start, 6);
+        for g in [0, 6] {
+            assert_ne!(job.paths[g].source.node, 0, "the design first");
+            assert!(job.paths[g + 1..g + 6].iter().all(|p| p.source == weed::SOURCE));
+            assert!(job.paths[g + 5].closed, "the box last");
+        }
+        set_settings(&mut d, &CuttingSettings { weed_box: false, weed_lines: false, ..s });
+        assert_eq!(build_job(&d).unwrap().paths.len(), 2, "off: the design alone");
     }
 
     #[test]

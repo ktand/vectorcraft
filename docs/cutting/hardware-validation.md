@@ -111,6 +111,15 @@ Result:
 
 Result:
 
+## Step 4h: weeding (C8.2)
+
+- On vinyl (or paper as a stand-in): a few letters, Cut Settings › Weeding › **Weed Box** and **Weed Lines**.
+  The letters are cut, then the lines from the box in towards them, then the box. Check that no line nicks a
+  letter (they stop 0.3 mm short; if the blade runs on further, note how far) and that the waste comes off in
+  strips.
+
+Result:
+
 ## Step 5: a real cut
 
 - Only after steps 1–3 pass: the golden test file (`nested.svg`) cut through on paper with the cut force set as

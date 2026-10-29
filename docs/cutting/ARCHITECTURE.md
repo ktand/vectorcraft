@@ -111,7 +111,8 @@ Name clash: VectorCraft already has *Cutting tools* (Mirror & Cut, Line Cut, Rec
     "score": {"force": 0.1, "speedMmS": 100, "passes": 1, "overcutMm": 0.0}
   },
   "ordering": "insideFirst",
-  "colorSetups": {"#ff0000": {"material": "Cardstock", "cut": {"force": 0.45, "passes": 2}, "score": {"force": 0.15}}}
+  "colorSetups": {"#ff0000": {"material": "Cardstock", "cut": {"force": 0.45, "passes": 2}, "score": {"force": 0.15}}},
+  "weedBox": false, "weedMarginMm": 3.0, "weedLines": false, "weedLineSpacingMm": 0.0
 }
 ```
 
