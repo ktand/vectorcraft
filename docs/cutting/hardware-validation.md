@@ -13,16 +13,17 @@ as confirmed (or correct them).
 1. Connect the Cameo 4 by USB, switch it on, and load a mat with a sheet of scrap paper.
 2. Close Silhouette Studio, so it doesn't hold the machine.
 3. Start VectorCraft from the repo: `cargo run -p vectorcraft -- crates/cutting/tests/golden/nested.svg`.
-4. Window › Workspace › Cutting. The Cutting panel's **Cutter** section should name the machine ("Cameo 4"). If it
-   says no cutter is connected, press **Find Cutters**.
+4. Window › Workspace › Cutting, then **Send to Cutter…** at the top of the Cut Settings panel (or File › Send to
+   Cutter…, Ctrl+Alt+Shift+C). The Send window should name the machine ("Cameo 4"). If it says no cutter is
+   connected, press **Find Cutters**. Sending, pausing and the test cut are all in that window.
 
 ## Step 1: the machine answers (C4.2)
 
-- With an empty document (File › New), press **Send to Cutter**: it is greyed out (nothing to cut). That's
+- With an empty document (File › New), the Send window's **Send** is greyed out (nothing to cut). That's
   right.
-- Draw one small rectangle, 10 × 10 mm. In the panel set **Default** to Score, and under **Tool Settings ›
+- Draw one small rectangle, 10 × 10 mm. In Cut Settings set **Default** to Score, and under **Tool Settings ›
   Score** set Force to 1 (the machine's lightest step) and Passes to 1.
-- Press **Send to Cutter**. Expected: the panel shows "Sending: …", the machine moves, then "Sent.".
+- Press **Send**. Expected: the window shows "Sending: …", the machine moves, then "Sent.".
 - If instead it shows "load the mat into the cutter first", the status answer works but the mat isn't loaded.
 - If it shows "the cutter didn't answer in time", write it down: the status read through `usbprint.sys` needs a
   look.
@@ -63,8 +64,8 @@ Result:
 
 ## Step 4c: cutting in groups (C5.3)
 
-- Two squares on two layers, Groups **By Layer**: the first square is cut, then the panel says "Paused before"
-  the second layer while the machine waits with the mat loaded. Continue: the second square is cut where it
+- Two squares on two layers, Groups **By Layer**: the first square is cut, then the Send window says "Paused
+  before" the second layer while the machine waits with the mat loaded. Continue: the second square is cut where it
   should be (the mat hasn't moved). Cancel while paused: nothing more is cut.
 
 Result:
@@ -88,6 +89,25 @@ Result:
 - If the search fails on a good sheet: note the marks inset, and try `TB52,0` instead of `TB52,2` (the other
   mark type in the notes). If the cut is offset by a fixed amount, measure it: the anchor may be the line's
   centre rather than its outer edge.
+
+Result:
+
+## Step 4f: each group's own setup (C7.4, C7.5)
+
+- The two layers of step 4c; in Cut Settings › Groups give the second layer a heavier force (or a material such
+  as Cardstock). The first square should be cut light, then after the pause ("Load Cardstock, then Continue"
+  when a material is set) the second heavier. Feel or look at the cut depth of each.
+
+Result:
+
+## Step 4g: the test cut (C8.1)
+
+- Send window › **Test at** Bottom Right, **Test Cut**: a 10 mm square with a triangle inside it is cut 3 mm in
+  from that corner of the cut area, the triangle first. The triangle should lift out and the square stay on the
+  backing. Then each other corner: check they land where the preview's mat says (a test at the corner the design
+  is in should warn before cutting).
+- Use it to tune a material: the force where the triangle lifts out cleanly without cutting the backing is the
+  one to save as the material.
 
 Result:
 
