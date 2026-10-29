@@ -28,6 +28,19 @@ fn the_pieces_are_nested_on_the_mat_as_one_step() {
     let r = s.execute("cutting.nest", &json!({"gapMm": 5, "rotate": false})).unwrap();
     assert_eq!(r["moved"].as_array().unwrap().len(), 1, "{r}");
 
+    // C8.6: onto new sheets: what doesn't fit the artboard goes onto Sheet 2…, one undo step.
+    s.execute("file.new", &json!({"width": 612, "height": 792})).unwrap();
+    for k in 0..9 {
+        s.execute("shape.rectangle", &json!({"x": 700 + 260 * k, "y": 0, "width": 250, "height": 250})).unwrap();
+    }
+    s.execute("select.none", &json!({})).unwrap();
+    let r = s.execute("cutting.nest", &json!({"sheets": true})).unwrap();
+    assert!(r["created"].as_u64().unwrap() >= 1 && r["unplaced"].as_array().unwrap().is_empty(), "{r}");
+    let boards = s.active().unwrap().doc.artboards.len();
+    assert_eq!(boards as u64, 1 + r["created"].as_u64().unwrap());
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(s.active().unwrap().doc.artboards.len(), 1, "the sheets go with the undo");
+
     assert!(s.execute("cutting.nest", &json!({"gapMm": 80})).is_err());
     assert!(s.execute("cutting.nest", &json!({"rotate": "yes"})).is_err());
     s.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();

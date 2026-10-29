@@ -409,15 +409,23 @@ pub fn default_pieces(d: &vectorcraft_doc::Document) -> Vec<vectorcraft_doc::Nod
         .collect()
 }
 
-/// Nests `ids` (each moved as one piece, with all it holds) on `d`'s mat: in the cut area, or
-/// between the registration marks for Print & Cut; the other objects that are cut stay where they
-/// are and are packed round. A piece's shape is its cut outline, or its bounds when it has none
-/// (art that is only printed). The transforms rotate and move, never scale.
+/// Nests `ids` (each moved as one piece, with all it holds) on the artboard where it lies on `d`'s
+/// mat: inside the cut area, and between the registration marks for Print & Cut; the other objects that are cut on the artboard
+/// stay where they are and are packed round. A piece's shape is its cut outline wherever it lies,
+/// or its bounds when nothing of it is cut (art that is only printed). The transforms rotate and
+/// move, never scale.
 pub fn nest_document(d: &vectorcraft_doc::Document, ids: &[vectorcraft_doc::NodeId], opt: Options) -> Result<DocNested, String> {
+    nest_on(d, ids, opt, crate::settings(d).artboard)
+}
+
+/// [`nest_document`] onto artboard `artboard` laid on the mat (the settings' own for the rest).
+pub fn nest_on(d: &vectorcraft_doc::Document, ids: &[vectorcraft_doc::NodeId], opt: Options, artboard: u32) -> Result<DocNested, String> {
     use vectorcraft_geom::{Affine, PathEl, Point};
-    let s = crate::settings(d);
+    let s = vectorcraft_cutjob::CuttingSettings { artboard, ..crate::settings(d) };
     let placement = crate::placement::place(&s, d).ok_or("the cutting settings' artboard isn't in the document")?;
-    let mut area = placement.mat.cut_area_mm;
+    // The artboard is the sheet: a job cuts only what lies on it, so nothing goes past it.
+    let (cut, at) = (placement.mat.cut_area_mm, placement.artboard_mm);
+    let mut area = RectMm { x0: cut.x0.max(at.x0), y0: cut.y0.max(at.y0), x1: cut.x1.min(at.x1), y1: cut.y1.min(at.y1) };
     if s.print_and_cut {
         let m = crate::marks::layout(&s, d).ok_or("the artboard is too small for registration marks")?.area();
         let at = placement.artboard_mm;
@@ -432,14 +440,17 @@ pub fn nest_document(d: &vectorcraft_doc::Document, ids: &[vectorcraft_doc::Node
     if pieces.len() > MAX_PIECES {
         return Err(format!("at most {MAX_PIECES} pieces can be nested at once"));
     }
-    // Every cut outline on the mat, in mm, with the piece it belongs to (none: it stays).
-    let items = crate::select::select(d, &s);
-    let (outlines, _) = crate::geometry::outlines(d, &items);
-    let tolerance = s.tolerance_mm.clamp(0.001, 1.0);
-    let piece_of = |node: u64| {
-        let a = d.ancestry(vectorcraft_doc::NodeId(node)).unwrap_or_default();
+    // The pieces' cut outlines wherever they lie, and what is cut on the artboard besides (it
+    // stays), in mm.
+    let piece_of = |node: vectorcraft_doc::NodeId| {
+        let a = d.ancestry(node).unwrap_or_default();
         pieces.iter().position(|p| a.contains(p))
     };
+    let on_artboard: std::collections::HashSet<vectorcraft_doc::NodeId> = crate::select::select(d, &s).iter().map(|i| i.id).collect();
+    let items: Vec<crate::select::Item> =
+        crate::select::select_everywhere(d, &s).into_iter().filter(|i| piece_of(i.id).is_some() || on_artboard.contains(&i.id)).collect();
+    let (outlines, _) = crate::geometry::outlines(d, &items);
+    let tolerance = s.tolerance_mm.clamp(0.001, 1.0);
     let mut shapes: Vec<Vec<Shape>> = vec![vec![]; pieces.len()];
     let mut fixed: Vec<Shape> = vec![];
     for o in &outlines {
@@ -454,7 +465,7 @@ pub fn nest_document(d: &vectorcraft_doc::Document, ids: &[vectorcraft_doc::Node
             continue;
         }
         let shape = Shape { closed: o.closed, points };
-        match piece_of(o.source.node) {
+        match piece_of(vectorcraft_doc::NodeId(o.source.node)) {
             Some(k) => {
                 if let Some(v) = shapes.get_mut(k) {
                     v.push(shape);
@@ -485,6 +496,65 @@ pub fn nest_document(d: &vectorcraft_doc::Document, ids: &[vectorcraft_doc::Node
         }
     }
     Ok(DocNested { moves, unplaced, used_length_mm: nested.used_length_mm, out_of_work: nested.out_of_work })
+}
+
+/// Most sheets nesting makes.
+pub const MAX_SHEETS: usize = 20;
+/// The space between one sheet's artboard and the next, points.
+const SHEET_SPACING_PT: f64 = 36.0;
+
+/// A nesting over sheets: the artboards it placed pieces on (indices, in order), how many new
+/// ones it made, and the pieces that fit on none.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SheetsNested {
+    pub sheets: Vec<usize>,
+    pub created: usize,
+    pub unplaced: Vec<vectorcraft_doc::NodeId>,
+    pub out_of_work: bool,
+}
+
+/// Nests `ids` on the settings' artboard, and what doesn't fit there onto new sheets: artboards
+/// the size of that one ("Sheet 2", "Sheet 3", …, at most [`MAX_SHEETS`] in all) to the right of
+/// the others, each nested in turn, until everything is placed or a piece doesn't fit even an
+/// empty sheet. Edits `d` (the caller makes that one undo step).
+pub fn nest_sheets(d: &mut vectorcraft_doc::Document, ids: &[vectorcraft_doc::NodeId], opt: Options) -> Result<SheetsNested, String> {
+    let s = crate::settings(d);
+    let first =
+        usize::try_from(s.artboard).ok().and_then(|i| d.artboards.get(i)).cloned().ok_or("the cutting settings' artboard isn't in the document")?;
+    let mut remaining = ids.to_vec();
+    let mut sheet = usize::try_from(s.artboard).map_err(|_| "no such artboard")?;
+    let (mut sheets, mut created, mut out_of_work) = (vec![], 0usize, false);
+    loop {
+        let n = nest_on(d, &remaining, opt, u32::try_from(sheet).map_err(|_| "too many artboards")?)?;
+        for (id, a) in &n.moves {
+            if let Some(node) = d.node_mut(*id) {
+                node.transform(*a, false);
+            }
+        }
+        if !n.moves.is_empty() {
+            sheets.push(sheet);
+        }
+        out_of_work |= n.out_of_work;
+        let fresh = created > 0;
+        remaining = n.unplaced;
+        // Done, out of sheets, or nothing fits even an empty one.
+        if remaining.is_empty() || out_of_work || created + 1 >= MAX_SHEETS || (fresh && n.moves.is_empty()) {
+            break;
+        }
+        let right = d.artboards.iter().map(|a| a.rect.x1).fold(f64::NEG_INFINITY, f64::max);
+        let x0 = right + SHEET_SPACING_PT;
+        let rect = vectorcraft_geom::Rect::new(x0, first.rect.y0, x0 + first.rect.width(), first.rect.y1);
+        let id = d.next_artboard_id();
+        d.artboards.push(vectorcraft_doc::Artboard { id, name: format!("Sheet {}", created + 2), rect, locked: false, ..first.clone() });
+        created += 1;
+        sheet = d.artboards.len().saturating_sub(1);
+    }
+    // A last sheet made for nothing (a piece too large for any) goes again.
+    if created > 0 && !sheets.contains(&d.artboards.len().saturating_sub(1)) {
+        d.artboards.pop();
+        created -= 1;
+    }
+    Ok(SheetsNested { sheets, created, unplaced: remaining, out_of_work })
 }
 
 #[cfg(test)]
@@ -666,5 +736,56 @@ mod document {
         }
         let job = crate::build_job(&d).unwrap();
         assert_eq!(job.paths.len(), 5, "all on the cut area");
+    }
+
+    /// A round piece off the artboard is nested by its true shape, not its bounds: a small square
+    /// goes in the corner its bounds would cover.
+    #[test]
+    fn a_piece_off_the_artboard_keeps_its_true_shape() {
+        let mut d = Document::new(500.0, 500.0);
+        let layer = d.layers[0].id;
+        let circle = Node::path(d.alloc_id(), shapes::ellipse(Rect::new(1000.0, 1000.0, 1300.0, 1300.0)), Appearance::default());
+        let circle = d.insert(Some(layer), usize::MAX, circle).unwrap();
+        let small = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(1500.0, 1000.0, 1520.0, 1020.0)), Appearance::default());
+        let small = d.insert(Some(layer), usize::MAX, small).unwrap();
+        let n = nest_document(&d, &[circle, small], Options { gap_mm: 2.0, rotate: false }).unwrap();
+        assert!(n.unplaced.is_empty(), "{n:?}");
+        for (id, a) in &n.moves {
+            d.node_mut(*id).unwrap().transform(*a, false);
+        }
+        let b = |id| d.node(id).unwrap().geometric_bounds().unwrap();
+        let (c, s) = (b(circle), b(small));
+        assert!(s.x1 < c.x0 + c.width() / 2.0 && s.y1 < c.y0 + c.height() / 2.0, "in the corner by the circle: {s:?} {c:?}");
+    }
+
+    /// More than a sheet holds: new sheets the first one's size to its right, each piece on one,
+    /// every sheet's job builds; a piece too large for any stays, and makes no sheet.
+    #[test]
+    fn what_doesnt_fit_goes_on_new_sheets() {
+        let mut d = Document::new(612.0, 792.0);
+        let layer = d.layers[0].id;
+        let mut ids = vec![];
+        for k in 0..9 {
+            let x = 700.0 + 260.0 * f64::from(k);
+            let sq = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(x, 0.0, x + 250.0, 250.0)), Appearance::default());
+            ids.push(d.insert(Some(layer), usize::MAX, sq).unwrap());
+        }
+        let huge = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(0.0, 3000.0, 2000.0, 5000.0)), Appearance::default());
+        ids.push(d.insert(Some(layer), usize::MAX, huge).unwrap());
+        let n = nest_sheets(&mut d, &ids, Options::default()).unwrap();
+        assert!(n.created >= 1 && n.sheets.len() == n.created + 1, "{n:?}");
+        assert_eq!(n.unplaced, [*ids.last().unwrap()], "only the huge one is left");
+        assert_eq!(d.artboards.len(), 1 + n.created, "no sheet made for nothing");
+        assert_eq!(d.artboards[1].name, "Sheet 2");
+        assert_eq!(d.artboards[1].rect.size(), d.artboards[0].rect.size());
+        let mut cut = 0;
+        for k in 0..d.artboards.len() {
+            let s = crate::settings(&d);
+            crate::set_settings(&mut d, &vectorcraft_cutjob::CuttingSettings { artboard: k as u32, ..s });
+            let job = crate::build_job(&d);
+            assert!(job.is_ok() || k == 0, "sheet {k}: {job:?}");
+            cut += job.map_or(0, |j| j.paths.len());
+        }
+        assert!(cut >= 9, "every square on a sheet: {cut}");
     }
 }
