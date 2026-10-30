@@ -40,7 +40,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Settings",
             [],
             None,
-            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}, ordering, clipToMat, trackEnhancing, grouping, printAndCut, markInsetMm, weedBox, weedMarginMm, weedLines, weedLineSpacingMm, material?, colorSetups?}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
+            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm, tool}}, ordering, clipToMat, trackEnhancing, grouping, printAndCut, markInsetMm, weedBox, weedMarginMm, weedLines, weedLineSpacingMm, material?, colorSetups?}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
             has_doc,
             settings_get
         ),
@@ -49,7 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Cutting Settings",
             [],
             None,
-            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none|outline (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5, depth?: 1–10 or null (an automatic blade's depth; null: the machine's own), accel?: 1–3 or null, cornerOvercutMm?: 0–2 (run past sharp corners and back), bladeOffsetMm?: 0–2 or null (how far the blade's tip trails its axis, for the machine to turn it round corners; 0: a pen; null: the usual blade's)}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job), trackEnhancing?: bool (the machine grips the material harder), grouping?: none|layer|color (cut in groups, by top-level layer or by stroke colour, else fill, pausing before each group after the first so the tool or material can be changed), printAndCut?: bool (the artboard is printed with registration marks and the machine cuts from them: portrait only, art between the marks), markInsetMm?: 5–50 (how far in from the artboard's edges the marks go), weedBox?: bool (a box cut round the design, each group's, after it), weedMarginMm?: 0–50 (how far the box is from the design), weedLines?: bool (lines from the box in to the design, stopping short of it), weedLineSpacingMm?: 0–200 (0: one from the middle of each side, else one every this many mm)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
+            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none|outline (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5, depth?: 1–10 or null (an automatic blade's depth; null: the machine's own), accel?: 1–3 or null, cornerOvercutMm?: 0–2 (run past sharp corners and back), bladeOffsetMm?: 0–2 or null (how far the blade's tip trails its axis, for the machine to turn it round corners; 0: a pen; null: the usual blade's), tool?: a tool id from cutting.tools.list or null (the usual, the AutoBlade; the tool decides the holder)}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job), trackEnhancing?: bool (the machine grips the material harder), grouping?: none|layer|color (cut in groups, by top-level layer or by stroke colour, else fill, pausing before each group after the first so the tool or material can be changed), printAndCut?: bool (the artboard is printed with registration marks and the machine cuts from them: portrait only, art between the marks), markInsetMm?: 5–50 (how far in from the artboard's edges the marks go), weedBox?: bool (a box cut round the design, each group's, after it), weedMarginMm?: 0–50 (how far the box is from the design), weedLines?: bool (lines from the box in to the design, stopping short of it), weedLineSpacingMm?: 0–200 (0: one from the middle of each side, else one every this many mm)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
             has_doc,
             settings_set
         ),
@@ -246,7 +246,7 @@ const TOP_KEYS: [&str; 18] = [
     "weedLineSpacingMm",
 ];
 const OP_KEYS: [&str; 2] = ["cut", "score"];
-const TOOL_KEYS: [&str; 8] = ["force", "speedMmS", "passes", "overcutMm", "depth", "accel", "cornerOvercutMm", "bladeOffsetMm"];
+const TOOL_KEYS: [&str; 9] = ["force", "speedMmS", "passes", "overcutMm", "depth", "accel", "cornerOvercutMm", "bladeOffsetMm", "tool"];
 
 /// `m`'s keys are all `allowed`; `at` names where `m` is, for the error.
 fn known_keys(m: &Map<String, Value>, allowed: &[&str], at: &str) -> Result<()> {
@@ -328,6 +328,17 @@ fn settings_set(s: &mut Session, p: &Value) -> Result<Value> {
     if given.contains_key("mat") && new.mat != "custom" && MatGeometry::preset(&new.mat).is_none() {
         let ids: Vec<&str> = MAT_PRESETS.iter().map(|m| m.id).collect();
         return Err(bad(SETTINGS_SET, format!("unknown mat {:?}: one of {}, or custom", new.mat, ids.join(", "))));
+    }
+    // C10.2: a tool given is one this version knows.
+    for (op, tool) in [("cut", &new.operations.cut.tool), ("score", &new.operations.score.tool)] {
+        let named = given.get("operations").and_then(|o| o.get(op)).is_some_and(|t| t.get("tool").is_some());
+        if named
+            && let Some(id) = tool
+            && vectorcraft_cutter_silhouette::tool(Some(id)).is_none()
+        {
+            let ids: Vec<&str> = vectorcraft_cutter_silhouette::TOOLS.iter().map(|t| t.id).collect();
+            return Err(bad(SETTINGS_SET, format!("unknown tool {id:?} for {op}: one of {}, or null", ids.join(", "))));
+        }
     }
     if given.contains_key("artboard") && index(u64::from(new.artboard)) >= d.artboards.len() {
         return Err(bad(SETTINGS_SET, format!("no artboard {}: the document has {}", new.artboard, d.artboards.len())));

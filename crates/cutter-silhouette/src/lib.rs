@@ -47,8 +47,52 @@ pub const MODELS: [(u16, &str, f64); 6] = [
 /// it, so the job's paths are where the tip cuts.
 pub const BLADE_OFFSET_MM: f64 = 0.9;
 
-/// The holder every operation is cut with (C10.1; a choice of tool comes with C10.2).
-const HOLDER: u8 = 1;
+/// A tool the machine cuts or draws with (C10.2, protocol notes › Tools and holders).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Tool {
+    /// The id a job's tool settings name it by.
+    pub id: &'static str,
+    /// Its name, short enough for the tool table.
+    pub label: &'static str,
+    /// The holder it goes in: 1 (left) or 2 (right, the Cameo 4 family's specialty tools).
+    pub holder: u8,
+    /// An automatic blade: one that takes a depth (`TF`).
+    pub autoblade: bool,
+    /// A pen: it doesn't swivel, so no blade offset.
+    pub pen: bool,
+}
+
+const fn tool_kind(id: &'static str, label: &'static str, holder: u8, autoblade: bool, pen: bool) -> Tool {
+    Tool { id, label, holder, autoblade, pen }
+}
+
+/// The usual tool, the one an operation naming none is cut with.
+pub const AUTOBLADE: Tool = tool_kind("autoblade", "AutoBlade", 1, true, false);
+
+/// The tools this driver knows, the usual one first: holder 1's (the AutoBlade, older blades in
+/// their adapters, the pen), then holder 2's.
+pub const TOOLS: [Tool; 8] = [
+    AUTOBLADE,
+    tool_kind("ratchet", "Ratchet blade", 1, false, false),
+    tool_kind("deepcut", "Deep-cut blade", 1, false, false),
+    tool_kind("kraft2", "Kraft 2 mm", 1, false, false),
+    tool_kind("pen", "Pen", 1, false, true),
+    tool_kind("kraft3", "Kraft 3 mm", 2, false, false),
+    tool_kind("rotary", "Rotary blade", 2, false, false),
+    tool_kind("punch", "Punch tool", 2, false, false),
+];
+
+/// The tool `id` names (`None`: the usual one, the AutoBlade); `None` for an id this driver
+/// doesn't know.
+pub fn tool(id: Option<&str>) -> Option<&'static Tool> {
+    match id {
+        None => Some(&AUTOBLADE),
+        Some(id) => TOOLS.iter().find(|t| t.id == id),
+    }
+}
+
+/// The product id of the one model here whose holder 2 doesn't take the specialty tools.
+const CAMEO_3: u16 = 0x112F;
 /// `FC`'s second value: a fixed 1 unit (0.05 mm), blade or pen (protocol notes › A job).
 const FC_SECOND: u32 = 1;
 
@@ -278,17 +322,36 @@ impl Silhouette {
                     continue;
                 }
                 let (force, speed) = steps(&op.tool);
+                // C10.2: the holder is the tool's; one this driver doesn't know is cut as the
+                // usual blade, said once.
+                let kind = match tool(op.tool.tool.as_deref()) {
+                    Some(t) => t,
+                    None => {
+                        let id = op.tool.tool.as_deref().unwrap_or_default();
+                        let note = format!("the tool {id:?} isn't one this version knows: it is cut as the AutoBlade in holder 1");
+                        if !warnings.contains(&note) {
+                            warnings.push(note);
+                        }
+                        &AUTOBLADE
+                    }
+                };
                 // C10.1: on a two-holder machine each tool setting names its holder (protocol
                 // notes › A job); the AutoBlade's depth is holder 1's only.
-                let h = HOLDER;
+                let h = kind.holder;
                 c.cmd(&format!("J{h}"));
                 c.cmd(&format!("FX{force},{h}"));
                 c.cmd(&format!("!{speed},{h}"));
-                c.cmd(&format!("FC{},{FC_SECOND},{h}", blade_offset_units(op.tool.blade_offset_mm)));
-                if let Some(depth) = op.tool.depth
-                    && h == 1
-                {
-                    c.cmd(&format!("TF{depth},{h}"));
+                let offset = if kind.pen { 0 } else { blade_offset_units(op.tool.blade_offset_mm) };
+                c.cmd(&format!("FC{offset},{FC_SECOND},{h}"));
+                if let Some(depth) = op.tool.depth {
+                    if kind.autoblade && h == 1 {
+                        c.cmd(&format!("TF{depth},{h}"));
+                    } else {
+                        let note = format!("blade depth is the AutoBlade's: not sent for the {}", kind.label);
+                        if !warnings.contains(&note) {
+                            warnings.push(note);
+                        }
+                    }
                 }
                 if let Some(accel) = op.tool.accel {
                     c.cmd(&format!("TJ{accel}"));
@@ -337,6 +400,12 @@ impl Driver for Silhouette {
 
     fn encode(&self, job: &CutJob, device: &DeviceInfo) -> Result<Encoded, String> {
         let width = model(device).map_or(304.8, |m| m.2);
+        // Holder 2's specialty tools are the Cameo 4 family's (protocol notes › Tools and holders).
+        if device.product_id == CAMEO_3
+            && let Some(t) = job.operations.iter().filter_map(|o| tool(o.tool.tool.as_deref())).find(|t| t.holder == 2)
+        {
+            return Err(format!("the {} fits the Cameo 4 and later only: choose a holder 1 tool for the Cameo 3", t.label));
+        }
         self.encode_for(job, width)
     }
 

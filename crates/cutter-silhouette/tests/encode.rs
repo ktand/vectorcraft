@@ -300,3 +300,27 @@ fn print_and_cut_searches_for_the_marks_first() {
     let plain = Silhouette.encode(&j, &cameo4()).unwrap();
     assert!(plain.checks.is_empty() && !String::from_utf8_lossy(&plain.chunks.concat()).contains("TB123"));
 }
+
+/// C10.2: the tool decides the holder: a holder 2 tool's settings name holder 2 and take no
+/// depth (said once); a pen no blade offset; an unknown tool is cut as the AutoBlade, said; the
+/// Cameo 3 refuses holder 2's specialty tools.
+#[test]
+fn the_tool_decides_the_holder() {
+    let encode = |tool_id: Option<&str>, device: &DeviceInfo| {
+        let t = ToolSettings { tool: tool_id.map(str::to_string), depth: Some(3), ..tool(0.5, 100.0, 1, 0.0) };
+        let j = job(vec![Operation { kind: OpKind::Cut, tool: t }], vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]])], "silhouette.12x12");
+        Silhouette.encode(&j, device).map(|e| (String::from_utf8_lossy(&e.chunks.concat()).to_string(), e.warnings))
+    };
+    let (text, warnings) = encode(Some("rotary"), &cameo4()).unwrap();
+    assert!(text.contains("J2\u{3}FX17,2\u{3}!10,2\u{3}FC18,1,2\u{3}M"), "{text:?}");
+    assert!(!text.contains("TF") && warnings.iter().any(|w| w.contains("blade depth is the AutoBlade's")), "{text:?} {warnings:?}");
+    let (text, _) = encode(None, &cameo4()).unwrap();
+    assert!(text.contains("J1\u{3}FX17,1\u{3}") && text.contains("TF3,1\u{3}"), "the AutoBlade: {text:?}");
+    let (text, _) = encode(Some("pen"), &cameo4()).unwrap();
+    assert!(text.contains("FC0,1,1\u{3}") && !text.contains("TF"), "{text:?}");
+    let (text, warnings) = encode(Some("laser"), &cameo4()).unwrap();
+    assert!(text.contains("J1\u{3}") && warnings.iter().any(|w| w.contains("\"laser\" isn't one this version knows")), "{warnings:?}");
+    let cameo3 = DeviceInfo { product_id: 0x112F, ..cameo4() };
+    assert!(encode(Some("kraft3"), &cameo3).unwrap_err().contains("Cameo 4 and later"));
+    assert!(encode(Some("kraft2"), &cameo3).is_ok(), "holder 1's adapter tools are any model's");
+}

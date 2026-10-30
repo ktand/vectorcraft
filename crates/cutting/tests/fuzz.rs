@@ -137,6 +137,9 @@ fn json_value() -> impl Strategy<Value = Value> {
         Just("depth"),
         Just("#000000"),
         Just("Gold"),
+        Just("tool"),
+        Just("rotary"),
+        Just("pen"),
     ];
     leaf.prop_recursive(3, 32, 6, move |inner| {
         prop_oneof![

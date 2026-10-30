@@ -156,6 +156,10 @@ pub struct ToolSettings {
     /// How far the blade's tip trails its axis, mm (0–2; 0: a pen, which doesn't swivel), for a
     /// machine that turns the blade round corners itself (`None`: the driver's usual blade).
     pub blade_offset_mm: Option<f64>,
+    /// The tool it is cut with, a driver's id for it (C10.2; `None`: the driver's usual tool). The
+    /// driver says which holder it goes in. It is the machine's, not the material's: it isn't part
+    /// of [`ToolSettings::same_setup`], and a material leaves it as it is.
+    pub tool: Option<String>,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -168,7 +172,9 @@ impl Default for ToolSettings {
 }
 
 impl ToolSettings {
-    const KEYS: [&'static str; 8] = ["force", "speedMmS", "passes", "overcutMm", "depth", "accel", "cornerOvercutMm", "bladeOffsetMm"];
+    const KEYS: [&'static str; 9] = ["force", "speedMmS", "passes", "overcutMm", "depth", "accel", "cornerOvercutMm", "bladeOffsetMm", "tool"];
+    /// The longest tool id read.
+    pub const MAX_TOOL_ID: usize = 32;
 
     /// The ranges settings are read into and a job is checked against ([`crate::CutJob::validate`]).
     pub const FORCE: (f64, f64) = (0.0, 1.0);
@@ -190,6 +196,7 @@ impl ToolSettings {
             accel: None,
             corner_overcut_mm: 0.0,
             blade_offset_mm: None,
+            tool: None,
             extra: Map::new(),
         }
     }
@@ -218,11 +225,16 @@ impl ToolSettings {
                     .map_or(default.blade_offset_mm, |f| Some(f.clamp(Self::BLADE_OFFSET_MM.0, Self::BLADE_OFFSET_MM.1))),
                 None => default.blade_offset_mm,
             },
+            tool: match m.get("tool") {
+                Some(Value::Null) => None,
+                Some(Value::String(id)) if !id.trim().is_empty() && id.len() <= Self::MAX_TOOL_ID => Some(id.trim().to_string()),
+                _ => default.tool,
+            },
             extra: unknown(m, &Self::KEYS),
         }
     }
 
-    /// The same tool setup as `other` (numbers to within rounding; unknown keys aside).
+    /// The same tool setup as `other` (numbers to within rounding; unknown keys and the tool aside).
     pub fn same_setup(&self, other: &ToolSettings) -> bool {
         let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
         near(self.force, other.force)
@@ -273,6 +285,7 @@ impl ToolSettings {
         m.insert("accel".into(), json!(self.accel));
         m.insert("cornerOvercutMm".into(), json!(self.corner_overcut_mm));
         m.insert("bladeOffsetMm".into(), json!(self.blade_offset_mm));
+        m.insert("tool".into(), json!(self.tool));
         Value::Object(m)
     }
 }

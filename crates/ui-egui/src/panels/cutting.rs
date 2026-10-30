@@ -210,9 +210,11 @@ fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             }
         });
         // The machine turns the blade round corners by this; the usual blade's until set.
-        tool_row(ui, "Blade offset", "How far the blade's tip trails its axis, 0–2 mm.", |ui, op| {
+        tool_row(ui, "Blade offset", "How far the blade's tip trails its axis, 0–2 mm. A pen has none.", |ui, op| {
             let offset = ops[op]["bladeOffsetMm"].as_f64().unwrap_or(silhouette::BLADE_OFFSET_MM);
-            if let Some(v) = cell(ui, op, "blade-offset", "Blade offset", offset, " mm", 2, 0.05, 0.0) {
+            if silhouette::tool(ops[op]["tool"].as_str()).is_some_and(|t| t.pen) {
+                widgets::dim_label(ui, "—");
+            } else if let Some(v) = cell(ui, op, "blade-offset", "Blade offset", offset, " mm", 2, 0.05, 0.0) {
                 set(app, json!({ "operations": { op: { "bladeOffsetMm": (v.clamp(0.0, 2.0) * 20.0).round() / 20.0 } } }));
             }
         });
@@ -397,8 +399,25 @@ fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let (s_lo, s_hi) = silhouette::SPEED;
     let force_hint = format!("{f_lo}–{f_hi}: {}", tl!("the machine's own force steps"));
     let speed_hint = format!("{s_lo}–{s_hi}: {}", tl!("the machine's own speed steps"));
+    let kind = |op: &str| silhouette::tool(ops[op]["tool"].as_str());
     egui::Grid::new(("cutting", "tools")).num_columns(3).spacing([8.0, 3.0]).show(ui, |ui| {
         table_heading(ui);
+        // C10.2: the tool decides the holder; the AutoBlade (the usual one) is kept as none.
+        let labels: Vec<&str> = silhouette::TOOLS.iter().map(|t| t.label).collect();
+        tool_row(
+            ui,
+            "Tool",
+            "Holder 1 (left): the AutoBlade, the pen and the blades in adapters; holder 2 (right): the 3 mm Kraft, rotary and punch tools.",
+            |ui, op| {
+                let shown = kind(op).map_or(tl!("Unknown"), |t| t.label);
+                if let Some(i) = widgets::dropdown(ui, ("cutting", op, "tool"), shown, &labels, 84.0)
+                    && let Some(t) = silhouette::TOOLS.get(i)
+                {
+                    let id = if t.id == silhouette::AUTOBLADE.id { Value::Null } else { json!(t.id) };
+                    set(app, json!({ "operations": { op: { "tool": id } } }));
+                }
+            },
+        );
         tool_row(ui, "Force", &force_hint, |ui, op| {
             let step = silhouette::force_step(get(op, "force", 0.3));
             if let Some(v) = cell(ui, op, "force", "Force", f64::from(step), "", 0, 1.0, f64::from(f_lo)) {
@@ -423,12 +442,19 @@ fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
                 set_tool(app, op, "overcutMm", (v.clamp(0.0, 5.0) * 10.0).round() / 10.0);
             }
         });
-        tool_row(ui, "Blade depth", "The blade's depth setting, 1–10; 0: the machine's own.", |ui, op| {
-            if let Some(v) = cell(ui, op, "depth", "Blade depth", get(op, "depth", 0.0), "", 0, 1.0, 0.0) {
+        tool_row(ui, "Blade depth", "The AutoBlade's depth setting, 1–10; 0: the machine's own. Other tools take none.", |ui, op| {
+            if kind(op).is_some_and(|t| !t.autoblade) {
+                widgets::dim_label(ui, "—");
+            } else if let Some(v) = cell(ui, op, "depth", "Blade depth", get(op, "depth", 0.0), "", 0, 1.0, 0.0) {
                 set_optional(app, op, "depth", v, 10.0);
             }
         });
     });
+    // Which holder each goes in, once one is holder 2's.
+    if ["cut", "score"].iter().any(|op| kind(op).is_some_and(|t| t.holder == 2)) {
+        let holder = |op: &str| kind(op).map_or(1, |t| t.holder);
+        widgets::dim_label(ui, &format!("{} {} · {} {}", tl!("Cut: holder"), holder("cut"), tl!("Score: holder"), holder("score")));
+    }
 }
 
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
@@ -636,6 +662,22 @@ mod tests {
         let mine = m["materials"].as_array().unwrap().iter().find(|x| x["name"] == name).unwrap().clone();
         assert_eq!((mine["cut"]["passes"].clone(), m["changed"].clone()), (json!(5), json!(false)));
         app.run("cutting.material.delete", json!({"name": name})).unwrap();
+    }
+
+    /// C10.2: a Tool row at the head of the table, the AutoBlade at first; a holder 2 tool says
+    /// which holder each goes in, and takes no depth.
+    #[test]
+    fn the_table_chooses_the_tool() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Tool") && texts.iter().filter(|t| *t == "AutoBlade").count() == 2, "{texts:?}");
+        assert!(!texts.iter().any(|t| t.starts_with("Cut: holder")), "{texts:?}");
+        app.run("cutting.settings.set", json!({"operations": {"score": {"tool": "rotary"}}})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Rotary blade") && texts.iter().any(|t| t == "Cut: holder 1 · Score: holder 2"), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "—"), "no depth for the rotary blade: {texts:?}");
     }
 
     /// Window → Workspace → Cutting is the cutting mode: the mat shows, and Cut Settings and

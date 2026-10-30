@@ -17,6 +17,15 @@ const SEND: &str = "cutting.send";
 pub fn specs() -> Vec<CommandSpec> {
     vec![
         cmd!(
+            query "cutting.tools.list",
+            "Cutting Tools",
+            [],
+            None,
+            "{} the tools an operation can be cut with (operations.cut.tool and operations.score.tool), the usual first → {tools: [{id, label, holder: 1 (left) or 2 (right: the Cameo 4 family's specialty tools), autoblade: takes a depth, pen: no blade offset}]}",
+            always,
+            tools_list
+        ),
+        cmd!(
             query "cutting.devices",
             "Cutting Machines",
             [],
@@ -80,6 +89,14 @@ pub fn specs() -> Vec<CommandSpec> {
             continue_
         ),
     ]
+}
+
+fn tools_list(_: &mut Session, _: &Value) -> Result<Value> {
+    let tools: Vec<Value> = vectorcraft_cutter_silhouette::TOOLS
+        .iter()
+        .map(|t| json!({"id": t.id, "label": t.label, "holder": t.holder, "autoblade": t.autoblade, "pen": t.pen}))
+        .collect();
+    Ok(json!({ "tools": tools }))
 }
 
 /// The drivers this version has, added once.

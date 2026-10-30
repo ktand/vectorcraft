@@ -26,8 +26,8 @@ fn the_defaults_round_trip_as_documented() {
             "version": 1, "mat": "silhouette.12x12", "customMatMm": [304.8, 304.8], "orientation": "portrait",
             "artboard": 0, "offsetMm": [0.0, 0.0], "defaultOp": "cut", "toleranceMm": 0.025,
             "operations": {
-                "cut": {"force": 0.3, "speedMmS": 100.0, "passes": 1, "overcutMm": 0.0, "depth": null, "accel": null, "cornerOvercutMm": 0.0, "bladeOffsetMm": null},
-                "score": {"force": 0.1, "speedMmS": 100.0, "passes": 1, "overcutMm": 0.0, "depth": null, "accel": null, "cornerOvercutMm": 0.0, "bladeOffsetMm": null}
+                "cut": {"force": 0.3, "speedMmS": 100.0, "passes": 1, "overcutMm": 0.0, "depth": null, "accel": null, "cornerOvercutMm": 0.0, "bladeOffsetMm": null, "tool": null},
+                "score": {"force": 0.1, "speedMmS": 100.0, "passes": 1, "overcutMm": 0.0, "depth": null, "accel": null, "cornerOvercutMm": 0.0, "bladeOffsetMm": null, "tool": null}
             },
             "ordering": "insideFirst",
             "clipToMat": false,
