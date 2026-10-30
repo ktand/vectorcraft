@@ -29,6 +29,9 @@ pub struct Behaviour {
     /// After a write holding the first, the machine answers the second unasked once it has
     /// worked it through (C6.2: the registration marks found).
     pub answers: Vec<(Vec<u8>, Vec<u8>)>,
+    /// A write of exactly the first is a question answered at once with the second, not work
+    /// (C10.3: which tools are fitted).
+    pub replies: Vec<(Vec<u8>, Vec<u8>)>,
 }
 
 /// What a simulated machine was sent, shared with whoever made it.
@@ -62,6 +65,10 @@ impl Transport for PacedTransport {
     fn write(&mut self, bytes: &[u8]) -> Result<(), TransportError> {
         if bytes == self.behaviour.query.as_slice() {
             self.asked = true;
+            return Ok(());
+        }
+        if let Some((_, reply)) = self.behaviour.replies.iter().find(|(q, _)| q.as_slice() == bytes) {
+            self.pending = Some(reply.clone());
             return Ok(());
         }
         let per_byte = self.behaviour.busy_per_byte.saturating_mul(u32::try_from(bytes.len()).unwrap_or(u32::MAX));
@@ -141,6 +148,7 @@ mod tests {
                 busy_per_write: Duration::from_millis(80),
                 busy_per_byte: Duration::ZERO,
                 answers: vec![(b"FIND".to_vec(), b"FOUND".to_vec())],
+                replies: vec![],
             },
             sent: Sent::default(),
         }

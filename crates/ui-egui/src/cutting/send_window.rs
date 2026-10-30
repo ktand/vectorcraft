@@ -57,6 +57,83 @@ struct Machines {
     chosen: usize,
     /// What the last Send said: its warnings, or why it didn't start.
     note: Option<(bool, String)>,
+    /// What the machine last said is in its holders (C10.3): the device asked, and
+    /// `cutting.tools`' answer or why there is none. Asked once a machine is found, and again on
+    /// Check Tools: asking is the machine's I/O, not each frame's.
+    tools: Option<(String, Result<Value, String>)>,
+}
+
+/// `cutting.tools`' holders as the driver reads them, holder 1 first.
+fn fitted(answer: &Value) -> Vec<vectorcraft_cutter_silhouette::Fitted> {
+    use vectorcraft_cutter_silhouette::Fitted;
+    answer["holders"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|h| match h["state"].as_str() {
+            Some("empty") => Fitted::Empty,
+            Some("tool") => Fitted::Tool(h["tool"].as_str().unwrap_or_default().to_string()),
+            Some("error") => Fitted::Error,
+            _ => Fitted::Unknown(h["code"].as_str().unwrap_or_default().to_string()),
+        })
+        .collect()
+}
+
+/// What is in each holder, and where the job needs a tool that isn't fitted (C10.3). The job is
+/// checked against the last answer each frame, so a tool chosen since is checked too.
+fn tools_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, m: &mut Machines, device: &str, sending: bool) {
+    let t = Tokens::get(ui.ctx());
+    let stale = m.tools.as_ref().is_none_or(|(asked, _)| asked != device);
+    if stale && !sending {
+        m.tools = Some((device.to_string(), app.session.execute("cutting.tools", &json!({ "device": device })).map_err(|e| e.to_string())));
+    }
+    let Some((_, answer)) = &m.tools else { return };
+    let mut ask_again = false;
+    match answer {
+        Ok(a) if a["canTell"] != true => {}
+        Ok(a) if a["answered"] != true => {
+            ui.horizontal(|ui| {
+                widgets::dim_label(ui, tl!("The cutter didn't say which tools are fitted."));
+                ask_again = !sending && ui.small_button(tl!("Check Tools")).clicked();
+            });
+        }
+        Ok(a) => {
+            let line: Vec<String> = a["holders"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(|h| {
+                    let what = match h["state"].as_str() {
+                        Some("empty") => tl!("empty").to_string(),
+                        Some("tool") => h["label"].as_str().unwrap_or_default().to_string(),
+                        Some("error") => tl!("can't tell").to_string(),
+                        _ => format!("{} {}", tl!("unknown tool"), h["code"].as_str().unwrap_or_default()),
+                    };
+                    format!("{} {}: {what}", tl!("Holder"), h["holder"])
+                })
+                .collect();
+            ui.horizontal_wrapped(|ui| {
+                widgets::dim_label(ui, &line.join(" · "));
+                ask_again = !sending && ui.small_button(tl!("Check Tools")).clicked();
+            });
+            let holders = fitted(a);
+            let job = crate::cutting::job(app, ui.ctx());
+            if let Some(Ok(made)) = job.as_deref() {
+                for w in vectorcraft_cutter_silhouette::tool_warnings(&made.job, &holders) {
+                    ui.label(egui::RichText::new(w).color(t.warning));
+                }
+            }
+        }
+        Err(e) => {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new(e).color(t.text_dim));
+                ask_again = !sending && ui.small_button(tl!("Check Tools")).clicked();
+            });
+        }
+    }
+    if ask_again {
+        m.tools = None;
+    }
 }
 
 fn find_machines(app: &mut VectorcraftApp) -> Vec<(String, String)> {
@@ -369,6 +446,8 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
         None => {
             let f = find_machines(app);
             m.found = Some(f.clone());
+            // Machines found again: what they have fitted is asked again too.
+            m.tools = None;
             f
         }
     };
@@ -411,6 +490,10 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
             m.chosen = 0;
         }
     });
+    if let Some((device, _)) = found.get(m.chosen).or(found.first()) {
+        let device = device.clone();
+        tools_rows(app, ui, &mut m, &device, sending);
+    }
     if let Some(group) = waiting {
         // The material its own setup came from (C7.4), when it has one.
         let material = crate::cutting::job(app, &ctx).and_then(|j| {
@@ -594,6 +677,7 @@ mod tests {
                 busy_per_write: Duration::ZERO,
                 busy_per_byte: Duration::ZERO,
                 answers: vec![],
+                replies: vec![(vec![0x1B, 0x15], b"2,0".to_vec())],
             },
             sent: Sent::default(),
         };
@@ -604,6 +688,16 @@ mod tests {
         set_open(&ctx, true);
         let texts = window_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t == "Cameo 4 (simulated)"), "{texts:?}");
+        // C10.3: what is fitted, asked once the machine is found (the registry is shared with
+        // other tests: a send of theirs running makes it say so instead); a tool the job needs
+        // that isn't fitted is said without asking again.
+        if !texts.iter().any(|t| t.contains("a send is running")) {
+            assert!(texts.iter().any(|t| t == "Holder 1: AutoBlade · Holder 2: empty") && texts.iter().any(|t| t == "Check Tools"), "{texts:?}");
+            app.run("cutting.settings.set", json!({"operations": {"cut": {"tool": "kraft3"}}})).unwrap();
+            let texts = window_texts(&mut app, &ctx);
+            assert!(texts.iter().any(|t| t == "The cut uses the Kraft 3 mm in holder 2, but holder 2 is empty"), "{texts:?}");
+            app.run("cutting.settings.set", json!({"operations": {"cut": {"tool": null}}})).unwrap();
+        }
         app.run("cutting.send", json!({})).unwrap();
         let wait_for = |app: &mut VectorcraftApp, key: &str| {
             for _ in 0..500 {

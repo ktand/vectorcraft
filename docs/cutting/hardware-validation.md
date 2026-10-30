@@ -30,6 +30,7 @@ Steps 1–3 must pass before the rest; after that, any step can be skipped or do
 | 13 | Print & Cut | | |
 | 14 | Job history, Send Again | | |
 | 15 | A real cut | | |
+| 16 | Tools and holders | | |
 
 ## Before you start
 
@@ -63,8 +64,12 @@ are worth passing on.
 - Press **Send**. Expected: the window shows "Sending: …", the machine moves, then "Sent.".
 - "load the mat into the cutter first": the status answer works, but the mat isn't loaded. Load it and send again.
 - "the cutter didn't answer in time": the status read through `usbprint.sys` needs a look.
+- If the machine moves but seems to ignore the force or speed (a very light or a very heavy line whatever is set),
+  note it: since C10.1 each setting names its holder (`FX`n`,1`), as the protocol notes say the Cameo 4 takes.
+- Under the machine's name the window should say what is in each holder, e.g. "Holder 1: AutoBlade · Holder 2:
+  empty". Step 16 checks this in full.
 
-Note: what the window said at the end; did the machine move?
+Note: what the window said at the end; did the machine move? What the holders line said.
 
 Result:
 
@@ -222,5 +227,22 @@ Result:
   and that the pieces come free.
 
 Note: the order as cut; did every piece come free?
+
+Result:
+
+## Step 16: tools and holders (C10.1–C10.3)
+
+- For each tool you have, fit it in its holder (holder 1: the AutoBlade, the pen holder, older tools in their
+  adapters; holder 2: the 3 mm Kraft blade, rotary blade, punch tool), then **Check Tools** in the Send window. The
+  holders line should name it. The punch tool's code isn't known: note what the window shows for it ("unknown tool
+  n").
+- With nothing in a holder, the line should say "empty" for it.
+- The pen: Cut Settings › Tool Settings › **Tool** Pen in the Cut column, a pen in holder 1, a 20 mm square
+  drawn: the corners should be sharp, with no little loops (a pen has no blade offset).
+- If you have a holder 2 tool: choose it for the Cut column (the window warns while holder 2 is empty), fit it,
+  and cut a 20 mm square in card. The machine should use holder 2. If it uses holder 1 or ignores the settings,
+  note it.
+
+Note: what the window showed for each tool and holder; the pen's corners; which holder the holder 2 cut used.
 
 Result:

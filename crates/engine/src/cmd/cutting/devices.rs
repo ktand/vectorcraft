@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use serde_json::{Value, json};
 use vectorcraft_cutter::send::{Patience, SendError};
+use vectorcraft_cutter::tools::Fitted;
 use vectorcraft_cutter::{DeviceInfo, Driver, registry};
 
 use super::*;
@@ -24,6 +25,15 @@ pub fn specs() -> Vec<CommandSpec> {
             "{} the tools an operation can be cut with (operations.cut.tool and operations.score.tool), the usual first → {tools: [{id, label, holder: 1 (left) or 2 (right: the Cameo 4 family's specialty tools), autoblade: takes a depth, pen: no blade offset}]}",
             always,
             tools_list
+        ),
+        cmd!(
+            query "cutting.tools",
+            "Fitted Cutting Tools",
+            [],
+            None,
+            "{device?} ask the machine (default: the only one connected) which tools are in its holders, not while a send runs → {device, model, canTell: whether this machine can say, answered: whether it did in time, holders: [{holder, state: empty|tool|unknown|error, tool: a tool id or null, label, code: the machine's code for an unknown one}], warnings: [where the document's job needs a tool that isn't fitted]}",
+            always,
+            tools_fitted
         ),
         cmd!(
             query "cutting.devices",
@@ -97,6 +107,47 @@ fn tools_list(_: &mut Session, _: &Value) -> Result<Value> {
         .map(|t| json!({"id": t.id, "label": t.label, "holder": t.holder, "autoblade": t.autoblade, "pen": t.pen}))
         .collect();
     Ok(json!({ "tools": tools }))
+}
+
+fn tools_fitted(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "cutting.tools";
+    let (device, driver) = machine(p, CMD)?;
+    if registry::current().is_some_and(|(_, r)| r.progress().outcome.is_none()) {
+        return Err(bad(CMD, "a send is running: ask again once it has finished"));
+    }
+    let provider = registry::provider().ok_or_else(|| bad(CMD, "no cutter is connected"))?;
+    let mut transport = provider.open(&device.id).map_err(|e| bad(CMD, e.to_string()))?;
+    let asked = vectorcraft_cutter::tools::ask(transport.as_mut(), driver.as_ref()).map_err(|e| bad(CMD, e.to_string()))?;
+    let holders = asked.clone().unwrap_or_default();
+    let listed: Vec<Value> = holders
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            let (state, tool, code) = match f {
+                Fitted::Empty => ("empty", None, None),
+                Fitted::Tool(id) => ("tool", Some(id.as_str()), None),
+                Fitted::Unknown(c) => ("unknown", None, Some(c.as_str())),
+                Fitted::Error => ("error", None, None),
+            };
+            let label = tool.and_then(|id| vectorcraft_cutter_silhouette::tool(Some(id))).map(|t| t.label);
+            json!({"holder": i + 1, "state": state, "tool": tool, "label": label, "code": code})
+        })
+        .collect();
+    // What the document's job would need, when it makes one.
+    let warnings = s
+        .doc()
+        .ok()
+        .and_then(|st| vectorcraft_cutting::build_job(&st.doc).ok())
+        .map(|job| vectorcraft_cutter_silhouette::tool_warnings(&job, &holders))
+        .unwrap_or_default();
+    Ok(json!({
+        "device": device.id,
+        "model": driver.model(&device),
+        "canTell": asked.is_some(),
+        "answered": !holders.is_empty(),
+        "holders": listed,
+        "warnings": warnings,
+    }))
 }
 
 /// The drivers this version has, added once.
