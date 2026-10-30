@@ -189,5 +189,36 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     vectorcraft_engine::cmd::cutting::history::attach(dir.join("History.json"));
     assert_eq!(s.execute("cutting.history", &json!({})).unwrap()["entries"].as_array().unwrap().len(), 1);
     assert_eq!(s.execute("cutting.history.clear", &json!({})).unwrap()["cleared"], json!(1));
+
+    // C8.7: a history file of anything reads without a panic, at most the cap, and lists; the
+    // entries' settings can be used whatever they say.
+    let file = dir.join("History.json");
+    use proptest::strategy::Strategy;
+    let mut runner = proptest::test_runner::TestRunner::deterministic();
+    let junk = proptest::prop_oneof![
+        proptest::collection::vec(proptest::prelude::any::<u8>(), 0..300),
+        proptest::collection::vec(
+            proptest::prop_oneof![
+                proptest::strategy::Just(json!({"settings": {"operations": {"cut": {"force": "heavy", "passes": -3}}}})),
+                proptest::strategy::Just(json!({"settings": 7, "time": "now", "outcome": [1, 2]})),
+                proptest::strategy::Just(json!([{"nested": "array"}])),
+                proptest::strategy::Just(json!(null)),
+                (-1e9f64..1e9).prop_map(|t| json!({"time": t, "shownTime": t, "report": t})),
+            ],
+            0..120,
+        )
+        .prop_map(|v| serde_json::to_vec(&v).unwrap()),
+    ];
+    for _ in 0..200 {
+        let bytes = proptest::strategy::ValueTree::current(&junk.new_tree(&mut runner).unwrap());
+        std::fs::write(&file, &bytes).unwrap();
+        vectorcraft_engine::cmd::cutting::history::attach(file.clone());
+        let h = s.execute("cutting.history", &json!({})).unwrap();
+        let entries = h["entries"].as_array().unwrap().clone();
+        assert!(entries.len() <= vectorcraft_engine::cmd::cutting::history::MAX_ENTRIES);
+        for e in &entries {
+            let _ = s.execute("cutting.history.apply", &json!({"index": e["index"]}));
+        }
+    }
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -5,3 +5,5 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc 570eb3e3c7d7dd6ce0980625c506fef34575dcfda4f523443b40cff4bf1999df # shrinks to objs = [Obj { art: Group { children: [Group { children: [Path { points: [], closed: false, curve: false }, Path { points: [(10.0, 10.0), (10.0, -1e300)], closed: false, curve: true }], clip: false }, Path { points: [(10.0, 10.0), (10.0, 10.0)], closed: false, curve: false }], clip: true }, op: None, visible: true }], settings = Object {}
+cc e7ced3ac752688566ccd6b6c1e9f9ef89a2dee437651caaf62dbeda2e7341826 # shrinks to pieces = [[Shape { closed: false, points: [[-1e300, 10.0]] }]], fixed = [], gap = 0.0, rotate = false
+cc fbe78bff78c8e246080e1194c8345749aa92bfc6e4c5a2d39d2caff9deb651a4 # shrinks to pieces = [[Shape { closed: false, points: [[-1e300, 10.0]] }]], fixed = [], gap = 0.0, rotate = false

@@ -22,6 +22,9 @@ const MAX_CELLS: f64 = 4_000_000.0;
 pub const MAX_WORK: u64 = 3_000_000_000;
 /// Most pieces nested at once.
 pub const MAX_PIECES: usize = 2_000;
+/// Most cells the pieces' turns may take in all (about 100 MB): past it, the rest aren't nested
+/// and the result says it ran out of work.
+const MAX_PREPARED_CELLS: u64 = 800_000_000;
 
 /// One outline of a piece, mm: closed (a shape) or open (a line).
 #[derive(Clone, Debug, PartialEq)]
@@ -228,7 +231,8 @@ fn draw(shapes: &[Shape], origin: [f64; 2], c: f64, w: usize, h: usize) -> Mask 
         xs.sort_by(f64::total_cmp);
         for pair in xs.chunks(2) {
             if let [x0, x1] = pair {
-                let (from, to) = (cell(*x0, origin[0]), cell(*x1, origin[0]));
+                // Kept to the mask: what stays can lie anywhere, far past it.
+                let (from, to) = (cell(*x0, origin[0]).max(0), cell(*x1, origin[0]).min(w as i64));
                 for x in from..=to {
                     m.set(x, y as i64);
                 }
@@ -238,11 +242,15 @@ fn draw(shapes: &[Shape], origin: [f64; 2], c: f64, w: usize, h: usize) -> Mask 
     m
 }
 
-/// What the points cover, mm.
+/// Farthest a piece's points may be from the mat's origin, mm (10 km): past it, moving the piece
+/// would lose the precision its position needs, so it isn't nested.
+const MAX_COORD_MM: f64 = 1e7;
+
+/// What the points cover, mm; none for none, or for any point not a number or past [`MAX_COORD_MM`].
 fn bounds<'a>(points: impl Iterator<Item = &'a [f64; 2]>) -> Option<RectMm> {
     let mut r: Option<RectMm> = None;
     for q in points {
-        if !(q[0].is_finite() && q[1].is_finite()) {
+        if !(q[0].abs() <= MAX_COORD_MM && q[1].abs() <= MAX_COORD_MM) {
             return None;
         }
         r = Some(match r {
@@ -267,15 +275,17 @@ fn apply(m: [f64; 4], p: [f64; 2]) -> [f64; 2] {
     [m[0] * p[0] + m[2] * p[1], m[1] * p[0] + m[3] * p[1]]
 }
 
-/// A piece turned one way: its own cells, tested against the sheet, and the same grown by the
-/// gap, added to the sheet once it is placed.
+/// A piece turned one way: its own cells, tested against the sheet; the same grown by the gap is
+/// added to the sheet once it is placed ([`Turned::grown`], made only then: growing is the costly
+/// part).
 struct Turned {
     q: u8,
     /// The outline's bounds' top-left, mm, after the turn: cell (0, 0) of `mask`.
     min: [f64; 2],
+    /// The outlines, turned.
+    shapes: Vec<Shape>,
     mask: Mask,
-    grown: Mask,
-    /// Cells from `grown`'s top-left to `mask`'s.
+    /// Cells from the grown mask's top-left to `mask`'s.
     inset: i64,
     /// The mask's rows in the order to test them: fullest first, so a collision is found soon.
     order: Vec<usize>,
@@ -285,24 +295,59 @@ fn turned(shapes: &[Shape], q: u8, c: f64, gap: f64) -> Option<Turned> {
     let m = turn(q);
     let shapes: Vec<Shape> = shapes.iter().map(|s| Shape { closed: s.closed, points: s.points.iter().map(|p| apply(m, *p)).collect() }).collect();
     let b = bounds(shapes.iter().flat_map(|s| s.points.iter()))?;
-    let w = usize::try_from(((b.x1 - b.x0) / c).floor() as i64 + 1).ok()?;
-    let h = usize::try_from(((b.y1 - b.y0) / c).floor() as i64 + 1).ok()?;
-    let inset = (gap / c).ceil() as i64 + 2;
-    let pad = usize::try_from(2 * inset).ok()?;
-    if (w + pad).saturating_mul(h + pad) > MAX_CELLS as usize {
+    // Counted as floats and checked before they become integers: a huge outline is no piece.
+    let cells = |len: f64| {
+        let n = (len / c).floor() + 1.0;
+        (1.0..=MAX_CELLS).contains(&n).then_some(n as usize)
+    };
+    let (w, h) = (cells(b.x1 - b.x0)?, cells(b.y1 - b.y0)?);
+    let inset_cells = (gap / c).ceil() + 2.0;
+    if !(inset_cells.is_finite() && inset_cells <= MAX_CELLS) {
+        return None;
+    }
+    let inset = inset_cells as i64;
+    let pad = usize::try_from(inset.checked_mul(2)?).ok()?;
+    if w.saturating_add(pad).saturating_mul(h.saturating_add(pad)) > MAX_CELLS as usize {
         return None;
     }
     let mask = draw(&shapes, [b.x0, b.y0], c, w, h);
-    let grown_at = [b.x0 - inset as f64 * c, b.y0 - inset as f64 * c];
-    let grown = draw(&shapes, grown_at, c, w + pad, h + pad).dilated(gap, c);
     let mut order: Vec<usize> = (0..h).collect();
     order.sort_by_key(|&y| std::cmp::Reverse(mask.row(y).iter().map(|v| v.count_ones()).sum::<u32>()));
-    Some(Turned { q, min: [b.x0, b.y0], mask, grown, inset, order })
+    Some(Turned { q, min: [b.x0, b.y0], shapes, mask, inset, order })
+}
+
+impl Turned {
+    /// The grown mask's size, cells.
+    fn grown_size(&self) -> (usize, usize) {
+        let pad = self.inset.unsigned_abs() as usize * 2;
+        (self.mask.w + pad, self.mask.h + pad)
+    }
+
+    /// About the word operations [`Turned::grown`] and adding it to the sheet take.
+    fn growth_work(&self, gap: f64, c: f64) -> u64 {
+        let (w, h) = self.grown_size();
+        let r = ((gap / c).ceil().max(0.0) as u64 + 1).min(w.max(h) as u64);
+        let words = w.div_ceil(64).max(1) as u64;
+        (words * h as u64).saturating_mul(3 * r + 2).saturating_add((w * h) as u64)
+    }
+
+    /// The piece's cells grown by `gap`, `inset` cells round [`Turned::mask`].
+    fn grown(&self, gap: f64, c: f64) -> Mask {
+        let (w, h) = self.grown_size();
+        let at = [self.min[0] - self.inset as f64 * c, self.min[1] - self.inset as f64 * c];
+        draw(&self.shapes, at, c, w, h).dilated(gap, c)
+    }
 }
 
 /// Nest `pieces` (each a set of outlines, mm, where they are now) in `area`, round `fixed` (what
 /// stays). Never panics; a piece with no finite outline, or larger than the area, isn't placed.
 pub fn nest(pieces: &[Vec<Shape>], fixed: &[Shape], area: RectMm, opt: Options) -> Nested {
+    nest_within(pieces, fixed, area, opt, MAX_WORK)
+}
+
+/// [`nest`] with at most `max_work` word comparisons instead of [`MAX_WORK`] (the fuzz tests keep
+/// each case short with it).
+pub fn nest_within(pieces: &[Vec<Shape>], fixed: &[Shape], area: RectMm, opt: Options, max_work: u64) -> Nested {
     let none = |out_of_work| Nested { placed: vec![None; pieces.len()], used_length_mm: 0.0, out_of_work };
     let (aw, ah) = (area.width(), area.height());
     if !(aw.is_finite() && ah.is_finite() && aw > 0.0 && ah > 0.0) || pieces.len() > MAX_PIECES {
@@ -315,23 +360,32 @@ pub fn nest(pieces: &[Vec<Shape>], fixed: &[Shape], area: RectMm, opt: Options) 
     // What stays, grown by the gap.
     let mut sheet = draw(fixed, [area.x0, area.y0], c, w, h).dilated(g, c);
     let turns: &[u8] = if opt.rotate { &[0, 1, 2, 3] } else { &[0] };
-    // Each piece's turns, and the order they are placed in: most cells first.
-    let mut prepared: Vec<(usize, Vec<Turned>, u64)> = pieces
-        .iter()
-        .enumerate()
-        .map(|(i, shapes)| {
-            let ts: Vec<Turned> = turns.iter().filter_map(|&q| turned(shapes, q, c, g)).collect();
-            let size = ts.first().map_or(0, |t| t.mask.count());
-            (i, ts, size)
-        })
-        .collect();
+    // Each piece's turns, and the order they are placed in: most cells first. Past
+    // [`MAX_PREPARED_CELLS`] the rest get none (and aren't placed).
+    let mut out_of_work = false;
+    let mut cells = 0u64;
+    let mut prepared: Vec<(usize, Vec<Turned>, u64)> = Vec::with_capacity(pieces.len());
+    for (i, shapes) in pieces.iter().enumerate() {
+        let mut ts: Vec<Turned> = vec![];
+        for &q in turns {
+            if cells > MAX_PREPARED_CELLS {
+                out_of_work = true;
+                break;
+            }
+            if let Some(t) = turned(shapes, q, c, g) {
+                cells = cells.saturating_add((t.mask.w * t.mask.h) as u64);
+                ts.push(t);
+            }
+        }
+        let size = ts.first().map_or(0, |t| t.mask.count());
+        prepared.push((i, ts, size));
+    }
     prepared.sort_by(|a, b| b.2.cmp(&a.2).then(a.0.cmp(&b.0)));
     let mut placed = vec![None; pieces.len()];
     let mut work = 0u64;
-    let mut out_of_work = false;
     let mut lowest = 0.0f64;
     for (i, ts, _) in &prepared {
-        if work > MAX_WORK {
+        if work > max_work {
             out_of_work = true;
             break;
         }
@@ -352,7 +406,7 @@ pub fn nest(pieces: &[Vec<Shape>], fixed: &[Shape], area: RectMm, opt: Options) 
                         if !sheet.meets(&t.mask, x, y, &t.order, &mut work) {
                             break 'search Some((x, y));
                         }
-                        if work > MAX_WORK {
+                        if work > max_work {
                             break 'search None;
                         }
                     }
@@ -374,7 +428,8 @@ pub fn nest(pieces: &[Vec<Shape>], fixed: &[Shape], area: RectMm, opt: Options) 
         }
         let Some((x, y, k)) = best else { continue };
         let Some(t) = ts.get(k) else { continue };
-        sheet.add(&t.grown, x - t.inset, y - t.inset);
+        work = work.saturating_add(t.growth_work(g, c));
+        sheet.add(&t.grown(g, c), x - t.inset, y - t.inset);
         let m = turn(t.q);
         let target = [area.x0 + x as f64 * c, area.y0 + y as f64 * c];
         let affine = [m[0], m[1], m[2], m[3], target[0] - t.min[0], target[1] - t.min[1]];
