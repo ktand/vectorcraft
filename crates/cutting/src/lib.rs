@@ -82,15 +82,19 @@ impl std::fmt::Display for BuildError {
 
 impl std::error::Error for BuildError {}
 
-/// The cut job `d` makes with its cutting settings: what [`select`] picks, cut along its
-/// [`geometry`], laid on the mat by [`prepare`] and put in [`order`], validated. The same document
-/// and settings always make the same job.
 /// `setup`, with `document`'s tool when it names none.
 fn with_tool(setup: &vectorcraft_cutjob::ToolSettings, document: &vectorcraft_cutjob::ToolSettings) -> vectorcraft_cutjob::ToolSettings {
     let tool = setup.tool.clone().or_else(|| document.tool.clone());
     vectorcraft_cutjob::ToolSettings { tool, ..setup.clone() }
 }
 
+/// The warning for a document measured in pixels (ARCHITECTURE R1): its pixels are cut at 72 per
+/// inch, and art drawn at 96 px/in (most SVGs with no units) cuts a third larger than meant.
+pub const PIXELS_WARNING: &str = "the document is measured in pixels, cut at 72 per inch: art drawn at 96 px/in cuts a third larger than meant";
+
+/// The cut job `d` makes with its cutting settings: what [`select`] picks, cut along its
+/// [`geometry`], laid on the mat by [`prepare`] and put in [`order`], validated. The same document
+/// and settings always make the same job.
 pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     let s = settings(d);
     let placement = placement::place(&s, d).ok_or(BuildError::NoArtboard(s.artboard))?;
@@ -100,6 +104,9 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     warnings.extend(welding);
     let (polylines, more) = prepare::prepare(&outlines, &placement, s.tolerance_mm, s.clip_to_mat).map_err(BuildError::Prepare)?;
     warnings.extend(more);
+    if d.units == vectorcraft_doc::Unit::Pixels && !polylines.is_empty() {
+        warnings.push(vectorcraft_cutjob::JobWarning { source: None, message: PIXELS_WARNING.into() });
+    }
     let registration = if s.print_and_cut {
         let (r, near) = marks::registration(&s, d, &placement, &polylines).map_err(BuildError::PrintAndCut)?;
         warnings.extend(near);

@@ -26,6 +26,8 @@ pub mod history;
 mod nest;
 // A cut line round the art (C11.1).
 mod contour;
+// A document measured in pixels, scaled to its author's pixel size (C11.3).
+mod pixels;
 
 const SETTINGS_SET: &str = "cutting.settings.set";
 const OP_SET: &str = "cutting.op.set";
@@ -37,6 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(history::specs());
     v.extend(nest::specs());
     v.extend(contour::specs());
+    v.extend(pixels::specs());
     v.extend(vec![
         cmd!(
             query "cutting.settings.get",

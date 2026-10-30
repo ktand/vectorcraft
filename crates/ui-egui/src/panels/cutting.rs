@@ -356,6 +356,23 @@ fn send_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
 }
 
+/// A document measured in pixels (C11.3, R1): it is cut at 72 px/in, and most SVGs with no units
+/// were drawn at 96, so the fix is a click away.
+fn pixel_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    if !app.session.active().is_some_and(|st| st.doc.units == vectorcraft_doc::Unit::Pixels) {
+        return;
+    }
+    let t = Tokens::get(ui.ctx());
+    ui.label(egui::RichText::new(tl!("Measured in pixels: cut at 72 per inch.")).color(t.warning));
+    let hover = tl!(
+        "Shrinks the whole document to three quarters, so a pixel is 1/96 in, as in most SVGs, and measures it in mm. If 72 per inch is right, change the units in File › Document Setup instead."
+    );
+    if ui.button(tl!("Scale from 96 px/in")).on_hover_text(hover).clicked() {
+        // Shown only for a document in pixels, the one thing the command asks for.
+        let _ = app.run("cutting.scaleFromPixels", json!({}));
+    }
+}
+
 /// The material the tool settings come from (C5.1): built-in starting points and the user's own,
 /// whether they were changed by hand since, and saving them as a material of the user's.
 fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
@@ -509,6 +526,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         return;
     };
     send_rows(app, ui);
+    pixel_rows(app, ui);
     widgets::divider(ui);
     selection_row(app, ui);
     job_settings_rows(app, ui, &info);
@@ -743,6 +761,20 @@ mod tests {
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
         app.run("cutting.contour", json!({"offsetMm": 2})).unwrap();
         assert!(app.session.active().unwrap().doc.layers.iter().any(|l| l.name.as_deref() == Some("Cut Contour")));
+    }
+
+    /// C11.3: a document in pixels offers the scale, and the button's command scales it.
+    #[test]
+    fn a_pixel_document_offers_the_scale() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        assert!(!panel_texts(&mut app, &ctx).iter().any(|t| t == "Scale from 96 px/in"));
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="96" height="96"/></svg>"#;
+        app.run("document.open", json!({"name": "a.svg", "dataBase64": vectorcraft_format::base64_encode(svg.as_bytes())})).unwrap();
+        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Scale from 96 px/in"));
+        app.run("cutting.scaleFromPixels", json!({})).unwrap();
+        assert!(!panel_texts(&mut app, &ctx).iter().any(|t| t == "Scale from 96 px/in"));
     }
 
     /// Window → Workspace → Cutting is the cutting mode: the mat shows, and Cut Settings and

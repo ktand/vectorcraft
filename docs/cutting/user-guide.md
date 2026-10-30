@@ -41,6 +41,19 @@ In the **Cutting Mat** tab:
 
 If the artboard runs off the mat, the panel says so in red. It says nothing while all is well.
 
+### Is it the right size?
+
+An SVG that gives its size in mm, cm or inches opens at that size. One with no units, or in pixels (most SVGs
+from the web and from icon sites), opens with a pixel as 1/72 in, and is cut at that size. Most of them were drawn
+at 96 pixels to the inch, so they would cut a third larger than meant.
+
+For such a document, Cut Settings says **Measured in pixels: cut at 72 per inch.** under the job line:
+
+- **Scale from 96 px/in** shrinks the whole document to three quarters (art, line widths, artboards) and measures
+  it in mm from then on. Undo puts it back.
+- If 72 per inch is what you meant, change the document's units in File › Document Setup instead, and the warning
+  goes.
+
 ## 3. What gets cut, and how
 
 Every object is cut in one of these ways:
