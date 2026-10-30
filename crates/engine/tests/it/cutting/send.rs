@@ -184,6 +184,45 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     assert_eq!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"]["passes"], json!(5));
     assert!(s.execute("cutting.history.apply", &json!({"index": 999})).is_err());
 
+    // C8.8: send an entry again. Only for the document it was cut from, and with a machine.
+    let title = newest["document"].clone();
+    let other = entries.iter().find(|e| e["document"] != title).unwrap();
+    let e = s.execute("cutting.history.send", &json!({"index": other["index"]})).unwrap_err().to_string();
+    assert!(e.contains("was cut from"), "{e}");
+    let e = s.execute("cutting.history.send", &json!({"index": newest["index"]})).unwrap_err().to_string();
+    assert!(e.contains("no cutter is connected"), "{e}");
+    registry::install(Some(Arc::new({
+        let mut sim = vectorcraft_cutter_silhouette::simulated_cameo4();
+        sim.behaviour.busy_per_write = std::time::Duration::ZERO;
+        sim.behaviour.busy_per_byte = std::time::Duration::ZERO;
+        sim
+    })));
+    // A test cut again: at the same corner, a test cut in the history again.
+    let r = s.execute("cutting.history.send", &json!({"index": newest["index"]})).unwrap();
+    assert!(r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("lands on the design")), "top left again: {r}");
+    assert_eq!(finished(&mut s)["outcome"], json!("done"));
+    let again = s.execute("cutting.history", &json!({})).unwrap()["entries"][0].clone();
+    assert_eq!((again["test"].clone(), again["corner"].clone()), (json!(true), json!("topLeft")));
+    // A cut again: with the passes it was cut with, one undo step.
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"passes": 3}}})).unwrap();
+    s.execute("cutting.send", &json!({})).unwrap();
+    finished(&mut s);
+    let cut = s.execute("cutting.history", &json!({})).unwrap()["entries"][0].clone();
+    assert_eq!(cut["test"], json!(false));
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"passes": 1}}})).unwrap();
+    let r = s.execute("cutting.history.send", &json!({"index": cut["index"]})).unwrap();
+    assert_eq!(r["applied"], json!(true));
+    assert_eq!(finished(&mut s)["outcome"], json!("done"));
+    assert_eq!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"]["passes"], json!(3));
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"]["passes"], json!(1));
+    // Nothing to cut: refused, the settings left as they are.
+    s.execute("select.all", &json!({})).unwrap();
+    s.execute("edit.clear", &json!({})).unwrap();
+    assert!(s.execute("cutting.history.send", &json!({"index": cut["index"]})).unwrap_err().to_string().contains("nothing to cut"));
+    assert_eq!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"]["passes"], json!(1));
+    registry::install(None);
+
     // A damaged file gives what it can.
     std::fs::write(dir.join("History.json"), b"[{\"outcome\": \"done\"}, 7, \"junk\"]").unwrap();
     vectorcraft_engine::cmd::cutting::history::attach(dir.join("History.json"));

@@ -125,6 +125,8 @@ Result:
 - After the steps above, open the Send window's **History**: every send and test cut should be there with its
   time, material and how it ended, and the failed ones (the turned Print & Cut sheet) with a report in
   `Cutting/Reports/` next to the preferences. **Use Settings** on a good one puts its settings back.
+- **Send Again** (C8.8) on a good cut, with a fresh sheet loaded: the same cut as before, with the settings it was
+  cut with; on a test cut: the test again at the same corner.
 
 Result:
 

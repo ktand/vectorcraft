@@ -106,7 +106,7 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
                     widgets::divider(ui);
                     test_rows(app, ui, &status);
                     widgets::divider(ui);
-                    history_rows(app, ui);
+                    history_rows(app, ui, &status);
                 });
             });
         });
@@ -159,11 +159,17 @@ const SHOWN_HISTORY: usize = 8;
 /// Job history (C8.4), folded at first: the latest sends, newest first, what they were cut with
 /// and how they ended; the settings of one that went well put back on the document; a failed
 /// one's report to share.
-fn history_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
+fn history_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     if !crate::panels::cutting::fold(ui, "cutting-history", tl!("History")) {
         return;
     }
     let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    // Send Again (C8.8): to the machine chosen above, for an entry cut from this document.
+    let mut m: Machines = crate::panels::pstate(&ctx, "cutting-machines");
+    let device = m.found.as_ref().and_then(|f| f.get(m.chosen).or(f.first())).map(|(id, _)| id.clone());
+    let idle = status["sending"].as_bool() != Some(true);
+    let title = app.session.active().map(|d| d.title());
     let listed = app.session.execute("cutting.history", &json!({})).unwrap_or_default();
     let entries = listed["entries"].as_array().cloned().unwrap_or_default();
     if entries.is_empty() {
@@ -190,6 +196,24 @@ fn history_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
                     && ui.small_button(tl!("Use Settings")).clicked()
                 {
                     let _ = app.run("cutting.history.apply", json!({ "index": i }));
+                }
+                let this_document = title.as_deref() == e["document"].as_str();
+                if let Some(i) = e["index"].as_u64()
+                    && this_document
+                    && ui
+                        .add_enabled(device.is_some() && idle, egui::Button::new(tl!("Send Again")).small())
+                        .on_hover_text(tl!("Cut this document again with these settings"))
+                        .clicked()
+                {
+                    let device = device.clone().unwrap_or_default();
+                    m.note = Some(match app.run("cutting.history.send", json!({ "index": i, "device": device })) {
+                        Ok(r) => (
+                            false,
+                            r["warnings"].as_array().map(|w| w.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" ")).unwrap_or_default(),
+                        ),
+                        Err(e) => (true, e),
+                    });
+                    crate::panels::set_pstate(&ctx, "cutting-machines", m.clone());
                 }
                 if let Some(report) = e["report"].as_str() {
                     widgets::dim_label(ui, &format!("{} {report}", tl!("Report:")));
@@ -568,6 +592,8 @@ mod tests {
         let texts = window_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t.starts_with("no material · cut")), "{texts:?}");
         assert!(texts.iter().any(|t| t == "Use Settings") && texts.iter().any(|t| t == "Clear History"), "{texts:?}");
+        // C8.8: and can be sent again, from this document.
+        assert!(texts.iter().any(|t| t == "Send Again"), "{texts:?}");
         vectorcraft_cutter::registry::install(None);
     }
 }
