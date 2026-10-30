@@ -105,7 +105,7 @@ fn devices(_: &mut Session, _: &Value) -> Result<Value> {
 }
 
 /// The machine `p` names, else the only one connected.
-fn machine(p: &Value, cmd: &str) -> Result<(DeviceInfo, Arc<dyn Driver>)> {
+pub(super) fn machine(p: &Value, cmd: &str) -> Result<(DeviceInfo, Arc<dyn Driver>)> {
     let found = machines();
     match str_param(p, "device") {
         Some(id) => found.into_iter().find(|(d, _)| d.id == id).ok_or_else(|| bad(cmd, format!("no cutter {id:?} is connected"))),
@@ -118,7 +118,7 @@ fn machine(p: &Value, cmd: &str) -> Result<(DeviceInfo, Arc<dyn Driver>)> {
 }
 
 /// Sends `job` to the machine `p` names, in the background; `before` are warnings of its own.
-fn start(s: &Session, job: &vectorcraft_cutjob::CutJob, p: &Value, cmd: &str, before: Vec<String>, test: bool) -> Result<Value> {
+pub(super) fn start(s: &Session, job: &vectorcraft_cutjob::CutJob, p: &Value, cmd: &str, before: Vec<String>, test: bool) -> Result<Value> {
     let (device, driver) = machine(p, cmd)?;
     if job.paths.is_empty() {
         return Err(bad(cmd, "the job has nothing to cut"));
@@ -131,7 +131,7 @@ fn start(s: &Session, job: &vectorcraft_cutjob::CutJob, p: &Value, cmd: &str, be
     let model = driver.model(&device);
     let running = vectorcraft_cutter::send::spawn(transport, driver, encoded, Patience::default()).map_err(|e| bad(cmd, e))?;
     registry::start(device.clone(), running.clone()).map_err(|e| bad(cmd, e))?;
-    super::history::begin(super::history::entry(s, job, &model, test), running);
+    super::history::begin(super::history::entry(s, job, &model, test.then_some(p)), running);
     Ok(json!({"device": device.id, "model": model, "chunks": chunks, "warnings": warnings}))
 }
 

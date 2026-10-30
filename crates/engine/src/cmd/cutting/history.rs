@@ -5,6 +5,9 @@
 //! short report to share (`Cutting/Reports/`). Without a file (tests, the web build) the history
 //! is kept for the process only. Entries are read leniently: the file is the user's.
 //!
+//! An entry can be sent again (C8.8): the same document cut with the settings it was cut with (a
+//! test cut at the same corner, with the same group).
+//!
 //! A send runs on its own thread; the entry is made when it starts and finished ([`resolve`]) the
 //! next time the status is asked for after it stops (the app asks while a send runs).
 
@@ -78,8 +81,8 @@ fn shown_time(t: i64) -> String {
     format!("{y:04}-{mo:02}-{d:02} {h:02}:{mi:02} UTC")
 }
 
-/// The entry for a send just started: everything but how it ends.
-pub(super) fn entry(s: &Session, job: &CutJob, model: &str, test: bool) -> Value {
+/// The entry for a send just started: everything but how it ends; `test`: a test cut's params.
+pub(super) fn entry(s: &Session, job: &CutJob, model: &str, test: Option<&Value>) -> Value {
     let (title, settings) = match s.doc() {
         Ok(d) => (d.title(), vectorcraft_cutting::settings(&d.doc)),
         Err(_) => (String::new(), CuttingSettings::default()),
@@ -92,7 +95,9 @@ pub(super) fn entry(s: &Session, job: &CutJob, model: &str, test: bool) -> Value
         "shownTime": now.map(shown_time),
         "document": title,
         "machine": model,
-        "test": test,
+        "test": test.is_some(),
+        "corner": test.map(|p| str_param(p, "corner").unwrap_or("topLeft")),
+        "group": test.and_then(|p| str_param(p, "group")),
         "material": settings.material,
         "grouping": settings.grouping.id(),
         "materials": job.groups.iter().filter_map(|g| g.material.clone()).collect::<Vec<_>>(),
@@ -205,7 +210,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting History",
             [],
             None,
-            "{} the sends to a machine, newest first → {entries: [{index, time: Unix seconds or null, shownTime, document, machine, test, material, grouping, materials: [each group's], paths, cutMm, estimatedSeconds, seconds, outcome: sending|done|cancelled|the error, report: a failed send's report file or null, settings}], file: the history file or null}",
+            "{} the sends to a machine, newest first → {entries: [{index, time: Unix seconds or null, shownTime, document, machine, test, corner and group: a test cut's, material, grouping, materials: [each group's], paths, cutMm, estimatedSeconds, seconds, outcome: sending|done|cancelled|the error, report: a failed send's report file or null, settings}], file: the history file or null}",
             always,
             list
         ),
@@ -217,6 +222,15 @@ pub fn specs() -> Vec<CommandSpec> {
             "{index} set the document's tool settings (cut and score, track enhancing, the material named) to those entry `index` was cut with, one undo step → as cutting.settings.get",
             has_doc,
             apply
+        ),
+        cmd!(
+            "cutting.history.send",
+            "Send Again",
+            [],
+            None,
+            "{index, device?} cut this document again as entry `index` was (it must have been cut from a document of this name): its settings used as cutting.history.apply does, then sent as cutting.send does (a test cut as cutting.test, at the same corner with the same group); nothing changes when there is no machine or no job → as cutting.send, and applied: whether the settings changed",
+            has_doc,
+            send_again
         ),
         cmd!(
             query "cutting.history.clear",
@@ -249,13 +263,15 @@ fn list(_: &mut Session, _: &Value) -> Result<Value> {
     Ok(json!({"entries": entries, "file": s.path.as_ref().map(|p| p.display().to_string())}))
 }
 
-fn apply(s: &mut Session, p: &Value) -> Result<Value> {
-    const CMD: &str = "cutting.history.apply";
-    let index = p.get("index").and_then(Value::as_u64).and_then(|i| usize::try_from(i).ok()).ok_or_else(|| bad(CMD, "index is required"))?;
-    let kept = store().lock().ok().and_then(|st| st.entries.get(index).and_then(|e| e.get("settings").cloned()));
-    let Some(kept) = kept else { return Err(bad(CMD, format!("no history entry {index}"))) };
-    let from = CuttingSettings::from_value(Some(&kept));
-    let d = &s.doc()?.doc;
+/// Entry `p.index`, a copy.
+fn entry_at(p: &Value, cmd: &str) -> Result<Value> {
+    let index = p.get("index").and_then(Value::as_u64).and_then(|i| usize::try_from(i).ok()).ok_or_else(|| bad(cmd, "index is required"))?;
+    store().lock().ok().and_then(|st| st.entries.get(index).cloned()).ok_or_else(|| bad(cmd, format!("no history entry {index}")))
+}
+
+/// The document's settings now, and the same with entry `e`'s tool settings in place of its own.
+fn settings_from(d: &vectorcraft_doc::Document, e: &Value) -> (CuttingSettings, CuttingSettings) {
+    let from = CuttingSettings::from_value(e.get("settings"));
     let current = vectorcraft_cutting::settings(d);
     let new = CuttingSettings {
         operations: from.operations,
@@ -264,13 +280,63 @@ fn apply(s: &mut Session, p: &Value) -> Result<Value> {
         color_setups: from.color_setups,
         ..current.clone()
     };
-    if new != current {
-        s.edit("Use Settings from History", |d, _| {
-            vectorcraft_cutting::set_settings(d, &new);
-            Ok(())
-        })?;
+    (current, new)
+}
+
+/// Makes `new` the document's settings, one undo step; whether they changed.
+fn use_settings(s: &mut Session, current: &CuttingSettings, new: &CuttingSettings, label: &str) -> Result<bool> {
+    if new == current {
+        return Ok(false);
     }
+    s.edit(label, |d, _| {
+        vectorcraft_cutting::set_settings(d, new);
+        Ok(())
+    })?;
+    Ok(true)
+}
+
+fn apply(s: &mut Session, p: &Value) -> Result<Value> {
+    let e = entry_at(p, "cutting.history.apply")?;
+    let (current, new) = settings_from(&s.doc()?.doc, &e);
+    use_settings(s, &current, &new, "Use Settings from History")?;
     super::settings_get(s, &json!({}))
+}
+
+fn send_again(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "cutting.history.send";
+    let e = entry_at(p, CMD)?;
+    let title = s.doc()?.title();
+    let from = e.get("document").and_then(Value::as_str).unwrap_or_default();
+    if from != title {
+        return Err(bad(CMD, format!("that entry was cut from {from:?}, not {title:?}")));
+    }
+    super::devices::machine(p, CMD)?;
+    let (current, new) = settings_from(&s.doc()?.doc, &e);
+    // The job made with the entry's settings first: without one, nothing changes.
+    let mut trial = (*s.doc()?.doc).clone();
+    vectorcraft_cutting::set_settings(&mut trial, &new);
+    let test = e.get("test") == Some(&Value::Bool(true));
+    let mut params = json!({ "device": p.get("device").cloned().unwrap_or(Value::Null) });
+    if test {
+        params["corner"] = e.get("corner").cloned().unwrap_or(Value::Null);
+        params["group"] = e.get("group").cloned().unwrap_or(Value::Null);
+    }
+    let job = if test {
+        use vectorcraft_cutting::test_cut::Corner;
+        let corner = str_param(&params, "corner").and_then(Corner::parse).unwrap_or_default();
+        vectorcraft_cutting::test_cut::test_job(&trial, corner, str_param(&params, "group"))
+    } else {
+        vectorcraft_cutting::build_job(&trial)
+    }
+    .map_err(|err| bad(CMD, err.to_string()))?;
+    if job.paths.is_empty() {
+        return Err(bad(CMD, "the job has nothing to cut"));
+    }
+    let applied = use_settings(s, &current, &new, "Send Again")?;
+    let own = if test { job.warnings.iter().map(|w| w.message.clone()).collect() } else { vec![] };
+    let mut r = super::devices::start(s, &job, &params, CMD, own, test)?;
+    r["applied"] = json!(applied);
+    Ok(r)
 }
 
 fn clear(_: &mut Session, _: &Value) -> Result<Value> {
