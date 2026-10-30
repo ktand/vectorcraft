@@ -6170,6 +6170,7 @@ dependencies = [
 name = "vectorcraft-cutter-silhouette"
 version = "0.18.0"
 dependencies = [
+ "proptest",
  "serde_json",
  "vectorcraft-cutjob",
  "vectorcraft-cutter",
