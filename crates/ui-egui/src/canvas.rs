@@ -16,10 +16,10 @@ use crate::theme::{self, Tokens};
 use crate::{CacheKey, VectorcraftApp, now_ms, widgets};
 
 // Fork: the cutting workspace.
-pub(crate) mod cutting_overlay;
 mod artboards;
 mod context;
 mod cursor;
+pub(crate) mod cutting_overlay;
 mod drag;
 mod fill;
 mod grid;
