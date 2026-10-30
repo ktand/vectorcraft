@@ -164,7 +164,7 @@ fn a_stroke_edge_is_cut_round_the_stroke() {
         Node::path(d.alloc_id(), shapes::line(Point::new(20.0, 50.0), Point::new(120.0, 50.0)), a)
     });
     let edge = Item { stroke_edge: true, ..item(id) };
-    let (out, warnings) = outlines(&d, &[edge.clone()]);
+    let (out, warnings) = outlines(&d, std::slice::from_ref(&edge));
     assert!(warnings.is_empty(), "{warnings:?}");
     assert_eq!(out.len(), 1);
     assert!(out[0].closed);

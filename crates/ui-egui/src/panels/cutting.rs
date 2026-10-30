@@ -31,7 +31,7 @@ fn set(app: &mut VectorcraftApp, p: Value) {
 }
 
 fn mm_field(ui: &mut Ui, id: &'static str, mm: f64, min_mm: f64) -> Option<f64> {
-    widgets::spin_field(ui, ("cutting", id), Some(mm * PT), Unit::Millimeters, 64.0, PT, min_mm * PT, &[]).map(|pt| pt / PT)
+    widgets::spin_field(ui, ("cutting", id), Some(mm * PT), Unit::Millimeters, 72.0, PT, min_mm * PT, &[]).map(|pt| pt / PT)
 }
 
 /// What the document cuts by default and how it groups the cut.
@@ -132,6 +132,59 @@ fn contour_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
     }
     super::set_pstate(&ctx, "cutting-contour", c);
+}
+
+/// What the Stencil section keeps between frames: the bridges' width and direction, and what the
+/// last Add Bridges said.
+#[derive(Clone, Debug)]
+struct BridgeChoice {
+    width_mm: f64,
+    horizontal: bool,
+    note: Option<(bool, String)>,
+}
+
+impl Default for BridgeChoice {
+    fn default() -> Self {
+        BridgeChoice { width_mm: vectorcraft_cutting::bridges::DEFAULT_WIDTH_MM, horizontal: false, note: None }
+    }
+}
+
+/// Stencil bridges for the selected art (C11.5): how wide, which way, and Add Bridges
+/// (`cutting.bridges`, one undo step; the art set to No Cut and hidden under the stencil).
+fn bridge_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut c: BridgeChoice = super::pstate(&ctx, "cutting-bridges");
+    let range = vectorcraft_cutting::bridges::WIDTH_MM;
+    widgets::label_row(ui, tl!("Bridges"), LABEL_W, |ui| {
+        if let Some(v) = mm_field(ui, "bridge-width", c.width_mm, *range.start()) {
+            c.width_mm = v.clamp(*range.start(), *range.end());
+        }
+    });
+    let labels = ["Vertical", "Horizontal"];
+    widgets::label_row(ui, tl!("Direction"), LABEL_W, |ui| {
+        let shown = if c.horizontal { labels[1] } else { labels[0] };
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "bridge-direction"), shown, &labels, 110.0) {
+            c.horizontal = i == 1;
+        }
+    });
+    let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
+    if ui
+        .add_enabled(selected, egui::Button::new(tl!("Add Bridges")))
+        .on_hover_text(tl!("Joins each hole's middle (the inside of an O) to the art round it, so a stencil keeps it. The stencil is added over the art, which is hidden and set to No Cut."))
+        .clicked()
+    {
+        let direction = if c.horizontal { "horizontal" } else { "vertical" };
+        c.note = Some(match app.run("cutting.bridges", json!({ "widthMm": c.width_mm, "direction": direction })) {
+            Ok(r) if r["unbridged"].as_u64().unwrap_or(0) > 0 => (true, format!("{} {} · {} {}", r["bridges"], tl!("bridges"), r["unbridged"], tl!("holes missed: try the other direction"))),
+            Ok(r) => (false, format!("{} {}", r["bridges"], tl!("bridges"))),
+            Err(e) => (true, e),
+        });
+    }
+    if let Some((bad, note)) = &c.note {
+        ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
+    }
+    super::set_pstate(&ctx, "cutting-bridges", c);
 }
 
 /// A group row's material choices: the document's setup first, then every material.
@@ -551,6 +604,9 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::section_header(ui, tl!("Contour"));
     contour_rows(app, ui);
     widgets::divider(ui);
+    widgets::section_header(ui, tl!("Stencil"));
+    bridge_rows(app, ui);
+    widgets::divider(ui);
     widgets::section_header(ui, tl!("Tool Settings"));
     tool_rows(app, ui, &info);
     advanced_rows(app, ui, &info);
@@ -784,6 +840,22 @@ mod tests {
         assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Scale from 96 px/in"));
         app.run("cutting.scaleFromPixels", json!({})).unwrap();
         assert!(!panel_texts(&mut app, &ctx).iter().any(|t| t == "Scale from 96 px/in"));
+    }
+
+    /// C11.5: the Stencil section; Add Bridges works on the selection.
+    #[test]
+    fn the_panel_adds_bridges() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(
+            texts.iter().any(|t| t == "Stencil") && texts.iter().any(|t| t == "Add Bridges") && texts.iter().any(|t| t == "Vertical"),
+            "{texts:?}"
+        );
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        let r = app.run("cutting.bridges", json!({})).unwrap();
+        assert_eq!(r["bridges"], json!(0), "a square has no hole");
     }
 
     /// C11.4: with a selection, Cut Along says what it is cut along.

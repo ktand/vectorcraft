@@ -298,6 +298,13 @@ proptest! {
                 prop_assert!(c.subpaths.iter().all(|s| s.anchors.iter().all(|a| a.p.x.is_finite() && a.p.y.is_finite())));
             }
         }
+        // C11.5: stencil bridges both ways: a finite path or a reason.
+        use vectorcraft_cutting::bridges::{Direction, Options, bridged};
+        for direction in [Direction::Vertical, Direction::Horizontal] {
+            if let Ok(b) = bridged(&d, &all, Options { width_mm: 1.5, direction }) {
+                prop_assert!(b.path.subpaths.iter().all(|s| s.anchors.iter().all(|a| a.p.x.is_finite() && a.p.y.is_finite())));
+            }
+        }
         match build_job(&d) {
             Ok(job) => {
                 if std::env::var_os("FUZZ_COUNT").is_some() {
