@@ -170,7 +170,8 @@ pub const UI_COMMANDS: &[(&str, &str, &str, &str)] = &[
     (
         "cutting.sendWindow",
         "Send to Cutter…",
-        "Cmd+Alt+Shift+C",
+        // Not Cmd+Alt+Shift+C: upstream's Line Composer has it.
+        "Cmd+Alt+Shift+X",
         "{} open the Send window (not modal) over the active document: the mat with the job's toolpaths, its numbers and warnings, the cutter, Send (cutting.send), progress, Continue and Cancel",
     ),
     ("view.cornerWidget", "Hide Corner Widget", "", "{} toggle the live corner widgets"),
