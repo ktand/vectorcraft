@@ -57,7 +57,7 @@ fn scale_document(d: &mut Document, k: f64) {
     let layers: Vec<_> = d.layers.iter().map(|l| l.id).collect();
     for id in layers {
         if let Some(n) = d.node_mut(id) {
-            n.transform(a, sc.clone());
+            n.transform(a, sc);
         }
     }
     for b in &mut d.artboards {
