@@ -73,3 +73,27 @@ fn materials_are_applied_saved_and_kept() {
     assert_eq!(kept, json!([]));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// C10.2: the tools to choose from; a tool chosen for an operation is kept, an unknown one is
+/// refused; a material applied leaves the tool as it is (it is the machine's); a group's setup
+/// without a tool of its own is cut with the document's. Nothing is saved to the store.
+#[test]
+fn the_tool_is_chosen_per_operation() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 300, "height": 300})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+    let tools = s.execute("cutting.tools.list", &json!({})).unwrap();
+    let first = &tools["tools"][0];
+    assert_eq!((first["id"].clone(), first["holder"].clone(), first["autoblade"].clone()), (json!("autoblade"), json!(1), json!(true)));
+    assert!(tools["tools"].as_array().unwrap().iter().any(|t| t["id"] == "rotary" && t["holder"] == 2));
+    let e = s.execute("cutting.settings.set", &json!({"operations": {"cut": {"tool": "laser"}}})).unwrap_err().to_string();
+    assert!(e.contains("unknown tool \"laser\""), "{e}");
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"tool": "kraft3"}}})).unwrap();
+    s.execute("cutting.material.apply", &json!({"name": "Cardstock"})).unwrap();
+    let got = s.execute("cutting.settings.get", &json!({})).unwrap();
+    assert_eq!(got["settings"]["operations"]["cut"]["tool"], json!("kraft3"), "the material left the tool");
+    let job = s.execute("cutting.job", &json!({})).unwrap();
+    assert_eq!(job["job"]["operations"][0]["tool"], json!("kraft3"), "{job}");
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"tool": null}}})).unwrap();
+    assert!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"]["tool"].is_null());
+}

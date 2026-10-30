@@ -23,7 +23,8 @@
       "kind": "score",
       "overcutMm": 0.0,
       "passes": 1,
-      "speedMmS": 100.0
+      "speedMmS": 100.0,
+      "tool": null
     },
     {
       "accel": null,
@@ -34,7 +35,8 @@
       "kind": "cut",
       "overcutMm": 0.0,
       "passes": 1,
-      "speedMmS": 100.0
+      "speedMmS": 100.0,
+      "tool": null
     }
   ],
   "paths": [

@@ -84,6 +84,12 @@ impl std::error::Error for BuildError {}
 /// The cut job `d` makes with its cutting settings: what [`select`] picks, cut along its
 /// [`geometry`], laid on the mat by [`prepare`] and put in [`order`], validated. The same document
 /// and settings always make the same job.
+/// `setup`, with `document`'s tool when it names none.
+fn with_tool(setup: &vectorcraft_cutjob::ToolSettings, document: &vectorcraft_cutjob::ToolSettings) -> vectorcraft_cutjob::ToolSettings {
+    let tool = setup.tool.clone().or_else(|| document.tool.clone());
+    vectorcraft_cutjob::ToolSettings { tool, ..setup.clone() }
+}
+
 pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     let s = settings(d);
     let placement = placement::place(&s, d).ok_or(BuildError::NoArtboard(s.artboard))?;
@@ -159,8 +165,9 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
         .map(|&(kind, slot)| {
             let own = slot.and_then(|g| setups.get(g)).and_then(Option::as_ref);
             let tool = match (kind, own) {
-                (OpKind::Cut, Some(x)) => x.cut.clone(),
-                (OpKind::Score, Some(x)) => x.score.clone(),
+                // A group's setup is cut with the document's tool unless it names one (C10.2).
+                (OpKind::Cut, Some(x)) => with_tool(&x.cut, &s.operations.cut),
+                (OpKind::Score, Some(x)) => with_tool(&x.score, &s.operations.score),
                 (OpKind::Cut, None) => s.operations.cut.clone(),
                 (OpKind::Score, None) => s.operations.score.clone(),
             };

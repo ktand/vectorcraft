@@ -131,8 +131,10 @@ fn set_material(s: &mut Session, m: &Material, label: &str) -> Result<()> {
     let before = settings.clone();
     // Keys a newer version kept in the tool settings stay.
     let (cut_extra, score_extra) = (settings.operations.cut.extra.clone(), settings.operations.score.extra.clone());
-    settings.operations.cut = ToolSettings { extra: cut_extra, ..m.cut.clone() };
-    settings.operations.score = ToolSettings { extra: score_extra, ..m.score.clone() };
+    // The tool is the machine's (C10.2): a material leaves the one chosen.
+    let (cut_tool, score_tool) = (settings.operations.cut.tool.clone(), settings.operations.score.tool.clone());
+    settings.operations.cut = ToolSettings { extra: cut_extra, tool: cut_tool, ..m.cut.clone() };
+    settings.operations.score = ToolSettings { extra: score_extra, tool: score_tool, ..m.score.clone() };
     settings.material = Some(m.name.clone());
     if settings != before {
         s.edit(label, |d, _| {
@@ -163,7 +165,12 @@ fn save_cmd(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad(CMD, format!("{name:?} is a built-in material: choose another name")));
     }
     let settings = vectorcraft_cutting::settings(&s.doc()?.doc);
-    let m = Material { name: name.clone(), cut: settings.operations.cut.clone(), score: settings.operations.score.clone(), builtin: false };
+    let m = Material {
+        name: name.clone(),
+        cut: ToolSettings { tool: None, ..settings.operations.cut.clone() },
+        score: ToolSettings { tool: None, ..settings.operations.score.clone() },
+        builtin: false,
+    };
     {
         let mut st = store().lock().map_err(|_| bad(CMD, "the materials are damaged"))?;
         match st.user.iter_mut().find(|u| u.name.eq_ignore_ascii_case(&name)) {
