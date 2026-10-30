@@ -1,7 +1,7 @@
 //! Fork: the Cutting Mat panel (C7.2): what is set once for a document, the mat, where the
-//! artboard lies on it and whether it fits, Print & Cut and its registration marks, and how the
-//! canvas shows the mat. Cut Settings (the parent module) holds what is set per object and per
-//! cut.
+//! artboard lies on it and whether it goes off it, nesting, and Print & Cut and its registration
+//! marks; only what asks for something is said (C9.1), and how the canvas shows the mat is in the
+//! View menu. Cut Settings (the parent module) holds what is set per object and per cut.
 
 use egui::Ui;
 use serde_json::{Value, json};
@@ -23,10 +23,15 @@ fn mat_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let mut labels: Vec<&str> = mats.iter().map(|m| m["label"].as_str().unwrap_or_default()).collect();
     labels.push(tl!("Custom"));
     let current = if custom { tl!("Custom") } else { mats.iter().find(|m| m["id"] == mat).and_then(|m| m["label"].as_str()).unwrap_or(mat) };
+    let approximate = !custom && info["mat"]["approximate"].as_bool() == Some(true);
     widgets::label_row(ui, tl!("Mat"), LABEL_W, |ui| {
         if let Some(i) = widgets::dropdown_names(ui, ("cutting", "mat"), current, &labels, 170.0) {
             let id = mats.get(i).and_then(|m| m["id"].as_str()).unwrap_or("custom");
             set(app, json!({ "mat": id }));
+        }
+        // A note, not a warning: every built-in mat's cut area is measured, not published.
+        if approximate {
+            widgets::dim_name(ui, "≈").on_hover_text(tl!("The cut area isn't from the maker's specifications: check it on the mat."));
         }
     });
     if custom {
@@ -39,8 +44,6 @@ fn mat_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
                 set(app, json!({ "customMatMm": [size(0), h] }));
             }
         });
-    } else if info["mat"]["approximate"].as_bool() == Some(true) {
-        widgets::dim_label(ui, tl!("The cut area isn't from the maker's specifications: check it on the mat."));
     }
     let orientations = ["Portrait", "Landscape"];
     let landscape = s["orientation"] == "landscape";
@@ -72,14 +75,8 @@ fn mat_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     if widgets::check(ui, tl!("Clip to Mat"), clip, true) {
         set(app, json!({ "clipToMat": !clip }));
     }
-    match info["placement"]["fits"].as_bool() {
-        Some(true) => {
-            widgets::dim_label(ui, tl!("The artboard fits the mat."));
-        }
-        Some(false) => {
-            ui.label(egui::RichText::new(tl!("The artboard goes off the mat.")).color(t.bleed));
-        }
-        None => {}
+    if info["placement"]["fits"].as_bool() == Some(false) {
+        ui.label(egui::RichText::new(tl!("The artboard goes off the mat.")).color(t.bleed));
     }
 }
 
@@ -196,15 +193,6 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Print & Cut"));
     print_and_cut_rows(app, ui, &info);
-    widgets::divider(ui);
-    let view = app.ui.view.cutting;
-    if widgets::check(ui, tl!("Cutting View"), view, true) {
-        let _ = app.run("view.cutting", json!({}));
-    }
-    let paths = crate::cutting::shows_toolpaths(ui.ctx());
-    if widgets::check(ui, tl!("Show Toolpaths"), paths, view) {
-        crate::cutting::set_shows_toolpaths(ui.ctx(), !paths);
-    }
 }
 
 #[cfg(test)]
@@ -224,7 +212,8 @@ mod tests {
             .collect()
     }
 
-    /// The mat, the artboard on it and the view switches; no cutting settings.
+    /// The mat and the artboard on it; no cutting settings, no view switches (the View menu's),
+    /// and a line only when the artboard goes off the mat (C9.1).
     #[test]
     fn the_panel_shows_the_mat() {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
@@ -232,10 +221,15 @@ mod tests {
         assert!(texts(&mut app, &ctx).iter().any(|t| t == "Open a document to cut it."));
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
         let t = texts(&mut app, &ctx);
-        for label in ["Mat", "Orientation", "Offset", "Clip to Mat", "The artboard fits the mat.", "Cutting View", "Show Toolpaths"] {
+        for label in ["Mat", "Orientation", "Offset", "Clip to Mat"] {
             assert!(t.iter().any(|x| x == label), "{label}: {t:?}");
         }
-        assert!(!t.iter().any(|x| x == "Force" || x == "Send to Cutter…"), "{t:?}");
+        for gone in ["Force", "Send to Cutter…", "Cutting View", "Show Toolpaths", "The artboard fits the mat."] {
+            assert!(!t.iter().any(|x| x == gone), "{gone}: {t:?}");
+        }
+        assert!(!t.iter().any(|x| x.starts_with("The cut area isn't")), "a hover note now: {t:?}");
+        app.run("cutting.settings.set", json!({"offsetMm": [300, 0]})).unwrap();
+        assert!(texts(&mut app, &ctx).iter().any(|x| x == "The artboard goes off the mat."));
     }
 
     /// C8.5: the Nesting section nests every piece, or the selection when there is one.

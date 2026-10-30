@@ -45,6 +45,7 @@ pub fn checked(app: &VectorcraftApp, id: &str, p: &Value) -> Option<bool> {
         "view.pixelPreview" => v.pixel_preview,
         "view.trimView" => v.trim_view,
         "view.cutting" => v.cutting,
+        crate::cutting::TOOLPATHS_COMMAND => app.ui_ctx.as_ref().is_some_and(crate::cutting::shows_toolpaths),
         "view.snapToPixel" => v.snap_to_pixel,
         "view.snapToGlyph" => v.snap_to_glyph,
         // Type on a Path effect of the selected path type.

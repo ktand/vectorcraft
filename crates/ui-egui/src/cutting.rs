@@ -33,7 +33,8 @@ struct Cached {
 
 /// The Cutting workspace's panels (C7.2): the dock's main column keeps Properties · Layers ·
 /// Libraries (Layers in front: a cut by layer is set up there) and gains Cut Settings and Cutting
-/// Mat below it, taken out of the icon column, so the settings show without opening anything.
+/// Mat below it, taken out of the icon column, so the settings show without opening anything; the
+/// two share one group as tabs (C9.1: the mat is mostly set once), so each gets the column's height.
 pub(crate) fn workspace_layout() -> craft_ui::docking::Layout<String> {
     use craft_ui::docking::{Group, Node};
     let ui = crate::state::UiState { dock_tab: crate::state::DockTab::Layers, ..Default::default() };
@@ -54,14 +55,14 @@ pub(crate) fn workspace_layout() -> craft_ui::docking::Layout<String> {
             if let Some(tabs) = main.groups.first_mut() {
                 tabs.height = Some(LAYERS_HEIGHT);
             }
-            main.groups.extend(ours.iter().map(|p| Group::new(vec![p.to_string()], 0)));
+            main.groups.push(Group::new(ours.iter().map(|p| p.to_string()).collect(), 0));
         }
     }
     layout
 }
 
-/// The height Layers starts at in the Cutting workspace, points.
-const LAYERS_HEIGHT: f32 = 200.0;
+/// The height Layers starts at in the Cutting workspace, points: about six rows.
+const LAYERS_HEIGHT: f32 = 300.0;
 
 fn key() -> egui::Id {
     egui::Id::unique("cutting-job")
@@ -100,6 +101,16 @@ pub(crate) fn shows_toolpaths(ctx: &egui::Context) -> bool {
 
 pub(crate) fn set_shows_toolpaths(ctx: &egui::Context, on: bool) {
     ctx.data_mut(|d| d.insert_temp(toolpaths_key(), !on));
+}
+
+/// View › Show Toolpaths (C9.1; was a switch in the Cutting Mat panel).
+pub(crate) const TOOLPATHS_COMMAND: &str = "view.cutting.toolpaths";
+
+/// [`TOOLPATHS_COMMAND`]: shows or hides the toolpaths.
+pub(crate) fn toggle_toolpaths(app: &mut VectorcraftApp) -> Result<serde_json::Value, String> {
+    let ctx = app.ui_ctx.clone().ok_or("the app hasn't drawn a frame yet")?;
+    set_shows_toolpaths(&ctx, !shows_toolpaths(&ctx));
+    Ok(serde_json::Value::Null)
 }
 
 /// Playback runs this many times faster than the machine is estimated to.
@@ -149,7 +160,8 @@ pub(crate) fn tick(ctx: &egui::Context, sim: &Simulation) -> Playback {
 
 /// Play the blade's run, step from path to path, or scrub along it (C3.7): the Send window's
 /// controls under its preview, and (`compact`, one row) the bar over the canvas in Cutting View
-/// (C7.3). Both move the one playback the canvas and the preview draw.
+/// (C7.3), only its buttons there until the run is played or stepped (C9.1: it sits over the
+/// art). Both move the one playback the canvas and the preview draw.
 pub(crate) fn playback_controls(ui: &mut egui::Ui, sim: &Simulation, compact: bool) {
     let ctx = ui.ctx().clone();
     let mut p = playback(&ctx);
@@ -182,10 +194,14 @@ pub(crate) fn playback_controls(ui: &mut egui::Ui, sim: &Simulation, compact: bo
             *p = Playback { mm: Some(v), playing: false, ..*p };
         }
     };
-    if compact {
+    if compact && p.mm.is_none() {
         ui.horizontal(|ui| {
             buttons(ui, &mut p);
-            slider(ui, &mut p, 220.0);
+        });
+    } else if compact {
+        ui.horizontal(|ui| {
+            buttons(ui, &mut p);
+            slider(ui, &mut p, 160.0);
             playback_label(ui, sim, &p);
         });
     } else {
