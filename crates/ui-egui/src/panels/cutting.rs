@@ -211,8 +211,8 @@ fn group_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     widgets::dim_label(ui, tl!("Force and passes of the cut; groups on the document's setup use the tool settings below."));
 }
 
-/// Cut, Score, No Cut or the group's or layer's, for the selected objects: a row only while
-/// something is selected (C9.1: one dropdown, at the top).
+/// Cut, Score, No Cut or the group's or layer's, for the selected objects, and what they are cut
+/// along: rows only while something is selected (C9.1: one dropdown, at the top).
 fn selection_row(app: &mut VectorcraftApp, ui: &mut Ui) {
     let objects = app.session.execute("cutting.op.get", &json!({})).ok().and_then(|r| r["objects"].as_array().cloned()).unwrap_or_default();
     if objects.is_empty() {
@@ -232,6 +232,15 @@ fn selection_row(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::label_row(ui, tl!("Selected"), LABEL_W, |ui| {
         if let Some(i) = widgets::dropdown(ui, ("cutting", "selection-op"), shown, &labels, 150.0) {
             let _ = app.run("cutting.op.set", json!({ "op": ids.get(i).copied().unwrap_or("inherit") }));
+        }
+    });
+    // What they are cut along (C11.4): the path, or round the edge of what they paint.
+    let labels = ["Path", "Stroke Edge"];
+    let edges = ["path", "stroke"];
+    let shown = edges.iter().position(|e| all(&|o| o["edge"] == *e)).and_then(|i| labels.get(i)).copied().unwrap_or("Mixed");
+    widgets::label_row(ui, tl!("Cut Along"), LABEL_W, |ui| {
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "selection-edge"), shown, &labels, 150.0) {
+            let _ = app.run("cutting.edge.set", json!({ "edge": edges.get(i).copied().unwrap_or("path") }));
         }
     });
 }
@@ -775,6 +784,20 @@ mod tests {
         assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Scale from 96 px/in"));
         app.run("cutting.scaleFromPixels", json!({})).unwrap();
         assert!(!panel_texts(&mut app, &ctx).iter().any(|t| t == "Scale from 96 px/in"));
+    }
+
+    /// C11.4: with a selection, Cut Along says what it is cut along.
+    #[test]
+    fn the_selection_row_shows_the_edge() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        assert!(!panel_texts(&mut app, &ctx).iter().any(|t| t == "Cut Along"), "nothing selected");
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Cut Along") && texts.iter().any(|t| t == "Path"), "{texts:?}");
+        app.run("cutting.edge.set", json!({"edge": "stroke"})).unwrap();
+        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Stroke Edge"));
     }
 
     /// Window → Workspace → Cutting is the cutting mode: the mat shows, and Cut Settings and

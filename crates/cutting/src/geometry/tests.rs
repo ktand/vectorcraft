@@ -12,7 +12,7 @@ fn square(d: &mut Document, x: f64, y: f64, side: f64) -> Node {
 }
 
 fn item(id: NodeId) -> Item {
-    Item { id, op: OpKind::Cut, outline: false, clips: vec![] }
+    Item { id, op: OpKind::Cut, outline: false, stroke_edge: false, clips: vec![] }
 }
 
 /// `n` added to a fresh 200 × 200 pt document: the document and its id.
@@ -152,4 +152,27 @@ fn subpaths_split_at_moves_and_after_closes() {
     assert_eq!(s.iter().map(|(_, c)| *c).collect::<Vec<_>>(), [true, false, false]);
     assert_eq!(s[1].0.elements()[0], PathEl::MoveTo(Point::new(0.0, 0.0)));
     assert_eq!(s[2].0.elements()[0], PathEl::MoveTo(Point::new(60.0, 60.0)));
+}
+
+/// C11.4: set to its stroke's edge, a stroked line is cut round its stroke, one closed outline the
+/// stroke's width across; a path with no stroke is cut along its path still.
+#[test]
+fn a_stroke_edge_is_cut_round_the_stroke() {
+    use vectorcraft_color::{Color, Paint};
+    let (d, id) = with(|d| {
+        let a = Appearance::basic(Paint::None, Paint::solid(Color::BLACK), 10.0);
+        Node::path(d.alloc_id(), shapes::line(Point::new(20.0, 50.0), Point::new(120.0, 50.0)), a)
+    });
+    let edge = Item { stroke_edge: true, ..item(id) };
+    let (out, warnings) = outlines(&d, &[edge.clone()]);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(out.len(), 1);
+    assert!(out[0].closed);
+    let b = bounds(&out[0]);
+    assert!((b.y0 - 45.0).abs() < 1e-6 && (b.y1 - 55.0).abs() < 1e-6 && (b.x0 - 20.0).abs() < 1e-6, "butt caps: {b:?}");
+    let (along, _) = outlines(&d, &[item(id)]);
+    assert!(!along[0].closed, "along its path, as before");
+    let (d, id) = with(|d| square(d, 10.0, 20.0, 30.0));
+    let (out, _) = outlines(&d, &[Item { stroke_edge: true, ..item(id) }]);
+    assert!(close(bounds(&out[0]), Rect::new(10.0, 20.0, 40.0, 50.0)), "no stroke: the path");
 }

@@ -31,6 +31,7 @@ mod pixels;
 
 const SETTINGS_SET: &str = "cutting.settings.set";
 const OP_SET: &str = "cutting.op.set";
+const EDGE_SET: &str = "cutting.edge.set";
 
 pub fn specs() -> Vec<CommandSpec> {
     let mut v = devices::specs();
@@ -69,11 +70,20 @@ pub fn specs() -> Vec<CommandSpec> {
             op_set
         ),
         cmd!(
+            "cutting.edge.set",
+            "Set Cut Edge",
+            [],
+            None,
+            "{ids?, edge: path|stroke|inherit} what the selected objects (or ids: objects, groups or layers) are cut along: path, the path itself (a stroke down its centre line); stroke, round the edge of what each path paints (its strokes' outlines, as drawn, united with its fill; a path with no stroke along its path); inherit removes their own, so they take their nearest group's or layer's, else path; one undo step → {ids: those that changed}",
+            has_doc,
+            edge_set
+        ),
+        cmd!(
             query "cutting.op.get",
             "Cutting Operation",
             [],
             None,
-            "{ids?} the cutting operation of each selected object (or ids) → {objects: [{id, op: cut|score|none|outline, own: its own op or null, source: own|inherited|default, from?: id of the group or layer it inherits from}]}",
+            "{ids?} the cutting operation of each selected object (or ids) → {objects: [{id, op: cut|score|none|outline, own: its own op or null, source: own|inherited|default, from?: id of the group or layer it inherits from, edge: path|stroke (what it is cut along, cutting.edge.set), edgeFrom: id of the object, group or layer that sets it, or null}]}",
             has_doc,
             op_get
         ),
@@ -392,6 +402,32 @@ fn op_set(s: &mut Session, p: &Value) -> Result<Value> {
     Ok(json!({ "ids": changed.iter().map(|i| i.0).collect::<Vec<_>>() }))
 }
 
+fn edge_set(s: &mut Session, p: &Value) -> Result<Value> {
+    use vectorcraft_cutting::edge::{self, Edge};
+    let e = match str_param(p, "edge") {
+        Some("inherit") => None,
+        Some(id) => Some(Edge::parse(id).ok_or_else(|| bad(EDGE_SET, format!("edge must be path, stroke or inherit, not {id:?}")))?),
+        None => return Err(bad(EDGE_SET, "edge is required: path, stroke or inherit")),
+    };
+    let ids = objects(s, p, EDGE_SET)?;
+    if ids.is_empty() {
+        return Err(bad(EDGE_SET, "no objects: select some or give ids"));
+    }
+    let d = &s.doc()?.doc;
+    let changed: Vec<NodeId> = ids.into_iter().filter(|id| d.node(*id).is_some_and(|n| edge::would_change(n, e))).collect();
+    if !changed.is_empty() {
+        s.edit("Cut Edge", |d, _| {
+            for id in &changed {
+                if let Some(n) = d.node_mut(*id) {
+                    edge::set_own_edge(n, e);
+                }
+            }
+            Ok(())
+        })?;
+    }
+    Ok(json!({ "ids": changed.iter().map(|i| i.0).collect::<Vec<_>>() }))
+}
+
 fn op_get(s: &mut Session, p: &Value) -> Result<Value> {
     let ids = objects(s, p, "cutting.op.get")?;
     let d = &s.doc()?.doc;
@@ -408,6 +444,9 @@ fn op_get(s: &mut Session, p: &Value) -> Result<Value> {
                 Source::Default => ("default", None),
             };
             o["source"] = json!(source);
+            let (edge, edge_from) = vectorcraft_cutting::edge::resolve(d, id)?;
+            o["edge"] = json!(edge.id());
+            o["edgeFrom"] = json!(edge_from.map(|a| a.0));
             if let Some(from) = from {
                 o["from"] = json!(from);
             }

@@ -15,6 +15,7 @@ use vectorcraft_cutjob::{CuttingSettings, Op, OpKind};
 use vectorcraft_doc::{Document, Node, NodeId, NodeKind};
 use vectorcraft_geom::Rect;
 
+use crate::edge::{Edge, own_edge};
 use crate::ops::own_op;
 
 /// An object the job cuts.
@@ -25,6 +26,8 @@ pub struct Item {
     /// Set to Cut Outline: cut, along the outline it makes with the others set to it
     /// ([`crate::weld`]).
     pub outline: bool,
+    /// Cut round the edge of what it paints, not along its path (C11.4, [`crate::edge`]).
+    pub stroke_edge: bool,
     /// The clip groups and clipping layers around it, outermost first.
     pub clips: Vec<NodeId>,
 }
@@ -36,7 +39,7 @@ pub fn select(d: &Document, s: &CuttingSettings) -> Vec<Item> {
     let mut out = vec![];
     let mut clips = vec![];
     for layer in &d.layers {
-        visit(layer, s.default_op, artboard, &mut clips, &mut out, false);
+        visit(layer, (s.default_op, Edge::Path), artboard, &mut clips, &mut out, false);
     }
     out
 }
@@ -48,7 +51,7 @@ pub fn select_everywhere(d: &Document, s: &CuttingSettings) -> Vec<Item> {
     let mut out = vec![];
     let mut clips = vec![];
     for layer in &d.layers {
-        visit(layer, s.default_op, everywhere, &mut clips, &mut out, false);
+        visit(layer, (s.default_op, Edge::Path), everywhere, &mut clips, &mut out, false);
     }
     out
 }
@@ -61,7 +64,7 @@ pub fn art_under(d: &Document, ids: &[NodeId]) -> Vec<Item> {
     let mut clips = vec![];
     for id in ids {
         if let Some(n) = d.node(*id) {
-            visit(n, Op::Cut, everywhere, &mut clips, &mut out, true);
+            visit(n, (Op::Cut, Edge::Path), everywhere, &mut clips, &mut out, true);
         }
     }
     out
@@ -72,12 +75,14 @@ fn clips_children(n: &Node) -> bool {
     matches!(n.kind, NodeKind::Group { clip: true, .. } | NodeKind::Layer { clip: true, .. })
 }
 
-/// `every`: every object, whatever it is set to cut as (each as a cut).
-fn visit(n: &Node, inherited: Op, artboard: Rect, clips: &mut Vec<NodeId>, out: &mut Vec<Item>, every: bool) {
+/// `inherited`: the operation and edge from the groups and layer around `n`. `every`: every
+/// object, whatever it is set to cut as (each as a cut along its path).
+fn visit(n: &Node, inherited: (Op, Edge), artboard: Rect, clips: &mut Vec<NodeId>, out: &mut Vec<Item>, every: bool) {
     if !n.visible || n.is_template() {
         return;
     }
-    let op = if every { Op::Cut } else { own_op(n).unwrap_or(inherited) };
+    let op = if every { Op::Cut } else { own_op(n).unwrap_or(inherited.0) };
+    let edge = if every { Edge::Path } else { own_edge(n).unwrap_or(inherited.1) };
     match &n.kind {
         NodeKind::Layer { children, .. } | NodeKind::Group { children, .. } | NodeKind::Intertwine { children } => {
             let clipping = clips_children(n);
@@ -89,7 +94,7 @@ fn visit(n: &Node, inherited: Op, artboard: Rect, clips: &mut Vec<NodeId>, out: 
                 if clipping && i == 0 {
                     continue;
                 }
-                visit(c, op, artboard, clips, out, every);
+                visit(c, (op, edge), artboard, clips, out, every);
             }
             if clipping {
                 clips.pop();
@@ -107,7 +112,7 @@ fn visit(n: &Node, inherited: Op, artboard: Rect, clips: &mut Vec<NodeId>, out: 
             if n.geometric_bounds().is_some_and(|b| !touches(b, artboard)) {
                 return;
             }
-            out.push(Item { id: n.id, op: kind, outline: op == Op::Outline, clips: clips.clone() });
+            out.push(Item { id: n.id, op: kind, outline: op == Op::Outline, stroke_edge: edge == Edge::Stroke, clips: clips.clone() });
         }
     }
 }
