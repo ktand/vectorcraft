@@ -12,7 +12,7 @@ use vectorcraft_cutting::ops::{self, Source};
 use vectorcraft_cutting::placement;
 use vectorcraft_doc::Document;
 
-use super::*;
+use super::{CommandSpec, NodeId, Result, Session, always, bad, check_numbers, checked_ids_or_selection, cmd, f64_or, has_doc, index, str_param};
 
 // Sending the job to a machine (C4.5).
 mod devices;

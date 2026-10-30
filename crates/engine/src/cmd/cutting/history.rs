@@ -18,7 +18,7 @@ use serde_json::{Map, Value, json};
 use vectorcraft_cutjob::{CutJob, CuttingSettings};
 use vectorcraft_cutter::send::{Running, SendError};
 
-use super::*;
+use super::{CommandSpec, Result, Session, always, bad, cmd, has_doc, str_param};
 
 /// Most entries kept.
 pub const MAX_ENTRIES: usize = 50;

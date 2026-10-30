@@ -316,10 +316,8 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         if app.session.active().is_some_and(|d| d.print_tiling) || app.session.tool_id() == "printTiling" {
             print_tiling_overlay(app, &painter, &xf);
         }
-        if app.ui.view.cutting {
-            cutting_overlay::cutting_overlay(app, &painter, &xf);
-            cutting_overlay::playback_bar(app, ui.ctx(), &xf);
-        }
+        // Fork: the cut job and its playback over the art.
+        cutting_overlay::over(app, &painter, &xf, ui.ctx());
         original_path_overlay(app, &painter, &xf);
 
         let overlays = selection_visuals(app, &painter, &xf, (hidden_chars, hover_still), revolve_edit, view_info);
@@ -662,9 +660,7 @@ fn paint_paper(app: &VectorcraftApp, ui: &Ui, painter: &egui::Painter, xf: &Xf, 
     // rounded. The transparency grid, while it shows, covers it as it covers the others.
     painter.rect_filled(rect, 0.0, t.pasteboard);
     // Fork: the cutting mat, behind the artboards and the art.
-    if app.ui.view.cutting {
-        cutting_overlay::mat_plate(app, painter, xf);
-    }
+    cutting_overlay::under(app, painter, xf);
     if !shows_artboards(app) {
         // View › Hide Artboards: no edges and no pasteboard, the whole canvas paper (#4038).
         let setup = &doc.setup;

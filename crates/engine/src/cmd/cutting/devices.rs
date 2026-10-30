@@ -11,7 +11,7 @@ use vectorcraft_cutter::send::{Patience, SendError};
 use vectorcraft_cutter::tools::Fitted;
 use vectorcraft_cutter::{DeviceInfo, Driver, registry};
 
-use super::*;
+use super::{CommandSpec, Result, Session, always, bad, cmd, has_doc, str_param};
 
 const SEND: &str = "cutting.send";
 

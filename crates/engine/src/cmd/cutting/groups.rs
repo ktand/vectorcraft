@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use vectorcraft_cutjob::{GroupSetup, Grouping, MAX_GROUP_NAME, MAX_GROUP_SETUPS};
 use vectorcraft_cutting::setups;
 
-use super::*;
+use super::{CommandSpec, Result, Session, bad, cmd, has_doc, str_param};
 
 const SET: &str = "cutting.group.set";
 const OP_KEYS: [&str; 2] = ["cut", "score"];
