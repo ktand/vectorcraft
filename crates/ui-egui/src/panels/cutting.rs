@@ -351,10 +351,24 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             }
             return;
         }
-        if ui.small_button(tl!("Save as Material…")).clicked() {
-            saving = Some(String::new());
-        }
         let own = current.as_deref().is_some_and(|c| list.iter().any(|(n, b)| n == c && !*b));
+        let changed = info["changed"].as_bool() == Some(true);
+        // C9.4: a changed material of the user's is updated in one click; a changed built-in one
+        // is kept under a name of the user's, offered as its copy.
+        if changed
+            && own
+            && let Some(c) = &current
+            && ui.small_button(format!("{} \u{201C}{c}\u{201D}", tl!("Update"))).on_hover_text(tl!("Keep these settings in the material")).clicked()
+        {
+            error = app.run("cutting.material.save", json!({ "name": c })).err();
+        }
+        if ui.small_button(tl!("Save as Material…")).clicked() {
+            let copy = match &current {
+                Some(c) if changed && !own => format!("{c} ({})", tl!("copy")),
+                _ => String::new(),
+            };
+            saving = Some(copy);
+        }
         if own
             && ui.small_button(tl!("Delete")).clicked()
             && let Some(c) = &current
@@ -596,6 +610,32 @@ mod tests {
         super::super::set_pstate(&ctx, "cutting-material-saving", Some(String::new()));
         let texts = panel_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t == "Material name") && texts.iter().any(|t| t == "Cancel"), "{texts:?}");
+    }
+
+    /// C9.4: a material of the user's changed by hand offers Update "name", which keeps the change
+    /// in it; a built-in one doesn't (it can't be changed), nor does one not changed.
+    #[test]
+    fn a_changed_material_can_be_updated() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        let update = |texts: &[String]| texts.iter().any(|t| t.starts_with("Update \u{201C}"));
+        app.run("cutting.material.apply", json!({"name": "Cardstock"})).unwrap();
+        app.run("cutting.settings.set", json!({"operations": {"cut": {"passes": 3}}})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Changed since the material was chosen.") && !update(&texts), "built-in: {texts:?}");
+        let name = "C9.4 panel test material";
+        app.run("cutting.material.save", json!({"name": name})).unwrap();
+        assert!(!update(&panel_texts(&mut app, &ctx)), "just saved: nothing changed");
+        app.run("cutting.settings.set", json!({"operations": {"cut": {"passes": 5}}})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| *t == format!("Update \u{201C}{name}\u{201D}")), "{texts:?}");
+        // What the button runs: the material keeps the change, the document is on it again.
+        app.run("cutting.material.save", json!({"name": name})).unwrap();
+        let m = app.session.execute("cutting.materials", &json!({})).unwrap();
+        let mine = m["materials"].as_array().unwrap().iter().find(|x| x["name"] == name).unwrap().clone();
+        assert_eq!((mine["cut"]["passes"].clone(), m["changed"].clone()), (json!(5), json!(false)));
+        app.run("cutting.material.delete", json!({"name": name})).unwrap();
     }
 
     /// Window → Workspace → Cutting is the cutting mode: the mat shows, and Cut Settings and
