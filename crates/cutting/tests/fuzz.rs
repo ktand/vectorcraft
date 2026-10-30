@@ -4,6 +4,12 @@
 //! aren't one and settings of any shape. A job that comes back validates, and its simulation,
 //! stats and preview are made without a panic too.
 //!
+//!
+//! C8.7: the data added since reads leniently too: each layer's own setup (`cut:setup`, any text),
+//! the settings' colour setups and weeding, and every random document also goes through the test
+//! cut, the group listing and nesting (on one sheet and onto more). Nesting's packer gets shapes of
+//! any coordinates on its own, and what it places keeps the gap.
+//!
 //! `FUZZ_COUNT=1 cargo test -p vectorcraft-cutting --test fuzz -- --nocapture` prints each case's
 //! outcome, to check how many cases reach a job (about a fifth make one with paths; most of the
 //! rest are documents with a huge coordinate, refused as off the mat).
@@ -89,7 +95,19 @@ fn json_value() -> impl Strategy<Value = Value> {
         any::<bool>().prop_map(Value::from),
         (-1000i64..1000).prop_map(Value::from),
         coord().prop_map(|f| serde_json::Number::from_f64(f).map_or(Value::Null, Value::Number)),
-        prop_oneof![Just("custom"), Just("landscape"), Just("document"), Just("silhouette.12x24"), Just("cut"), Just("none")].prop_map(Value::from),
+        prop_oneof![
+            Just("custom"),
+            Just("landscape"),
+            Just("document"),
+            Just("silhouette.12x24"),
+            Just("cut"),
+            Just("none"),
+            Just("layer"),
+            Just("color"),
+            Just("Cardstock"),
+            Just(""),
+        ]
+        .prop_map(Value::from),
     ];
     let key = prop_oneof![
         Just("mat"),
@@ -106,6 +124,19 @@ fn json_value() -> impl Strategy<Value = Value> {
         Just("score"),
         Just("passes"),
         Just("overcutMm"),
+        Just("grouping"),
+        Just("colorSetups"),
+        Just("material"),
+        Just("printAndCut"),
+        Just("markInsetMm"),
+        Just("weedBox"),
+        Just("weedMarginMm"),
+        Just("weedLines"),
+        Just("weedLineSpacingMm"),
+        Just("bladeOffsetMm"),
+        Just("depth"),
+        Just("#000000"),
+        Just("Gold"),
     ];
     leaf.prop_recursive(3, 32, 6, move |inner| {
         prop_oneof![
@@ -146,12 +177,42 @@ fn build(d: &mut Document, art: &Art) -> Node {
     }
 }
 
+/// A layer beside the first: its name, and what its `cut:setup` says, if anything.
+#[derive(Clone, Debug)]
+struct Layer {
+    name: String,
+    setup: Option<String>,
+}
+
+fn layer() -> impl Strategy<Value = Layer> {
+    let setup = prop_oneof![
+        2 => Just(None),
+        3 => json_value().prop_map(|v| Some(v.to_string())),
+        1 => Just(Some(r#"{"material":"Vinyl","cut":{"force":0.5,"passes":2},"score":{}}"#.to_string())),
+        1 => ".{0,40}".prop_map(Some),
+    ];
+    (prop_oneof![Just("Gold".to_string()), Just("Layer 1".to_string()), ".{0,10}"], setup).prop_map(|(name, setup)| Layer { name, setup })
+}
+
 fn document(objs: &[Obj], settings: &Value) -> Document {
+    document_with(objs, &[], settings)
+}
+
+fn document_with(objs: &[Obj], layers: &[Layer], settings: &Value) -> Document {
     let mut d = Document::new(500.0, 500.0);
     let art = Node::path(d.alloc_id(), PathData::from_bezpath(&bez(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)], true, false)), Appearance::default());
     d.symbols.push(Symbol { name: "s".into(), art: Arc::new(art) });
-    let layer: NodeId = d.layers[0].id;
-    for o in objs {
+    let mut targets: Vec<NodeId> = vec![d.layers[0].id];
+    for l in layers {
+        let mut n = Node::layer(d.alloc_id(), &l.name, vectorcraft_doc::LayerColor::Preset(1));
+        if let Some(v) = &l.setup {
+            let name = vectorcraft_cutting::setups::NAME.to_string();
+            n.edit_attrs(|a| a.foreign.push(ForeignAttribute { ns: NS.into(), prefix: PREFIX.into(), name, value: v.clone() }));
+        }
+        targets.push(d.insert(None, usize::MAX, n).unwrap());
+    }
+    for (k, o) in objs.iter().enumerate() {
+        let layer = targets[k % targets.len()];
         let mut n = build(&mut d, &o.art);
         n.visible = o.visible;
         if let Some(v) = &o.op {
@@ -166,8 +227,32 @@ fn document(objs: &[Obj], settings: &Value) -> Document {
 proptest! {
     /// 256 cases by default; `PROPTEST_CASES=20000` for a longer run.
     #[test]
-    fn any_document_makes_a_job_or_says_why(objs in prop::collection::vec(obj(), 0..8), settings in prop_oneof![Just(json!({})), json_value()]) {
-        let d = document(&objs, &settings);
+    fn any_document_makes_a_job_or_says_why(
+        objs in prop::collection::vec(obj(), 0..8),
+        layers in prop::collection::vec(layer(), 0..3),
+        settings in prop_oneof![Just(json!({})), json_value(), json_value().prop_map(|v| json!({"grouping": "layer", "weedBox": true, "weedLines": true, "colorSetups": {"#000000": v}}))],
+    ) {
+        let d = document_with(&objs, &layers, &settings);
+        // C8.7: the groups, the test cut at each corner, nesting: an answer or a reason, no panic.
+        let s = vectorcraft_cutting::settings(&d);
+        let groups = vectorcraft_cutting::setups::group_names(&d, &s);
+        for g in &groups {
+            let _ = vectorcraft_cutting::setups::setup_of(&d, &s, g);
+        }
+        for (_, corner) in vectorcraft_cutting::test_cut::Corner::CHOICES {
+            if let Ok(job) = vectorcraft_cutting::test_cut::test_job(&d, corner, groups.first().map(String::as_str)) {
+                prop_assert_eq!(job.validate(), Ok(()));
+            }
+        }
+        let pieces = vectorcraft_cutting::nest::default_pieces(&d);
+        if let Ok(n) = vectorcraft_cutting::nest::nest_document(&d, &pieces, vectorcraft_cutting::nest::Options::default()) {
+            for (_, a) in &n.moves {
+                prop_assert!(a.as_coeffs().iter().all(|v| v.is_finite()));
+            }
+        }
+        let mut sheets = d.clone();
+        let _ = vectorcraft_cutting::nest::nest_sheets(&mut sheets, &pieces, vectorcraft_cutting::nest::Options { gap_mm: 1.0, rotate: true });
+        prop_assert!(sheets.artboards.len() <= d.artboards.len() + vectorcraft_cutting::nest::MAX_SHEETS);
         match build_job(&d) {
             Ok(job) => {
                 if std::env::var_os("FUZZ_COUNT").is_some() {
@@ -187,6 +272,77 @@ proptest! {
                 prop_assert!(!e.to_string().is_empty());
             }
         }
+    }
+}
+
+/// A shape for the packer: a rectangle or any points, coordinates of any kind.
+fn raw_shape() -> impl Strategy<Value = vectorcraft_cutting::nest::Shape> {
+    use vectorcraft_cutting::nest::Shape;
+    prop_oneof![
+        4 => (0.0..400.0f64, 0.0..400.0f64, 0.0..120.0f64, 0.0..120.0f64)
+            .prop_map(|(x, y, w, h)| Shape { closed: true, points: vec![[x, y], [x + w, y], [x + w, y + h], [x, y + h]] }),
+        1 => (prop::collection::vec((coord(), coord()), 0..12), any::<bool>())
+            .prop_map(|(p, closed)| Shape { closed, points: p.into_iter().map(|(x, y)| [x, y]).collect() }),
+    ]
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    /// C8.7: the packer takes pieces of any shape, size and coordinates (none, a point, a line,
+    /// not numbers, huge) without a panic, and the rectangles it places lie on the area the gap
+    /// apart from each other.
+    #[test]
+    fn the_packer_takes_any_pieces(
+        pieces in prop::collection::vec(prop::collection::vec(raw_shape(), 0..3), 0..14),
+        fixed in prop::collection::vec(raw_shape(), 0..3),
+        gap in prop_oneof![0.0..10.0f64, Just(f64::NAN), Just(-5.0), Just(1e9)],
+        rotate in any::<bool>(),
+    ) {
+        use vectorcraft_cutjob::RectMm;
+        use vectorcraft_cutting::nest::{Options, nest_within};
+        let area = RectMm { x0: 5.0, y0: 5.0, x1: 305.0, y1: 305.0 };
+        let n = nest_within(&pieces, &fixed, area, Options { gap_mm: gap, rotate }, 20_000_000);
+        prop_assert_eq!(n.placed.len(), pieces.len());
+        let used_gap = if gap.is_finite() { gap.clamp(0.0, 100.0) } else { 2.0 };
+        // The placed pieces made only of rectangles, as rectangles where they went.
+        let mut rects: Vec<RectMm> = vec![];
+        for (shapes, at) in pieces.iter().zip(&n.placed) {
+            let Some(at) = at else { continue };
+            let a = at.affine;
+            prop_assert!(a.iter().all(|v| v.is_finite()));
+            let corners: Vec<[f64; 2]> = shapes.iter().flat_map(|s| s.points.iter()).map(|q| [a[0] * q[0] + a[2] * q[1] + a[4], a[1] * q[0] + a[3] * q[1] + a[5]]).collect();
+            for q in &corners {
+                prop_assert!(q[0] >= area.x0 - 1e-6 && q[1] >= area.y0 - 1e-6 && q[0] <= area.x1 + 1e-6 && q[1] <= area.y1 + 1e-6, "{:?} off the area", q);
+            }
+            if shapes.len() == 1 && shapes[0].points.len() == 4 && shapes[0].closed {
+                let xs = corners.iter().map(|q| q[0]);
+                let ys = corners.iter().map(|q| q[1]);
+                rects.push(RectMm { x0: xs.clone().fold(f64::INFINITY, f64::min), x1: xs.fold(f64::NEG_INFINITY, f64::max), y0: ys.clone().fold(f64::INFINITY, f64::min), y1: ys.fold(f64::NEG_INFINITY, f64::max) });
+            }
+        }
+        for (i, r) in rects.iter().enumerate() {
+            for o in rects.iter().skip(i + 1) {
+                let dx = (o.x0 - r.x1).max(r.x0 - o.x1).max(0.0);
+                let dy = (o.y0 - r.y1).max(r.y0 - o.y1).max(0.0);
+                prop_assert!((dx * dx + dy * dy).sqrt() >= used_gap - 1e-6, "{:?} and {:?} closer than {}", r, o, used_gap);
+            }
+        }
+    }
+
+    /// C8.7: a group's setup read from anything gives the same thing read again after it is
+    /// written: the document keeps what it read.
+    #[test]
+    fn a_group_setup_reads_back_as_it_was_read(v in json_value()) {
+        let defaults = vectorcraft_cutjob::Operations::default();
+        if let Some(g) = vectorcraft_cutjob::GroupSetup::from_value(&v, &defaults) {
+            prop_assert!(g.cut.problem().is_none() && g.score.problem().is_none());
+            prop_assert_eq!(vectorcraft_cutjob::GroupSetup::from_value(&g.to_value(), &defaults), Some(g));
+        }
+        let mut m = Map::new();
+        m.insert("colorSetups".into(), json!({"#000000": v.clone(), "": v.clone(), "x": v}));
+        let s = vectorcraft_cutjob::CuttingSettings::from_value(Some(&Value::Object(m)));
+        prop_assert_eq!(vectorcraft_cutjob::CuttingSettings::from_value(Some(&s.to_value())), s);
     }
 }
 
