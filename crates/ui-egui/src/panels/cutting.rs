@@ -1,9 +1,9 @@
 //! Fork: the Cut Settings panel (`docs/cutting/ARCHITECTURE.md`; the id is still `cutting`, so
 //! saved workspaces open it): the job in a line with Send to Cutter… (the Send window, C7.1, runs
-//! the cut), the document's default operation and groups, the selection's operation, the
-//! material and tool settings, the rarely changed ones behind Advanced (C7.2). The mat and Print &
-//! Cut are the Cutting Mat panel's ([`mat`]). It reads the engine's `cutting.*` queries and acts
-//! through `app.run`, as every panel does.
+//! the cut), the selection's operation, the document's default operation and groups, the
+//! material and tool settings (cut and score side by side, C9.1), the rarely changed ones behind
+//! Advanced (C7.2). The mat and Print & Cut are the Cutting Mat panel's ([`mat`]). It reads the
+//! engine's `cutting.*` queries and acts through `app.run`, as every panel does.
 
 use egui::Ui;
 use serde_json::{Value, json};
@@ -22,6 +22,8 @@ pub const ID: &str = "cutting";
 /// Points per millimetre: the number fields take points and show millimetres.
 const PT: f64 = 72.0 / 25.4;
 const LABEL_W: f32 = 80.0;
+/// A number field in the tool table.
+const CELL_W: f32 = 60.0;
 
 fn set(app: &mut VectorcraftApp, p: Value) {
     // A refusal (a value out of range) leaves the settings as they were; the field shows them.
@@ -163,23 +165,29 @@ fn group_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     widgets::dim_label(ui, tl!("Force and passes of the cut; groups on the document's setup use the tool settings below."));
 }
 
-/// Cut, Score, No Cut or the group's or layer's, for the selected objects.
-fn selection_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+/// Cut, Score, No Cut or the group's or layer's, for the selected objects: a row only while
+/// something is selected (C9.1: one dropdown, at the top).
+fn selection_row(app: &mut VectorcraftApp, ui: &mut Ui) {
     let objects = app.session.execute("cutting.op.get", &json!({})).ok().and_then(|r| r["objects"].as_array().cloned()).unwrap_or_default();
     if objects.is_empty() {
-        widgets::dim_label(ui, tl!("Select objects to choose how they are cut."));
         return;
     }
+    let labels = ["Cut", "Cut Outline", "Score", "No Cut", "As Its Group or Layer"];
+    let ids = ["cut", "outline", "score", "none", "inherit"];
     let all = |f: &dyn Fn(&Value) -> bool| objects.iter().all(f);
-    for (label, op) in [("Cut", "cut"), ("Cut Outline", "outline"), ("Score", "score"), ("No Cut", "none")] {
-        if widgets::radio(ui, label, all(&|o| o["op"] == op), true) {
-            let _ = app.run("cutting.op.set", json!({ "op": op }));
+    let current = if all(&|o| o["source"] != "own") {
+        Some(4)
+    } else if all(&|o| o["source"] == "own") {
+        ids.iter().position(|id| all(&|o| o["op"] == *id))
+    } else {
+        None
+    };
+    let shown = current.and_then(|i| labels.get(i)).copied().unwrap_or("Mixed");
+    widgets::label_row(ui, tl!("Selected"), LABEL_W, |ui| {
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "selection-op"), shown, &labels, 150.0) {
+            let _ = app.run("cutting.op.set", json!({ "op": ids.get(i).copied().unwrap_or("inherit") }));
         }
-    }
-    let inherited = all(&|o| o["source"] != "own");
-    if widgets::radio(ui, "As Its Group or Layer", inherited, true) {
-        let _ = app.run("cutting.op.set", json!({ "op": "inherit" }));
-    }
+    });
 }
 
 /// The settings most cuts leave alone, behind a fold that starts closed: each operation's
@@ -188,34 +196,58 @@ fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     if !fold(ui, "cutting-advanced", tl!("Advanced")) {
         return;
     }
-    for (op, label) in [("cut", "Cut"), ("score", "Score")] {
-        let tool = &info["settings"]["operations"][op];
-        let get = |k: &str, d: f64| tool[k].as_f64().unwrap_or(d);
-        let set_tool = |app: &mut VectorcraftApp, key: &str, v: f64| set(app, json!({ "operations": { op: { key: v } } }));
-        ui.label(egui::RichText::new(tl!(label)).strong());
-        widgets::label_row(ui, tl!("Accel."), LABEL_W, |ui| {
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "accel"), get("accel", 0.0), " (0: machine's)", 0, 72.0, 1.0, 0.0, &[]) {
+    let ops = &info["settings"]["operations"];
+    egui::Grid::new(("cutting", "advanced")).num_columns(3).spacing([8.0, 3.0]).show(ui, |ui| {
+        table_heading(ui);
+        tool_row(ui, "Accel.", "The machine's acceleration steps, 1–3; 0: the machine's own.", |ui, op| {
+            if let Some(v) = cell(ui, op, "accel", "Accel.", ops[op]["accel"].as_f64().unwrap_or(0.0), "", 0, 1.0, 0.0) {
                 set_optional(app, op, "accel", v, 3.0);
             }
         });
-        widgets::label_row(ui, tl!("Corners"), LABEL_W, |ui| {
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "corners"), get("cornerOvercutMm", 0.0), " mm past", 1, 72.0, 0.1, 0.0, &[]) {
-                set_tool(app, "cornerOvercutMm", (v.clamp(0.0, 2.0) * 10.0).round() / 10.0);
+        tool_row(ui, "Corners", "How far past each corner the blade goes, 0–2 mm.", |ui, op| {
+            if let Some(v) = cell(ui, op, "corners", "Corners", ops[op]["cornerOvercutMm"].as_f64().unwrap_or(0.0), " mm", 1, 0.1, 0.0) {
+                set(app, json!({ "operations": { op: { "cornerOvercutMm": (v.clamp(0.0, 2.0) * 10.0).round() / 10.0 } } }));
             }
         });
         // The machine turns the blade round corners by this; the usual blade's until set.
-        let offset = tool["bladeOffsetMm"].as_f64().unwrap_or(silhouette::BLADE_OFFSET_MM);
-        widgets::label_row(ui, tl!("Blade offset"), LABEL_W, |ui| {
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "blade-offset"), offset, " mm", 2, 64.0, 0.05, 0.0, &[]) {
-                set_tool(app, "bladeOffsetMm", (v.clamp(0.0, 2.0) * 20.0).round() / 20.0);
+        tool_row(ui, "Blade offset", "How far the blade's tip trails its axis, 0–2 mm.", |ui, op| {
+            let offset = ops[op]["bladeOffsetMm"].as_f64().unwrap_or(silhouette::BLADE_OFFSET_MM);
+            if let Some(v) = cell(ui, op, "blade-offset", "Blade offset", offset, " mm", 2, 0.05, 0.0) {
+                set(app, json!({ "operations": { op: { "bladeOffsetMm": (v.clamp(0.0, 2.0) * 20.0).round() / 20.0 } } }));
             }
         });
-    }
+    });
     let s = &info["settings"];
     let track = s["trackEnhancing"].as_bool() == Some(true);
     if widgets::check(ui, tl!("Track Enhancing"), track, true) {
         set(app, json!({ "trackEnhancing": !track }));
     }
+}
+
+/// The tool table's heading row: the two operations over their columns.
+fn table_heading(ui: &mut Ui) {
+    ui.label("");
+    for label in ["Cut", "Score"] {
+        ui.label(egui::RichText::new(tl!(label)).strong());
+    }
+    ui.end_row();
+}
+
+/// A row of the tool table: `label` (its range and meaning on hover), then `add` for the cut's
+/// cell and the score's.
+fn tool_row(ui: &mut Ui, label: &str, hover: &str, mut add: impl FnMut(&mut Ui, &'static str)) {
+    widgets::dim_label(ui, tl!(label)).on_hover_text(tl!(hover));
+    for op in ["cut", "score"] {
+        add(ui, op);
+    }
+    ui.end_row();
+}
+
+/// A number cell of the tool table, named for screen readers by its row and operation.
+#[allow(clippy::too_many_arguments)]
+fn cell(ui: &mut Ui, op: &'static str, key: &'static str, row: &str, v: f64, suffix: &str, decimals: usize, step: f64, min: f64) -> Option<f64> {
+    let name = format!("{} {}", if op == "cut" { tl!("Cut") } else { tl!("Score") }, tl!(row));
+    widgets::spin_plain_named(ui, ("cutting", op, key), Some(&name), v, suffix, decimals, CELL_W, step, min, &[])
 }
 
 /// 0: the machine's own setting, sent as nothing.
@@ -301,19 +333,30 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     } else if current.as_deref().is_some_and(|c| list.iter().any(|(n, b)| n == c && *b)) {
         widgets::dim_label(ui, tl!("A starting point: make a test cut first."));
     }
-    let mut name: String = super::pstate(&ctx, "cutting-material-name");
+    // The name field only once Save as Material… is clicked (C9.1).
+    let mut saving: Option<String> = super::pstate(&ctx, "cutting-material-saving");
     let mut error: Option<String> = super::pstate(&ctx, "cutting-material-error");
     ui.horizontal(|ui| {
-        ui.add(egui::TextEdit::singleline(&mut name).hint_text(tl!("Material name")).desired_width(120.0));
-        if ui.add_enabled(!name.trim().is_empty(), egui::Button::new(tl!("Save as Material"))).clicked() {
-            error = app.run("cutting.material.save", json!({ "name": name.trim() })).err();
-            if error.is_none() {
-                name.clear();
+        if let Some(name) = &mut saving {
+            let field = ui.add(egui::TextEdit::singleline(name).hint_text(tl!("Material name")).desired_width(120.0));
+            let entered = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if (ui.add_enabled(!name.trim().is_empty(), egui::Button::new(tl!("Save"))).clicked() || entered) && !name.trim().is_empty() {
+                error = app.run("cutting.material.save", json!({ "name": name.trim() })).err();
+                if error.is_none() {
+                    saving = None;
+                }
+            } else if ui.button(tl!("Cancel")).clicked() {
+                saving = None;
+                error = None;
             }
+            return;
+        }
+        if ui.small_button(tl!("Save as Material…")).clicked() {
+            saving = Some(String::new());
         }
         let own = current.as_deref().is_some_and(|c| list.iter().any(|(n, b)| n == c && !*b));
         if own
-            && ui.button(tl!("Delete")).clicked()
+            && ui.small_button(tl!("Delete")).clicked()
             && let Some(c) = &current
         {
             error = app.run("cutting.material.delete", json!({ "name": c })).err();
@@ -322,57 +365,56 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     if let Some(e) = &error {
         ui.label(egui::RichText::new(e).color(t.bleed));
     }
-    super::set_pstate(&ctx, "cutting-material-name", name);
+    super::set_pstate(&ctx, "cutting-material-saving", saving);
     super::set_pstate(&ctx, "cutting-material-error", error);
 }
 
 /// How each operation drives the blade: force and speed in the machine's own steps (C5.2),
 /// passes, overcut and blade depth, set through `cutting.settings.set` (values typed out of range
-/// are brought into it); the rest is in [`advanced_rows`].
+/// are brought into it); cut and score side by side, their ranges on hover (C9.1); the rest is in
+/// [`advanced_rows`].
 fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     material_rows(app, ui);
-    for (op, label) in [("cut", "Cut"), ("score", "Score")] {
-        let tool = &info["settings"]["operations"][op];
-        let get = |k: &str, d: f64| tool[k].as_f64().unwrap_or(d);
-        let set_tool = |app: &mut VectorcraftApp, key: &str, v: f64| set(app, json!({ "operations": { op: { key: v } } }));
-        ui.label(egui::RichText::new(tl!(label)).strong());
-        // In the machine's own steps (C5.2): what its maker's software and guides use.
-        let (f_lo, f_hi) = silhouette::FORCE;
-        widgets::label_row(ui, tl!("Force"), LABEL_W, |ui| {
-            let step = silhouette::force_step(get("force", 0.3));
-            if let Some(v) =
-                widgets::spin_plain(ui, ("cutting", op, "force"), f64::from(step), &format!(" ({f_lo}–{f_hi})"), 0, 72.0, 1.0, f64::from(f_lo), &[])
-            {
+    let ops = &info["settings"]["operations"];
+    let get = |op: &str, k: &str, d: f64| ops[op][k].as_f64().unwrap_or(d);
+    let set_tool = |app: &mut VectorcraftApp, op: &str, key: &str, v: f64| set(app, json!({ "operations": { op: { key: v } } }));
+    // In the machine's own steps (C5.2): what its maker's software and guides use.
+    let (f_lo, f_hi) = silhouette::FORCE;
+    let (s_lo, s_hi) = silhouette::SPEED;
+    let force_hint = format!("{f_lo}–{f_hi}: {}", tl!("the machine's own force steps"));
+    let speed_hint = format!("{s_lo}–{s_hi}: {}", tl!("the machine's own speed steps"));
+    egui::Grid::new(("cutting", "tools")).num_columns(3).spacing([8.0, 3.0]).show(ui, |ui| {
+        table_heading(ui);
+        tool_row(ui, "Force", &force_hint, |ui, op| {
+            let step = silhouette::force_step(get(op, "force", 0.3));
+            if let Some(v) = cell(ui, op, "force", "Force", f64::from(step), "", 0, 1.0, f64::from(f_lo)) {
                 let step = v.clamp(f64::from(f_lo), f64::from(f_hi)).round() as u32;
-                set_tool(app, "force", silhouette::force_from_step(step));
+                set_tool(app, op, "force", silhouette::force_from_step(step));
             }
         });
-        let (s_lo, s_hi) = silhouette::SPEED;
-        widgets::label_row(ui, tl!("Speed"), LABEL_W, |ui| {
-            let step = silhouette::speed_step(get("speedMmS", 100.0));
-            if let Some(v) =
-                widgets::spin_plain(ui, ("cutting", op, "speed"), f64::from(step), &format!(" ({s_lo}–{s_hi})"), 0, 72.0, 1.0, f64::from(s_lo), &[])
-            {
+        tool_row(ui, "Speed", &speed_hint, |ui, op| {
+            let step = silhouette::speed_step(get(op, "speedMmS", 100.0));
+            if let Some(v) = cell(ui, op, "speed", "Speed", f64::from(step), "", 0, 1.0, f64::from(s_lo)) {
                 let step = v.clamp(f64::from(s_lo), f64::from(s_hi)).round() as u32;
-                set_tool(app, "speedMmS", silhouette::speed_from_step(step));
+                set_tool(app, op, "speedMmS", silhouette::speed_from_step(step));
             }
         });
-        widgets::label_row(ui, tl!("Passes"), LABEL_W, |ui| {
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "passes"), get("passes", 1.0), "", 0, 48.0, 1.0, 1.0, &[]) {
-                set_tool(app, "passes", v.clamp(1.0, 10.0).round());
+        tool_row(ui, "Passes", "1–10 times round each path.", |ui, op| {
+            if let Some(v) = cell(ui, op, "passes", "Passes", get(op, "passes", 1.0), "", 0, 1.0, 1.0) {
+                set_tool(app, op, "passes", v.clamp(1.0, 10.0).round());
             }
         });
-        widgets::label_row(ui, tl!("Overcut"), LABEL_W, |ui| {
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "overcut"), get("overcutMm", 0.0), " mm", 1, 64.0, 0.5, 0.0, &[]) {
-                set_tool(app, "overcutMm", (v.clamp(0.0, 5.0) * 10.0).round() / 10.0);
+        tool_row(ui, "Overcut", "How far past the start a closed path is cut again, 0–5 mm.", |ui, op| {
+            if let Some(v) = cell(ui, op, "overcut", "Overcut", get(op, "overcutMm", 0.0), " mm", 1, 0.5, 0.0) {
+                set_tool(app, op, "overcutMm", (v.clamp(0.0, 5.0) * 10.0).round() / 10.0);
             }
         });
-        widgets::label_row(ui, tl!("Blade depth"), LABEL_W, |ui| {
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", op, "depth"), get("depth", 0.0), " (0: machine's)", 0, 72.0, 1.0, 0.0, &[]) {
+        tool_row(ui, "Blade depth", "The blade's depth setting, 1–10; 0: the machine's own.", |ui, op| {
+            if let Some(v) = cell(ui, op, "depth", "Blade depth", get(op, "depth", 0.0), "", 0, 1.0, 0.0) {
                 set_optional(app, op, "depth", v, 10.0);
             }
         });
-    }
+    });
 }
 
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
@@ -382,6 +424,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     };
     send_rows(app, ui);
     widgets::divider(ui);
+    selection_row(app, ui);
     job_settings_rows(app, ui, &info);
     widgets::divider(ui);
     if info["settings"]["grouping"] != "none" {
@@ -391,9 +434,6 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
     widgets::section_header(ui, tl!("Weeding"));
     weeding_rows(app, ui, &info);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Selection"));
-    selection_rows(app, ui);
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Tool Settings"));
     tool_rows(app, ui, &info);
@@ -525,8 +565,37 @@ mod tests {
         );
         super::super::set_pstate(&ctx, "cutting-advanced", true);
         let texts = panel_texts(&mut app, &ctx);
-        assert_eq!(texts.iter().filter(|t| *t == "Blade offset").count(), 2, "cut and score: {texts:?}");
+        assert_eq!(texts.iter().filter(|t| *t == "Blade offset").count(), 1, "cut and score in one row: {texts:?}");
         assert!(texts.iter().any(|t| t == "Track Enhancing"), "{texts:?}");
+    }
+
+    /// C9.1: cut and score side by side, one row each setting, no range squeezed into a field; the
+    /// selection's operation one dropdown at the top, only with a selection; the material's name
+    /// field only once saving is asked for.
+    #[test]
+    fn the_panel_is_compact() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        for label in ["Force", "Speed", "Passes", "Overcut", "Blade depth"] {
+            assert_eq!(texts.iter().filter(|t| *t == label).count(), 1, "{label}: {texts:?}");
+        }
+        assert!(!texts.iter().any(|t| t.contains("(1–") || t.contains("machine's)")), "{texts:?}");
+        assert!(!texts.iter().any(|t| t == "Selected"), "nothing selected: {texts:?}");
+        assert!(texts.iter().any(|t| t == "Save as Material…") && !texts.iter().any(|t| t == "Material name"), "{texts:?}");
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        let at = |label: &str| texts.iter().position(|t| t == label).unwrap();
+        assert!(at("Selected") < at("Default"), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "As Its Group or Layer"), "{texts:?}");
+        app.run("cutting.op.set", json!({"op": "score"})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        let i = texts.iter().position(|t| t == "Selected").unwrap();
+        assert_eq!(texts.get(i + 1).map(String::as_str), Some("Score"), "{texts:?}");
+        super::super::set_pstate(&ctx, "cutting-material-saving", Some(String::new()));
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Material name") && texts.iter().any(|t| t == "Cancel"), "{texts:?}");
     }
 
     /// Window → Workspace → Cutting is the cutting mode: the mat shows, and Cut Settings and

@@ -162,6 +162,12 @@ pub const UI_COMMANDS: &[(&str, &str, &str, &str)] = &[
     // Fork: the cutting workspace.
     ("view.cutting", "Cutting View", "", "{} toggle: draw the cutting mat (cutting.settings.get) over the art, with a millimetre grid"),
     (
+        "view.cutting.toolpaths",
+        "Show Toolpaths",
+        "",
+        "{} toggle: in Cutting View, draw the cut job's toolpaths in cutting order, with the playback bar",
+    ),
+    (
         "cutting.sendWindow",
         "Send to Cutter…",
         "Cmd+Alt+Shift+C",
