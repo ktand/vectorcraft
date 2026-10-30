@@ -4,9 +4,9 @@
 //! that cross the art next to the hole are taken out of the art. Cutting what is left cuts round
 //! each letter in parts, and the counter stays on the sheet, held by the bridges.
 //!
-//! The art is taken as filled, as [`crate::contour`] takes it: each object's closed outlines from
-//! the cutting geometry, even-odd within the object, all objects united. Lines and strokes have no
-//! area and add nothing. The result is in document points; the engine adds it as a path.
+//! The art is taken as filled, as it is cut: each object's closed outlines from the cutting
+//! geometry (round its stroke when it is set to its stroke's edge, [`crate::edge`]), even-odd
+//! within the object, all objects united. Open lines have no area and add nothing. The result is in document points; the engine adds it as a path.
 
 use std::collections::BTreeMap;
 
@@ -109,7 +109,10 @@ pub fn bridged(d: &Document, ids: &[NodeId], opt: Options) -> Result<Bridged, St
 
 /// The filled area of the art under `ids`: each object's closed outlines even-odd, all united.
 fn area(d: &Document, ids: &[NodeId]) -> Result<PathData, String> {
-    let items = crate::select::art_under(d, ids);
+    let mut items = crate::select::art_under(d, ids);
+    for item in &mut items {
+        item.stroke_edge = crate::edge::resolve(d, item.id).is_some_and(|(e, _)| e == crate::edge::Edge::Stroke);
+    }
     let (outlines, _) = crate::geometry::outlines(d, &items);
     if outlines.len() > MAX_OUTLINES {
         return Err(format!("at most {MAX_OUTLINES} outlines can be bridged at once"));
@@ -241,6 +244,20 @@ mod tests {
         let b = bridged(&d, &ids, Options { width_mm: mm(4.0), direction: Direction::Vertical }).unwrap();
         assert_eq!(b.bridges, 2, "the ring's only: {b:?}");
         assert_eq!(b.path.subpaths.len(), 3, "two halves and the island");
+    }
+
+    /// A stroked circle set to its stroke's edge is a ring: bridged; along its path it is a disc.
+    #[test]
+    fn a_stroke_edge_is_bridged_as_cut() {
+        let (mut d, ids) = doc_with(|d| {
+            let a = Appearance::basic(Paint::None, Paint::solid(Color::BLACK), 20.0);
+            vec![Node::path(d.alloc_id(), shapes::ellipse(Rect::new(0.0, 0.0, 100.0, 100.0)), a)]
+        });
+        let b = bridged(&d, &ids, Options::default()).unwrap();
+        assert_eq!((b.bridges, b.path.subpaths.len()), (0, 1), "a disc");
+        crate::edge::set_own_edge(d.node_mut(ids[0]).unwrap(), Some(crate::edge::Edge::Stroke));
+        let b = bridged(&d, &ids, Options::default()).unwrap();
+        assert_eq!((b.bridges, b.path.subpaths.len()), (2, 2), "a ring in two halves");
     }
 
     #[test]

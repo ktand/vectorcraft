@@ -172,7 +172,8 @@ middles joined to the sheet by narrow bridges:
 - **Bridges:** how wide each bridge is (default 1.5 mm). Wider holds better; narrower shows less.
 - **Direction:** **Vertical** puts a bridge above and below each hole, **Horizontal** one either side.
 
-The art is taken as filled shapes (type, paths, symbols); lines without a fill have no middle to keep. The bridged
+The art is taken as filled shapes, as it is cut: a closed shape counts as filled whatever its paint, an object set
+to Cut Along › Stroke Edge counts as its stroke, and open lines add nothing. The bridged
 shape, named **Stencil**, is added above the art and is what's cut. The art is hidden and set to No Cut, so you
 see what will be cut. Undo takes the stencil away and brings the art back. If the panel says holes were missed
 (a bar through a hole's middle doesn't cross the art beside it, as in some odd shapes), try the other direction.

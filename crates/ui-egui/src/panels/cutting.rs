@@ -31,7 +31,7 @@ fn set(app: &mut VectorcraftApp, p: Value) {
 }
 
 fn mm_field(ui: &mut Ui, id: &'static str, mm: f64, min_mm: f64) -> Option<f64> {
-    widgets::spin_field(ui, ("cutting", id), Some(mm * PT), Unit::Millimeters, 64.0, PT, min_mm * PT, &[]).map(|pt| pt / PT)
+    widgets::spin_field(ui, ("cutting", id), Some(mm * PT), Unit::Millimeters, 72.0, PT, min_mm * PT, &[]).map(|pt| pt / PT)
 }
 
 /// What the document cuts by default and how it groups the cut.
