@@ -47,7 +47,9 @@ fn a_square_as_bytes() {
     let e = Silhouette.encode(&j, &cameo4()).unwrap();
     let got = e.chunks.concat();
     let mut want = vec![0x1B, 0x04];
-    for c in ["TG1", "FN0", "TB50,0", "J1", "FX17,1", "!10,1", "FC18,1,1", "M400,200", "D400,400", "D600,400", "D600,200", "D400,200", "M600,0", "SO0"] {
+    for c in
+        ["TG1", "FN0", "TB50,0", "J1", "FX17,1", "!10,1", "FC18,1,1", "M400,200", "D400,400", "D600,400", "D600,200", "D400,200", "M600,0", "SO0"]
+    {
         want.extend(c.as_bytes());
         want.push(0x03);
     }
