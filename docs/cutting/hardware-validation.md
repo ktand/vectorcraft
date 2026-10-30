@@ -9,7 +9,8 @@ The steps to confirm on a real Cameo 4 what the encoder takes from the
 settings until step 3 has passed. Each step says what to note; a word or a number is enough. Afterwards, mark the
 matching facts in the protocol notes as confirmed (or correct them), or pass the notes on.
 
-Steps 1–3 must pass before the rest; after that, any step can be skipped or done on another day.
+Steps 1–3 must pass before the rest; after that, any step can be skipped or done on another day. Where each
+control is and what it does: the [user guide](user-guide.md).
 
 ## Results at a glance
 
