@@ -88,6 +88,52 @@ fn weeding_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     }
 }
 
+/// What the Contour section keeps between frames: the distance and holes asked for, and what the
+/// last Add Contour said.
+#[derive(Clone, Debug)]
+struct ContourChoice {
+    offset_mm: f64,
+    holes: bool,
+    note: Option<(bool, String)>,
+}
+
+impl Default for ContourChoice {
+    fn default() -> Self {
+        ContourChoice { offset_mm: vectorcraft_cutting::contour::DEFAULT_OFFSET_MM, holes: false, note: None }
+    }
+}
+
+/// A cut line round the selected art (C11.1): how far out, whether holes are kept, and Add
+/// Contour (`cutting.contour`, one undo step; the art set to No Cut).
+fn contour_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut c: ContourChoice = super::pstate(&ctx, "cutting-contour");
+    widgets::label_row(ui, tl!("Offset"), LABEL_W, |ui| {
+        if let Some(v) = mm_field(ui, "contour-offset", c.offset_mm, 0.0) {
+            c.offset_mm = v.clamp(0.0, vectorcraft_cutting::contour::MAX_OFFSET_MM);
+        }
+    });
+    if widgets::check(ui, tl!("Keep Holes"), c.holes, true) {
+        c.holes = !c.holes;
+    }
+    let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
+    if ui
+        .add_enabled(selected, egui::Button::new(tl!("Add Contour")))
+        .on_hover_text(tl!("A cut line round the selected art; the art itself is set to No Cut."))
+        .clicked()
+    {
+        c.note = Some(match app.run("cutting.contour", json!({ "offsetMm": c.offset_mm, "holes": c.holes })) {
+            Ok(r) => (false, format!("{} {}", r["pieces"], tl!("contour lines on the Cut Contour layer"))),
+            Err(e) => (true, e),
+        });
+    }
+    if let Some((bad, note)) = &c.note {
+        ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
+    }
+    super::set_pstate(&ctx, "cutting-contour", c);
+}
+
 /// A group row's material choices: the document's setup first, then every material.
 fn group_choices(app: &mut VectorcraftApp) -> Vec<String> {
     let listed = app.session.execute("cutting.materials", &json!({})).unwrap_or_default();
@@ -475,6 +521,9 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::section_header(ui, tl!("Weeding"));
     weeding_rows(app, ui, &info);
     widgets::divider(ui);
+    widgets::section_header(ui, tl!("Contour"));
+    contour_rows(app, ui);
+    widgets::divider(ui);
     widgets::section_header(ui, tl!("Tool Settings"));
     tool_rows(app, ui, &info);
     advanced_rows(app, ui, &info);
@@ -678,6 +727,22 @@ mod tests {
         let texts = panel_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t == "Rotary blade") && texts.iter().any(|t| t == "Cut: holder 1 · Score: holder 2"), "{texts:?}");
         assert!(texts.iter().any(|t| t == "—"), "no depth for the rotary blade: {texts:?}");
+    }
+
+    /// C11.1: the Contour section; Add Contour works on the selection.
+    #[test]
+    fn the_panel_adds_a_contour() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(
+            texts.iter().any(|t| t == "Contour") && texts.iter().any(|t| t == "Add Contour") && texts.iter().any(|t| t == "Keep Holes"),
+            "{texts:?}"
+        );
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        app.run("cutting.contour", json!({"offsetMm": 2})).unwrap();
+        assert!(app.session.active().unwrap().doc.layers.iter().any(|l| l.name.as_deref() == Some("Cut Contour")));
     }
 
     /// Window → Workspace → Cutting is the cutting mode: the mat shows, and Cut Settings and

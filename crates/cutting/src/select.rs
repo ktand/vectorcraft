@@ -36,7 +36,7 @@ pub fn select(d: &Document, s: &CuttingSettings) -> Vec<Item> {
     let mut out = vec![];
     let mut clips = vec![];
     for layer in &d.layers {
-        visit(layer, s.default_op, artboard, &mut clips, &mut out);
+        visit(layer, s.default_op, artboard, &mut clips, &mut out, false);
     }
     out
 }
@@ -48,7 +48,21 @@ pub fn select_everywhere(d: &Document, s: &CuttingSettings) -> Vec<Item> {
     let mut out = vec![];
     let mut clips = vec![];
     for layer in &d.layers {
-        visit(layer, s.default_op, everywhere, &mut clips, &mut out);
+        visit(layer, s.default_op, everywhere, &mut clips, &mut out, false);
+    }
+    out
+}
+
+/// The visible art in and under `ids`, wherever it lies and whatever it is set to cut as (C11.1:
+/// what a contour goes round), each as a cut.
+pub fn art_under(d: &Document, ids: &[NodeId]) -> Vec<Item> {
+    let everywhere = Rect::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::INFINITY);
+    let mut out = vec![];
+    let mut clips = vec![];
+    for id in ids {
+        if let Some(n) = d.node(*id) {
+            visit(n, Op::Cut, everywhere, &mut clips, &mut out, true);
+        }
     }
     out
 }
@@ -58,11 +72,12 @@ fn clips_children(n: &Node) -> bool {
     matches!(n.kind, NodeKind::Group { clip: true, .. } | NodeKind::Layer { clip: true, .. })
 }
 
-fn visit(n: &Node, inherited: Op, artboard: Rect, clips: &mut Vec<NodeId>, out: &mut Vec<Item>) {
+/// `every`: every object, whatever it is set to cut as (each as a cut).
+fn visit(n: &Node, inherited: Op, artboard: Rect, clips: &mut Vec<NodeId>, out: &mut Vec<Item>, every: bool) {
     if !n.visible || n.is_template() {
         return;
     }
-    let op = own_op(n).unwrap_or(inherited);
+    let op = if every { Op::Cut } else { own_op(n).unwrap_or(inherited) };
     match &n.kind {
         NodeKind::Layer { children, .. } | NodeKind::Group { children, .. } | NodeKind::Intertwine { children } => {
             let clipping = clips_children(n);
@@ -74,7 +89,7 @@ fn visit(n: &Node, inherited: Op, artboard: Rect, clips: &mut Vec<NodeId>, out: 
                 if clipping && i == 0 {
                     continue;
                 }
-                visit(c, op, artboard, clips, out);
+                visit(c, op, artboard, clips, out, every);
             }
             if clipping {
                 clips.pop();

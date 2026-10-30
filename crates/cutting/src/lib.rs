@@ -23,6 +23,7 @@
 #![forbid(unsafe_code)]
 
 pub mod clip;
+pub mod contour;
 pub mod corners;
 pub mod geometry;
 pub mod group;

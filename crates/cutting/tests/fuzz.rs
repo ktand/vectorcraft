@@ -256,6 +256,13 @@ proptest! {
         let mut sheets = d.clone();
         let _ = vectorcraft_cutting::nest::nest_sheets(&mut sheets, &pieces, vectorcraft_cutting::nest::Options { gap_mm: 1.0, rotate: true });
         prop_assert!(sheets.artboards.len() <= d.artboards.len() + vectorcraft_cutting::nest::MAX_SHEETS);
+        // C11.1: a contour round everything, holes or not: a path of closed lines or a reason.
+        let all: Vec<NodeId> = d.layers.iter().map(|l| l.id).collect();
+        for holes in [false, true] {
+            if let Ok(c) = vectorcraft_cutting::contour::contour(&d, &all, vectorcraft_cutting::contour::Options { offset_mm: 2.0, holes }) {
+                prop_assert!(c.subpaths.iter().all(|s| s.anchors.iter().all(|a| a.p.x.is_finite() && a.p.y.is_finite())));
+            }
+        }
         match build_job(&d) {
             Ok(job) => {
                 if std::env::var_os("FUZZ_COUNT").is_some() {
