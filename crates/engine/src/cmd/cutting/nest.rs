@@ -5,7 +5,7 @@
 use serde_json::{Value, json};
 use vectorcraft_cutting::nest::{Options, default_pieces, nest_document, nest_sheets};
 
-use super::*;
+use super::{CommandSpec, Result, Session, bad, check_numbers, cmd, has_doc};
 
 const NEST: &str = "cutting.nest";
 

@@ -41,7 +41,7 @@ Steps 1–3 must pass before the rest; after that, any step can be skipped or do
    history, which step 14 looks at.
 4. Window › Workspace › **Cutting**. On the right: Layers, then **Cut Settings** and **Cutting Mat** as two tabs.
    If your Cutting workspace looks different (saved before C9.1), Window › Workspace › Reset Cutting.
-5. **Send to Cutter…** at the top of Cut Settings (or File › Send to Cutter…, Ctrl+Alt+Shift+C) opens the Send
+5. **Send to Cutter…** at the top of Cut Settings (or File › Send to Cutter…, Ctrl+Alt+Shift+X) opens the Send
    window: the mat preview on the left; the job, the machine, **Send**, the test cut and the history on the
    right. It should name the machine ("Cameo 4"); if it says no cutter is connected, press **Find Cutters**. The
    window can stay open beside the art; drag its corner to make the preview larger.

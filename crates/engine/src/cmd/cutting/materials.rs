@@ -10,7 +10,7 @@ use std::sync::{Mutex, OnceLock};
 use serde_json::{Value, json};
 use vectorcraft_cutjob::{CuttingSettings, Material, ToolSettings, builtin_materials, read_materials, valid_name};
 
-use super::*;
+use super::{CommandSpec, Result, Session, bad, cmd, has_doc, str_param};
 
 /// The largest materials file read, bytes.
 const MAX_FILE: u64 = 1 << 20;

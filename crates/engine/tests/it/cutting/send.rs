@@ -1,9 +1,11 @@
 //! C4.5: sending the cut job to a machine, here a recording stand-in for a Cameo 4 that answers
 //! ready. One test: the device registry is the process's.
 
+use std::path::Path;
 use std::sync::Arc;
 
 use serde_json::{Value, json};
+use vectorcraft_cutter::simulated::Sent;
 use vectorcraft_cutter::{DeviceInfo, DeviceProvider, MemoryTransport, Transport, TransportError, registry};
 use vectorcraft_engine::Session;
 
@@ -41,7 +43,20 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     vectorcraft_engine::cmd::cutting::history::attach(dir.join("History.json"));
     let mut s = Session::new();
     s.execute("file.new", &json!({"width": 300, "height": 300})).unwrap();
+    // In order: each step goes on from the document and machine the one before left.
+    sends_and_says_why(&mut s);
+    pauses_between_groups(&mut s);
+    let sent = print_and_cut(&mut s);
+    test_cut(&mut s, &sent);
+    let entries = history(&mut s, &dir);
+    send_again(&mut s, &entries);
+    tools_fitted(&mut s);
+    damaged_history(&mut s, &dir);
+    let _ = std::fs::remove_dir_all(&dir);
+}
 
+/// No machine, no art, no mat: each said plainly; a send to the end.
+fn sends_and_says_why(s: &mut Session) {
     // No machine: nothing to send to, said plainly.
     registry::install(None);
     assert_eq!(s.execute("cutting.devices", &json!({})).unwrap()["devices"], json!([]));
@@ -61,12 +76,12 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     assert_eq!((r["device"].clone(), r["model"].clone()), (json!("usb-cameo"), json!("Cameo 4")));
     assert!(r["chunks"].as_u64().unwrap() >= 1);
     for _ in 0..500 {
-        if !status(&mut s)["sending"].as_bool().unwrap() {
+        if !status(s)["sending"].as_bool().unwrap() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    let st = status(&mut s);
+    let st = status(s);
     assert_eq!((st["outcome"].clone(), st["device"].clone()), (json!("done"), json!("Silhouette CAMEO 4")));
     assert_eq!(st["chunksSent"], st["chunks"]);
     let written = cameo.written();
@@ -79,15 +94,17 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     registry::install(Some(Arc::new(FakeCameo(unloaded))));
     s.execute("cutting.send", &json!({"device": "usb-cameo"})).unwrap();
     for _ in 0..500 {
-        if !status(&mut s)["sending"].as_bool().unwrap() {
+        if !status(s)["sending"].as_bool().unwrap() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    assert_eq!(status(&mut s)["outcome"], json!("load the mat into the cutter first"));
+    assert_eq!(status(s)["outcome"], json!("load the mat into the cutter first"));
     assert!(s.execute("cutting.send", &json!({"device": "usb-other"})).unwrap_err().to_string().contains("no cutter \"usb-other\""));
+}
 
-    // C5.3: cut by layer, the send pauses before the second layer and goes on when told.
+/// C5.3: cut by layer, the send pauses before the second layer and goes on when told.
+fn pauses_between_groups(s: &mut Session) {
     s.execute("layer.new", &json!({"name": "Gold"})).unwrap();
     s.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 50, "height": 50})).unwrap();
     s.execute("cutting.settings.set", &json!({"grouping": "layer"})).unwrap();
@@ -96,26 +113,29 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     assert_eq!(s.execute("cutting.continue", &json!({})).unwrap()["continued"], json!(false), "nothing waiting yet");
     s.execute("cutting.send", &json!({})).unwrap();
     for _ in 0..500 {
-        if !status(&mut s)["waitingFor"].is_null() {
+        if !status(s)["waitingFor"].is_null() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    let st = status(&mut s);
+    let st = status(s);
     assert_eq!((st["waitingFor"].clone(), st["sending"].clone()), (json!("Gold"), json!(true)));
     assert_eq!(s.execute("cutting.continue", &json!({})).unwrap()["continued"], json!(true));
     for _ in 0..500 {
-        if !status(&mut s)["sending"].as_bool().unwrap() {
+        if !status(s)["sending"].as_bool().unwrap() {
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    let st = status(&mut s);
+    let st = status(s);
     assert_eq!((st["outcome"].clone(), st["waitingFor"].clone()), (json!("done"), Value::Null));
     assert!(grouped.written().ends_with(b"SO0"));
+}
 
-    // C6.2: Print & Cut. A machine that answers the search with anything but "found" stops the
-    // job there; the simulated Cameo finds its marks and the job goes on to the end.
+/// C6.2: Print & Cut. A machine that answers the search with anything but "found" stops the
+/// job there; the simulated Cameo finds its marks and the job goes on to the end. What it was
+/// sent, for the test cut after.
+fn print_and_cut(s: &mut Session) -> Sent {
     s.execute("file.new", &json!({"width": 300, "height": 300})).unwrap();
     s.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 50, "height": 50})).unwrap();
     s.execute("cutting.settings.set", &json!({"printAndCut": true})).unwrap();
@@ -123,7 +143,7 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     let blind = MemoryTransport::answering(b"0");
     registry::install(Some(Arc::new(FakeCameo(blind.clone()))));
     s.execute("cutting.send", &json!({})).unwrap();
-    let st = finished(&mut s);
+    let st = finished(s);
     assert!(st["outcome"].as_str().unwrap().contains("didn't find the registration marks"), "{st}");
     assert!(String::from_utf8_lossy(&blind.written()).contains("TB123,"));
     assert!(!blind.written().ends_with(b"SO0"), "nothing cut");
@@ -133,30 +153,36 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     let sent = sim.sent.clone();
     registry::install(Some(Arc::new(sim)));
     s.execute("cutting.send", &json!({})).unwrap();
-    assert_eq!(finished(&mut s)["outcome"], json!("done"));
+    assert_eq!(finished(s)["outcome"], json!("done"));
     assert!(sent.bytes().ends_with(b"SO0"));
+    sent
+}
 
-    // C8.1: the test cut, on the simulated machine: the two shapes at the corner asked for, the
-    // design's own paths left alone; at the corner the design is in, a warning first.
+/// C8.1: the test cut, on the simulated machine: the two shapes at the corner asked for, the
+/// design's own paths left alone; at the corner the design is in, a warning first.
+fn test_cut(s: &mut Session, sent: &Sent) {
     s.execute("file.new", &json!({"width": 300, "height": 300})).unwrap();
     s.execute("shape.rectangle", &json!({"x": 0, "y": 0, "width": 100, "height": 100})).unwrap();
     let before = sent.bytes().len();
     let r = s.execute("cutting.test", &json!({"corner": "bottomRight"})).unwrap();
     assert!(!r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("lands on the design")), "{r}");
-    assert_eq!(finished(&mut s)["outcome"], json!("done"));
+    assert_eq!(finished(s)["outcome"], json!("done"));
     let cut = String::from_utf8_lossy(&sent.bytes()[before..]).to_string();
     assert_eq!(cut.split('\u{3}').filter(|c| c.starts_with('D')).count(), 3 + 4, "the triangle's and the square's strokes: {cut:?}");
     let r = s.execute("cutting.test", &json!({"corner": "topLeft"})).unwrap();
     assert!(r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("lands on the design")), "{r}");
-    finished(&mut s);
+    finished(s);
     assert!(s.execute("cutting.test", &json!({"corner": "middle"})).is_err());
     let j = s.execute("cutting.test.job", &json!({"corner": "topRight"})).unwrap();
     assert_eq!(j["job"]["paths"].as_array().unwrap().len(), 2);
     registry::install(None);
     assert!(s.execute("cutting.test", &json!({})).unwrap_err().to_string().contains("no cutter is connected"));
+}
 
-    // C8.4: the history, newest first: the test cuts, the Print & Cut that didn't find its marks
-    // with a report to share, the sends before; kept in the file, and read back from it.
+/// C8.4: the history, newest first: the test cuts, the Print & Cut that didn't find its marks
+/// with a report to share, the sends before; kept in the file, and read back from it; an entry's
+/// settings used, one undo step. The entries, newest first.
+fn history(s: &mut Session, dir: &Path) -> Vec<Value> {
     let h = s.execute("cutting.history", &json!({})).unwrap();
     let entries = h["entries"].as_array().unwrap().clone();
     assert!(entries.len() >= 5, "{h}");
@@ -183,8 +209,12 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     s.execute("edit.undo", &json!({})).unwrap();
     assert_eq!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"]["passes"], json!(5));
     assert!(s.execute("cutting.history.apply", &json!({"index": 999})).is_err());
+    entries
+}
 
-    // C8.8: send an entry again. Only for the document it was cut from, and with a machine.
+/// C8.8: send an entry again. Only for the document it was cut from, and with a machine.
+fn send_again(s: &mut Session, entries: &[Value]) {
+    let newest = &entries[0];
     let title = newest["document"].clone();
     let other = entries.iter().find(|e| e["document"] != title).unwrap();
     let e = s.execute("cutting.history.send", &json!({"index": other["index"]})).unwrap_err().to_string();
@@ -200,19 +230,19 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     // A test cut again: at the same corner, a test cut in the history again.
     let r = s.execute("cutting.history.send", &json!({"index": newest["index"]})).unwrap();
     assert!(r["warnings"].as_array().unwrap().iter().any(|w| w.as_str().unwrap().contains("lands on the design")), "top left again: {r}");
-    assert_eq!(finished(&mut s)["outcome"], json!("done"));
+    assert_eq!(finished(s)["outcome"], json!("done"));
     let again = s.execute("cutting.history", &json!({})).unwrap()["entries"][0].clone();
     assert_eq!((again["test"].clone(), again["corner"].clone()), (json!(true), json!("topLeft")));
     // A cut again: with the passes it was cut with, one undo step.
     s.execute("cutting.settings.set", &json!({"operations": {"cut": {"passes": 3}}})).unwrap();
     s.execute("cutting.send", &json!({})).unwrap();
-    finished(&mut s);
+    finished(s);
     let cut = s.execute("cutting.history", &json!({})).unwrap()["entries"][0].clone();
     assert_eq!(cut["test"], json!(false));
     s.execute("cutting.settings.set", &json!({"operations": {"cut": {"passes": 1}}})).unwrap();
     let r = s.execute("cutting.history.send", &json!({"index": cut["index"]})).unwrap();
     assert_eq!(r["applied"], json!(true));
-    assert_eq!(finished(&mut s)["outcome"], json!("done"));
+    assert_eq!(finished(s)["outcome"], json!("done"));
     assert_eq!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"]["passes"], json!(3));
     s.execute("edit.undo", &json!({})).unwrap();
     assert_eq!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"]["passes"], json!(1));
@@ -221,10 +251,12 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     s.execute("edit.clear", &json!({})).unwrap();
     assert!(s.execute("cutting.history.send", &json!({"index": cut["index"]})).unwrap_err().to_string().contains("nothing to cut"));
     assert_eq!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"]["passes"], json!(1));
+}
 
-    // C10.3: which tools are fitted. The simulated Cameo 4 has the AutoBlade in holder 1 and
-    // nothing in holder 2; a job that needs the rotary blade is warned about. A machine
-    // answering with codes this version doesn't know, or nothing, is read as far as it goes.
+/// C10.3: which tools are fitted. The simulated Cameo 4 has the AutoBlade in holder 1 and
+/// nothing in holder 2; a job that needs the rotary blade is warned about. A machine answering
+/// with codes this version doesn't know, or nothing, is read as far as it goes.
+fn tools_fitted(s: &mut Session) {
     s.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
     let t = s.execute("cutting.tools", &json!({})).unwrap();
     assert_eq!((t["canTell"].clone(), t["answered"].clone()), (json!(true), json!(true)), "{t}");
@@ -247,8 +279,11 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     assert_eq!((t["holders"][0]["tool"].clone(), t["holders"][1]["tool"].clone()), (json!("kraft2"), json!("kraft3")), "by holder");
     registry::install(None);
     assert!(s.execute("cutting.tools", &json!({})).unwrap_err().to_string().contains("no cutter is connected"));
+}
 
-    // A damaged file gives what it can.
+/// A damaged history file gives what it can (C8.4); C8.7: a file of anything reads without a
+/// panic, at most the cap, and lists, and the entries' settings can be used whatever they say.
+fn damaged_history(s: &mut Session, dir: &Path) {
     std::fs::write(dir.join("History.json"), b"[{\"outcome\": \"done\"}, 7, \"junk\"]").unwrap();
     vectorcraft_engine::cmd::cutting::history::attach(dir.join("History.json"));
     assert_eq!(s.execute("cutting.history", &json!({})).unwrap()["entries"].as_array().unwrap().len(), 1);
@@ -284,5 +319,4 @@ fn the_job_goes_to_the_cutter_in_the_background() {
             let _ = s.execute("cutting.history.apply", &json!({"index": e["index"]}));
         }
     }
-    let _ = std::fs::remove_dir_all(&dir);
 }

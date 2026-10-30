@@ -16,7 +16,23 @@
 use vectorcraft_cutjob::RectMm;
 use vectorcraft_cutting::placement::{self, MM_PER_PT, Placement};
 
-use super::*;
+use super::{Color32, Point, Pos2, Shape, Stroke, Tokens, VectorcraftApp, Xf, pos2, vec2};
+
+/// What Cutting View draws under the art (the canvas's hook): the mat.
+pub(super) fn under(app: &VectorcraftApp, painter: &egui::Painter, xf: &Xf) {
+    if app.ui.view.cutting {
+        mat_plate(app, painter, xf);
+    }
+}
+
+/// What Cutting View draws over the art (the canvas's hook): the job's overlay and the
+/// playback bar.
+pub(super) fn over(app: &VectorcraftApp, painter: &egui::Painter, xf: &Xf, ctx: &egui::Context) {
+    if app.ui.view.cutting {
+        cutting_overlay(app, painter, xf);
+        playback_bar(app, ctx, xf);
+    }
+}
 
 /// Grid lines closer than this on screen are left out, px.
 const MIN_GAP_PX: f64 = 6.0;
