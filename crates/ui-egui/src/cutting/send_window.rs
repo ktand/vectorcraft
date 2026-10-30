@@ -15,10 +15,15 @@ use crate::widgets;
 pub(crate) const COMMAND: &str = "cutting.sendWindow";
 /// Most of a job's warnings the window lists before "n more".
 const SHOWN_WARNINGS: usize = 12;
-/// The most room the mat preview takes, px (it keeps the mat's proportions).
-const PREVIEW: egui::Vec2 = egui::vec2(320.0, 440.0);
-/// The column beside it, px.
+/// The least room the mat preview gets, px (it keeps the mat's proportions); it takes what the
+/// window leaves it (C9.2: the window is resizable, and opens three quarters of the app's height).
+const PREVIEW_MIN: egui::Vec2 = egui::vec2(240.0, 300.0);
+/// The share of the app window's height the window opens at.
+const OPEN_HEIGHT: f32 = 0.75;
+/// The column beside the preview, px.
 const SIDE_W: f32 = 250.0;
+/// Between the preview and the column, px.
+const GAP: f32 = 12.0;
 
 fn open_key() -> egui::Id {
     egui::Id::unique("cutting-send-window-open")
@@ -84,29 +89,42 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
         return;
     }
     let mut open = true;
+    // Opens with the preview three quarters of the app's height, as wide as the mat makes it.
+    let screen = ctx.content_rect();
+    let preview_h = (screen.height() * OPEN_HEIGHT - 40.0).max(PREVIEW_MIN.y);
+    let preview_w = crate::canvas::cutting_overlay::preview_size(app, screen.width(), preview_h).x.max(PREVIEW_MIN.x);
+    let min = egui::vec2(PREVIEW_MIN.x + GAP + SIDE_W, PREVIEW_MIN.y);
     egui::Window::new(tl!("Send to Cutter"))
         .id(egui::Id::unique("cutting-send-window"))
         .open(&mut open)
         .collapsible(false)
-        .resizable(false)
+        .resizable(true)
+        .min_size(min)
+        .default_size(egui::vec2(preview_w + GAP + SIDE_W, preview_h))
         .pivot(egui::Align2::CENTER_CENTER)
-        .default_pos(ctx.content_rect().center())
+        .default_pos(screen.center())
         .show(ctx, |ui| {
+            let room = ui.available_size().max(min);
             ui.horizontal_top(|ui| {
-                let size = crate::canvas::cutting_overlay::preview_size(app, PREVIEW.x, PREVIEW.y);
+                // The preview fills what the column leaves, the mat's proportions kept.
+                let size = crate::canvas::cutting_overlay::preview_size(app, room.x - GAP - SIDE_W, room.y);
                 let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
                 ui.painter().rect_filled(rect, 4.0, Tokens::get(ui.ctx()).pasteboard);
                 crate::canvas::cutting_overlay::preview(app, ui.painter(), rect);
+                ui.add_space((GAP - ui.spacing().item_spacing.x).max(0.0));
                 ui.vertical(|ui| {
                     ui.set_width(SIDE_W);
-                    job_rows(app, ui);
-                    widgets::divider(ui);
-                    sheet_rows(app, ui, &status);
-                    cutter_rows(app, ui, &status);
-                    widgets::divider(ui);
-                    test_rows(app, ui, &status);
-                    widgets::divider(ui);
-                    history_rows(app, ui, &status);
+                    // The column scrolls when the window is shorter than it.
+                    egui::ScrollArea::vertical().id_salt("cutting-send-side").max_height(room.y).show(ui, |ui| {
+                        job_rows(app, ui);
+                        widgets::divider(ui);
+                        sheet_rows(app, ui, &status);
+                        cutter_rows(app, ui, &status);
+                        widgets::divider(ui);
+                        test_rows(app, ui, &status);
+                        widgets::divider(ui);
+                        history_rows(app, ui, &status);
+                    });
                 });
             });
         });
@@ -451,6 +469,22 @@ mod tests {
                 .collect();
         }
         texts
+    }
+
+    /// C9.2: the window opens three quarters of the app's height (the preview with it), not the
+    /// old fixed 320 × 440 px preview, and its content stays inside it.
+    #[test]
+    fn the_window_opens_large() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        app.adopt_context(&ctx);
+        app.run(COMMAND, json!({})).unwrap();
+        window_texts(&mut app, &ctx);
+        let r = ctx.memory(|m| m.area_rect(egui::Id::unique("cutting-send-window"))).unwrap();
+        assert!(r.height() >= 900.0 * OPEN_HEIGHT - 50.0 && r.width() > 2.0 * SIDE_W + GAP, "the title bar aside: {r:?}");
+        assert!(r.bottom() <= 900.0 && r.top() >= 0.0, "on screen: {r:?}");
     }
 
     fn app_with_two_layers() -> VectorcraftApp {
