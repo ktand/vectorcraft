@@ -143,6 +143,23 @@ column stacked Layers, Cut Settings and Cutting Mat at about 250 px each, so all
 | C9.3 | **The hardware checklist brought up to date** — **done**: `hardware-validation.md` reordered safest first and numbered 1–15 (the test cut moved up to step 4, so each material is tuned with it before the rest; Print & Cut, which needs a printer, near the end), a results table to fill in at a glance, what to note at each step, the controls named as the panels show them since C9.1 (the tool table's Cut and Score columns, Advanced, the Cutting Mat tab), where the reports and the log are, and the Cutting workspace reset for a layout saved before C9.1; every message it quotes checked against the code | Every quoted message and control exists; the golden file it opens exists |
 | C9.4 | **Updating a material** (owner, 2026-10-30: how do changed settings get back into the material?) — **done**: a material of the user's changed by hand since it was chosen offers Update “name” beside Save as Material…, keeping the changed cut and score settings in it in one click (`cutting.material.save` under its own name, which already replaced one of that name); a changed built-in one can't be changed, so Save as Material… opens with “name (copy)” filled in | Frame test: no Update for a built-in material or one just saved; Update “name” once one of the user's is changed; what it runs keeps the change in the material and the document is on it again |
 
+## Phase 10 — Tools and holders
+
+Owner, 2026-10-30: handle the different tools, which holder each goes in, and the Cameo 4's tool detection. From
+public sources (Silhouette School's Cameo 4 tool and carriage articles, its Studio V5 Send panel article, Silhouette
+America's Cameo 4 page; links in the protocol notes): holder 1 (left, fast, about 210 g) takes the AutoBlade, the
+pen holder, and older tools in the four adapters (ratchet, deep-cut, premium and fabric blades, the 2 mm Kraft
+blade, sketch pens); holder 2 (right, up to 5 kg) takes the 3 mm Kraft blade, the rotary blade and the punch tool
+only. Both holders and the Cameo 4's tools and adapters carry a sensor: the machine reports what is fitted, and the
+maker's software adjusts its suggested settings; the material is still chosen by hand.
+
+| Id | Task | Acceptance |
+|---|---|---|
+| C10.1 | **The holder in every tool setting** — **done, to confirm on the machine**: reading the reference again for the tools found that on the Cameo 3 and 4 family every tool setting names its holder (`FX` n`,`h, `!` n`,`h, `TF` n`,`h, `FC` n`,1,`h), where the encoder sent the bare forms older models take, and that `FC` takes a second value; the encoder now sends them so (holder 1 until C10.2), depth only for holder 1; the protocol notes corrected (the reference's second `FX` round and `FE`/`FF` noted as not sent, to confirm) | The golden byte checks with the holder: `J1`, `FX17,1`, `!10,1`, `FC18,1,1`, `TF3,1`; a pen's `FC0,1,1` |
+| C10.2 | **Choosing a tool** — to do: a tool for each operation and each group's setup (AutoBlade, the adapter blades, pen, 3 mm Kraft, rotary, punch), the holder it goes in from it (`J1`/`J2`), its defaults (a pen no offset; depth the AutoBlade's only); the tool table's Tool row | Unit and golden: a holder-2 tool's settings with `,2` and no `TF`; frame test: the row |
+| C10.3 | **Tool detection** — to do: the tool query (ESC NAK, protocol notes › Status) in the driver, `cutting.tools`, the Send window's holders line, a warning before a send whose tools aren't fitted; the simulated cutter answers | Against the simulated and a fake Cameo 4: the holders listed, a missing tool warned of; junk replies read leniently (fuzz) |
+| C10.4 | **Checklist** — to do: what the machine reports for each tool fitted (the punch tool's code is unknown), a cut from holder 2, the holder-numbered settings taken | Steps in `hardware-validation.md` |
+
 Later (outline; size later):
 
 Saved device profiles ·

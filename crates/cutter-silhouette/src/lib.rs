@@ -47,6 +47,11 @@ pub const MODELS: [(u16, &str, f64); 6] = [
 /// it, so the job's paths are where the tip cuts.
 pub const BLADE_OFFSET_MM: f64 = 0.9;
 
+/// The holder every operation is cut with (C10.1; a choice of tool comes with C10.2).
+const HOLDER: u8 = 1;
+/// `FC`'s second value: a fixed 1 unit (0.05 mm), blade or pen (protocol notes › A job).
+const FC_SECOND: u32 = 1;
+
 /// A blade offset (mm, `None`: the usual blade's) as the machine's units for `FC`.
 fn blade_offset_units(mm: Option<f64>) -> u32 {
     let mm = mm.filter(|m| m.is_finite()).unwrap_or(BLADE_OFFSET_MM).clamp(0.0, 2.0);
@@ -273,12 +278,17 @@ impl Silhouette {
                     continue;
                 }
                 let (force, speed) = steps(&op.tool);
-                c.cmd("J1");
-                c.cmd(&format!("FX{force}"));
-                c.cmd(&format!("!{speed}"));
-                c.cmd(&format!("FC{}", blade_offset_units(op.tool.blade_offset_mm)));
-                if let Some(depth) = op.tool.depth {
-                    c.cmd(&format!("TF{depth}"));
+                // C10.1: on a two-holder machine each tool setting names its holder (protocol
+                // notes › A job); the AutoBlade's depth is holder 1's only.
+                let h = HOLDER;
+                c.cmd(&format!("J{h}"));
+                c.cmd(&format!("FX{force},{h}"));
+                c.cmd(&format!("!{speed},{h}"));
+                c.cmd(&format!("FC{},{FC_SECOND},{h}", blade_offset_units(op.tool.blade_offset_mm)));
+                if let Some(depth) = op.tool.depth
+                    && h == 1
+                {
+                    c.cmd(&format!("TF{depth},{h}"));
                 }
                 if let Some(accel) = op.tool.accel {
                     c.cmd(&format!("TJ{accel}"));

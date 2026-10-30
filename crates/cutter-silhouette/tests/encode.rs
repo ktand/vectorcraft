@@ -47,7 +47,7 @@ fn a_square_as_bytes() {
     let e = Silhouette.encode(&j, &cameo4()).unwrap();
     let got = e.chunks.concat();
     let mut want = vec![0x1B, 0x04];
-    for c in ["TG1", "FN0", "TB50,0", "J1", "FX17", "!10", "FC18", "M400,200", "D400,400", "D600,400", "D600,200", "D400,200", "M600,0", "SO0"] {
+    for c in ["TG1", "FN0", "TB50,0", "J1", "FX17,1", "!10,1", "FC18,1,1", "M400,200", "D400,400", "D600,400", "D600,200", "D400,200", "M600,0", "SO0"] {
         want.extend(c.as_bytes());
         want.push(0x03);
     }
@@ -158,7 +158,7 @@ fn depth_acceleration_and_track_enhancing() {
     j.track_enhancing = true;
     let text = String::from_utf8_lossy(&Silhouette.encode(&j, &cameo4()).unwrap().chunks.concat()).to_string();
     assert!(text.contains("TB50,0\u{3}FY1\u{3}J1\u{3}"), "{text:?}");
-    assert!(text.contains("FC18\u{3}TF3\u{3}TJ2\u{3}M"), "{text:?}");
+    assert!(text.contains("FC18,1,1\u{3}TF3,1\u{3}TJ2\u{3}M"), "{text:?}");
     // Left unset: not sent.
     let plain = job(
         vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }],
@@ -201,7 +201,7 @@ fn groups_pause_between_them() {
     let (at, name) = &e.pauses[0];
     assert_eq!(name, "Blue");
     let after = String::from_utf8_lossy(&e.chunks[*at..].concat()).to_string();
-    assert!(after.starts_with("J1\u{3}FX17\u{3}"), "the settings again: {after:?}");
+    assert!(after.starts_with("J1\u{3}FX17,1\u{3}"), "the settings again: {after:?}");
     assert!(after.contains("M100,100\u{3}"), "the second path after the pause: {after:?}");
     let before = String::from_utf8_lossy(&e.chunks[..*at].concat()).to_string();
     assert!(before.contains("M20,20\u{3}") && !before.contains("M100,100"), "{before:?}");
@@ -224,8 +224,8 @@ fn each_group_gets_its_own_settings() {
     let at = e.pauses[0].0;
     let (before, after) =
         (String::from_utf8_lossy(&e.chunks[..at].concat()).to_string(), String::from_utf8_lossy(&e.chunks[at..].concat()).to_string());
-    assert!(before.contains("FX17\u{3}") && !before.contains("FX33\u{3}"), "{before:?}");
-    assert!(after.starts_with("J1\u{3}FX33\u{3}") && !after.contains("FX17\u{3}"), "{after:?}");
+    assert!(before.contains("FX17,1\u{3}") && !before.contains("FX33,1\u{3}"), "{before:?}");
+    assert!(after.starts_with("J1\u{3}FX33,1\u{3}") && !after.contains("FX17,1\u{3}"), "{after:?}");
     assert_eq!(after.matches("M100,100\u{3}").count(), 2, "two passes: {after:?}");
 }
 
@@ -241,9 +241,9 @@ fn the_blade_offset_goes_to_the_machine() {
         assert!(text.contains("M20,20\u{3}D40,40\u{3}"), "the path as it is: {text:?}");
         fc
     };
-    assert_eq!(fc(None), "FC18");
-    assert_eq!(fc(Some(0.25)), "FC5");
-    assert_eq!(fc(Some(0.0)), "FC0");
+    assert_eq!(fc(None), "FC18,1,1");
+    assert_eq!(fc(Some(0.25)), "FC5,1,1");
+    assert_eq!(fc(Some(0.0)), "FC0,1,1");
 }
 
 /// C4.8: the simulated Cameo 4 is one this driver drives, and answers as the machine does: ready,
