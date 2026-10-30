@@ -28,6 +28,8 @@ mod nest;
 mod contour;
 // A document measured in pixels, scaled to its author's pixel size (C11.3).
 mod pixels;
+// Stencil bridges (C11.5).
+mod bridges;
 
 const SETTINGS_SET: &str = "cutting.settings.set";
 const OP_SET: &str = "cutting.op.set";
@@ -41,6 +43,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(nest::specs());
     v.extend(contour::specs());
     v.extend(pixels::specs());
+    v.extend(bridges::specs());
     v.extend(vec![
         cmd!(
             query "cutting.settings.get",

@@ -164,6 +164,19 @@ Pieces closer together than twice the offset share one line. The line goes on a 
 magenta, set to Cut), and the art itself is set to No Cut, so only the line round it is cut. Undo takes the
 contour away and puts the art's operation back.
 
+### Stencils: bridges
+
+Cut a letter O out of a stencil sheet and its middle falls out with it. **Stencil** › **Add Bridges** keeps such
+middles joined to the sheet by narrow bridges:
+
+- **Bridges:** how wide each bridge is (default 1.5 mm). Wider holds better; narrower shows less.
+- **Direction:** **Vertical** puts a bridge above and below each hole, **Horizontal** one either side.
+
+The art is taken as filled shapes (type, paths, symbols); lines without a fill have no middle to keep. The bridged
+shape, named **Stencil**, is added above the art and is what's cut. The art is hidden and set to No Cut, so you
+see what will be cut. Undo takes the stencil away and brings the art back. If the panel says holes were missed
+(a bar through a hole's middle doesn't cross the art beside it, as in some odd shapes), try the other direction.
+
 ### Weeding
 
 For vinyl and heat-transfer material, where the waste around the design is peeled away:
