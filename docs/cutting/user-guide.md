@@ -69,6 +69,19 @@ Every object is cut in one of these ways:
 - **Selected** appears when something is selected. It sets the selected objects' operation, or **As Its Group or
   Layer** to follow their group or layer. Setting a layer to No Cut turns off everything on it.
 
+### Along the path or round the stroke
+
+A line drawn with a thick stroke is cut down its middle at first: the blade follows the path, whatever the
+stroke's width. **Cut Along** (shown under Selected) changes that for the selected objects:
+
+- **Path:** along the path itself. Right for shapes whose edge *is* the path: filled shapes, thin lines.
+- **Stroke Edge:** round the edge of what the object paints, its stroke as wide as it is drawn (with its caps,
+  corners and dashes) and its fill. A 3 mm line becomes a 3 mm strip, and outlined lettering is cut as it looks.
+  An object with no stroke is cut along its path still.
+
+Set it on a layer (select the layer's objects) to change everything on it. It's kept in the document and in SVG
+(`cut:edge`).
+
 Inside shapes are cut before the shapes around them, so a letter's counter (the hole in an O) is cut before the
 O, while the sheet still holds.
 

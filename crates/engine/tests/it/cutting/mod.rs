@@ -2,6 +2,7 @@
 //! engine as users reach it. See `docs/cutting/`.
 
 mod contour;
+mod edge;
 mod groups;
 mod job;
 mod marks;

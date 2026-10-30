@@ -25,6 +25,7 @@
 pub mod clip;
 pub mod contour;
 pub mod corners;
+pub mod edge;
 pub mod geometry;
 pub mod group;
 pub mod marks;

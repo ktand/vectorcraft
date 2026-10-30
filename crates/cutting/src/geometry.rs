@@ -2,7 +2,8 @@
 //! drawn, in document points, one subpath each.
 //!
 //! A path or compound path is cut along its path after its geometry effects ([`drawn_art`]), on
-//! the path itself: a stroke is cut on its centre line, not around its outline. Type is cut
+//! the path itself: a stroke is cut on its centre line, not around its outline, unless the object
+//! is set to its stroke's edge ([`crate::edge`]), when it is cut round what it paints. Type is cut
 //! along its glyph outlines, a symbol instance along its symbol's art, and blends, envelopes,
 //! repeats and placed documents along their evaluated art. Images and gradient meshes have no
 //! line to cut and are left out with a warning. An outline drawn twice in the same object (type's
@@ -17,7 +18,7 @@ use std::collections::HashSet;
 use vectorcraft_cutjob::{JobWarning, OpKind, SourceRef};
 use vectorcraft_doc::{Document, MAX_DEPTH, Node, NodeKind, SymbolBoxes};
 use vectorcraft_effects::preview::drawn_art;
-use vectorcraft_geom::{BezPath, PathEl};
+use vectorcraft_geom::{BezPath, FillRule, PathData, PathEl};
 
 use crate::select::Item;
 
@@ -48,6 +49,16 @@ struct Notes {
     too_deep: bool,
     no_outline: bool,
     too_many: bool,
+    /// A stroke's edge couldn't be made: cut along its path.
+    edge_failed: bool,
+}
+
+/// How an object's art is walked: what it is cut along, and what the walk ran into.
+struct Walk<'a> {
+    symbols: &'a SymbolBoxes<'a>,
+    /// Round the edge of what each path paints, not along the path.
+    stroke_edge: bool,
+    notes: Notes,
 }
 
 /// The outlines `items` cut along, in their order, and what they leave out.
@@ -57,8 +68,9 @@ pub fn outlines(d: &Document, items: &[Item]) -> (Vec<Outline>, Vec<JobWarning>)
     for item in items {
         let Some(n) = d.node(item.id) else { continue };
         let mut paths = vec![];
-        let mut notes = Notes::default();
-        collect(d, &symbols, n, 0, &mut paths, &mut notes);
+        let mut w = Walk { symbols: &symbols, stroke_edge: item.stroke_edge, notes: Notes::default() };
+        collect(d, &mut w, n, 0, &mut paths);
+        let mut notes = w.notes;
         let mut subs: Vec<(BezPath, bool)> = paths.iter().flat_map(subpaths).collect();
         // The clip groups around it, outermost first: each clips what the one outside it left.
         for &clip in &item.clips {
@@ -103,61 +115,77 @@ pub fn outlines(d: &Document, items: &[Item]) -> (Vec<Outline>, Vec<JobWarning>)
         warn(notes.too_deep, "art nested too deep is left out");
         warn(notes.no_outline, "type couldn't be outlined (is its font missing?) and is left out");
         warn(notes.too_many, "only the first 100000 outlines of an object are cut");
+        warn(notes.edge_failed, "the stroke's edge couldn't be worked out: it is cut along its path");
     }
     (out, warnings)
 }
 
 /// `n`'s paths as drawn, added to `paths`.
-fn collect(d: &Document, symbols: &SymbolBoxes, n: &Node, depth: usize, paths: &mut Vec<BezPath>, notes: &mut Notes) {
+fn collect(d: &Document, w: &mut Walk, n: &Node, depth: usize, paths: &mut Vec<BezPath>) {
     if depth > MAX_DEPTH {
-        notes.too_deep = true;
+        w.notes.too_deep = true;
         return;
     }
     if !n.visible {
         return;
     }
     // Geometry effects applied, at every depth of `n`: what is under it then has none left.
-    if let Some(art) = drawn_art(symbols, n) {
-        return walk(d, symbols, &art, depth, paths, notes);
+    if let Some(art) = drawn_art(w.symbols, n) {
+        return walk(d, w, &art, depth, paths);
     }
-    walk(d, symbols, n, depth, paths, notes);
+    walk(d, w, n, depth, paths);
 }
 
-fn walk(d: &Document, symbols: &SymbolBoxes, n: &Node, depth: usize, paths: &mut Vec<BezPath>, notes: &mut Notes) {
+/// What path `path` of `n` is cut along: the path, or with `w.stroke_edge` the edge of what `n`
+/// paints along it (the path when it paints no stroke).
+fn along(w: &mut Walk, n: &Node, path: &PathData, rule: FillRule) -> BezPath {
+    if w.stroke_edge && n.appearance.painted_strokes().next().is_some() {
+        match crate::edge::painted_edge(n, path, rule) {
+            Some(edge) => return edge.to_bezpath(),
+            None => w.notes.edge_failed = true,
+        }
+    }
+    path.to_bezpath()
+}
+
+fn walk(d: &Document, w: &mut Walk, n: &Node, depth: usize, paths: &mut Vec<BezPath>) {
     let next = depth + 1;
     match &n.kind {
         NodeKind::Path { guide: true, .. } | NodeKind::Path { clipping: true, .. } => {}
-        NodeKind::Path { path, .. } => paths.push(path.to_bezpath()),
-        NodeKind::Compound { children, .. } => paths.extend(children.iter().filter_map(|c| c.path_data()).map(|p| p.to_bezpath())),
+        NodeKind::Path { path, rule, .. } => paths.push(along(w, n, path, *rule)),
+        NodeKind::Compound { children, rule } => {
+            let subpaths = children.iter().filter_map(|c| c.path_data()).flat_map(|p| p.subpaths.iter().cloned()).collect();
+            paths.push(along(w, n, &PathData::new(subpaths), *rule));
+        }
         NodeKind::Layer { children, .. } | NodeKind::Group { children, .. } | NodeKind::Intertwine { children } => {
             let clip = matches!(n.kind, NodeKind::Group { clip: true, .. } | NodeKind::Layer { clip: true, .. });
-            notes.clipped |= clip;
+            w.notes.clipped |= clip;
             for (i, c) in children.iter().enumerate() {
                 if !(clip && i == 0) {
-                    collect(d, symbols, c, next, paths, notes);
+                    collect(d, w, c, next, paths);
                 }
             }
         }
         NodeKind::Text(_) => match vectorcraft_effects::outline_text(n) {
-            Some(o) => walk(d, symbols, &o, next, paths, notes),
-            None => notes.no_outline = true,
+            Some(o) => walk(d, w, &o, next, paths),
+            None => w.notes.no_outline = true,
         },
         NodeKind::SymbolInstance { symbol, xf } => {
             if let Some(sym) = d.symbols.iter().find(|s| &s.name == symbol) {
                 let mut art = (*sym.art).clone();
                 art.transform(*xf, false);
-                collect(d, symbols, &art, next, paths, notes);
+                collect(d, w, &art, next, paths);
             }
         }
-        NodeKind::Image(_) => notes.images = true,
-        NodeKind::Mesh(_) => notes.meshes = true,
+        NodeKind::Image(_) => w.notes.images = true,
+        NodeKind::Mesh(_) => w.notes.meshes = true,
         NodeKind::Blend { .. } | NodeKind::Envelope { .. } | NodeKind::Repeat(_) | NodeKind::PlacedDocument(_) => {
             let g = vectorcraft_effects::expand_live_deep(Some(d), n);
             // What expanding gives is plain art; a live object still there didn't evaluate.
             if std::mem::discriminant(&g.kind) == std::mem::discriminant(&n.kind) {
                 return;
             }
-            walk(d, symbols, &g, next, paths, notes);
+            walk(d, w, &g, next, paths);
         }
     }
 }

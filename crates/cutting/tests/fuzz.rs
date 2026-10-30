@@ -20,6 +20,7 @@ use std::sync::Arc;
 
 use proptest::prelude::*;
 use serde_json::{Map, Value, json};
+use vectorcraft_color::{Color, Paint};
 use vectorcraft_cutjob::{DOCUMENT_KEY, Simulation};
 use vectorcraft_cutting::build_job;
 use vectorcraft_cutting::ops::{NAME, NS, PREFIX};
@@ -54,24 +55,51 @@ fn op() -> impl Strategy<Value = Option<String>> {
 /// The shape of an object, before ids are given out.
 #[derive(Clone, Debug)]
 enum Art {
-    Path { points: Vec<(f64, f64)>, closed: bool, curve: bool },
+    /// `stroke`: a black stroke that wide, if any (C11.4: what a stroke's edge goes round).
+    Path {
+        points: Vec<(f64, f64)>,
+        closed: bool,
+        curve: bool,
+        stroke: Option<f64>,
+    },
     Compound(Vec<Art>),
-    Group { children: Vec<Art>, clip: bool },
-    Symbol { xf: [f64; 6] },
+    Group {
+        children: Vec<Art>,
+        clip: bool,
+    },
+    Symbol {
+        xf: [f64; 6],
+    },
 }
 
 #[derive(Clone, Debug)]
 struct Obj {
     art: Art,
     op: Option<String>,
+    /// What its `cut:edge` says, if anything.
+    edge: Option<String>,
     visible: bool,
 }
 
+/// A stroke width: none, ordinary, huge or not a number.
+fn stroke() -> impl Strategy<Value = Option<f64>> {
+    prop_oneof![
+        3 => Just(None),
+        3 => (0.0..40.0f64).prop_map(Some),
+        1 => prop_oneof![Just(1e9), Just(f64::NAN), Just(f64::INFINITY), Just(-3.0)].prop_map(Some),
+    ]
+}
+
+fn edge() -> impl Strategy<Value = Option<String>> {
+    prop_oneof![3 => Just(None), 2 => Just(Some("stroke".to_string())), 1 => Just(Some("path".to_string())), 1 => ".{0,8}".prop_map(Some)]
+}
+
 fn path() -> impl Strategy<Value = Art> {
-    (prop::collection::vec((coord(), coord()), 0..8), any::<bool>(), any::<bool>()).prop_map(|(points, closed, curve)| Art::Path {
+    (prop::collection::vec((coord(), coord()), 0..8), any::<bool>(), any::<bool>(), stroke()).prop_map(|(points, closed, curve, stroke)| Art::Path {
         points,
         closed,
         curve,
+        stroke,
     })
 }
 
@@ -86,7 +114,7 @@ fn obj() -> impl Strategy<Value = Obj> {
             (prop::collection::vec(inner, 0..5), any::<bool>()).prop_map(|(children, clip)| Art::Group { children, clip }),
         ]
     });
-    (art, op(), prop::bool::weighted(0.9)).prop_map(|(art, op, visible)| Obj { art, op, visible })
+    (art, op(), edge(), prop::bool::weighted(0.9)).prop_map(|(art, op, edge, visible)| Obj { art, op, edge, visible })
 }
 
 fn json_value() -> impl Strategy<Value = Value> {
@@ -167,7 +195,10 @@ fn bez(points: &[(f64, f64)], closed: bool, curve: bool) -> BezPath {
 
 fn build(d: &mut Document, art: &Art) -> Node {
     match art {
-        Art::Path { points, closed, curve } => Node::path(d.alloc_id(), PathData::from_bezpath(&bez(points, *closed, *curve)), Appearance::default()),
+        Art::Path { points, closed, curve, stroke } => {
+            let a = stroke.map_or_else(Appearance::default, |w| Appearance::basic(Paint::None, Paint::solid(Color::BLACK), w));
+            Node::path(d.alloc_id(), PathData::from_bezpath(&bez(points, *closed, *curve)), a)
+        }
         Art::Compound(parts) => {
             let children = parts.iter().map(|p| Arc::new(build(d, p))).collect();
             Node::new(d.alloc_id(), NodeKind::Compound { children, rule: Default::default() })
@@ -220,6 +251,10 @@ fn document_with(objs: &[Obj], layers: &[Layer], settings: &Value) -> Document {
         n.visible = o.visible;
         if let Some(v) = &o.op {
             n.edit_attrs(|a| a.foreign.push(ForeignAttribute { ns: NS.into(), prefix: PREFIX.into(), name: NAME.into(), value: v.clone() }));
+        }
+        if let Some(v) = &o.edge {
+            let name = vectorcraft_cutting::edge::NAME.to_string();
+            n.edit_attrs(|a| a.foreign.push(ForeignAttribute { ns: NS.into(), prefix: PREFIX.into(), name, value: v.clone() }));
         }
         d.insert(Some(layer), usize::MAX, n).unwrap();
     }
