@@ -85,3 +85,45 @@ fn unitless_lengths_are_points() {
     assert!((side - 133.35).abs() < 0.01, "{side}");
     assert_eq!(d.units, Unit::Pixels);
 }
+
+/// C11.3: the job warns about a document measured in pixels, and `cutting.scaleFromPixels` gives
+/// the 96 px/in square its true 100 mm, in one undo step.
+#[test]
+fn a_pixel_document_warns_and_scales_from_96_px_per_inch() {
+    let px = 100.0 / 25.4 * 96.0;
+    let svg = format!(
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="{px}" height="{px}"><rect width="{px}" height="{px}" stroke="black" stroke-width="4"/></svg>"#
+    );
+    let mut s = Session::new();
+    s.execute("document.open", &json!({"name": "art.svg", "dataBase64": vectorcraft_format::base64_encode(svg.as_bytes())})).unwrap();
+    let warned = |s: &mut Session| s.execute("cutting.job", &json!({})).unwrap()["job"]["warnings"].to_string().contains("measured in pixels");
+    assert!(warned(&mut s));
+    assert!(s.execute("cutting.scaleFromPixels", &json!({"pxPerInch": 0})).is_err());
+    assert!(s.execute("cutting.scaleFromPixels", &json!({"pxPerInch": "96"})).is_err());
+    let r = s.execute("cutting.scaleFromPixels", &json!({})).unwrap();
+    assert!((r["scale"].as_f64().unwrap() - 0.75).abs() < 1e-12, "{r}");
+    let d = (*s.doc().unwrap().doc).clone();
+    assert_eq!(d.units, Unit::Millimeters);
+    assert_mm(d.artboards[0].rect, [0.0, 0.0, 100.0, 100.0]);
+    assert_mm(art_bounds(&d), [0.0, 0.0, 100.0, 100.0]);
+    let mut widths = vec![];
+    d.walk(|n| widths.extend(n.appearance.stroke().map(|k| k.width)));
+    assert!(widths.len() == 1 && (widths[0] - 3.0).abs() < 1e-9, "the stroke scales too: {widths:?}");
+    assert!(!warned(&mut s));
+    assert!(s.execute("cutting.scaleFromPixels", &json!({})).is_err(), "not in pixels any more");
+    s.execute("edit.undo", &json!({})).unwrap();
+    let d = (*s.doc().unwrap().doc).clone();
+    assert_eq!(d.units, Unit::Pixels);
+    assert_mm(art_bounds(&d), [0.0, 0.0, 100.0 * 4.0 / 3.0, 100.0 * 4.0 / 3.0]);
+}
+
+/// A document in points says nothing.
+#[test]
+fn a_point_document_has_no_pixel_warning() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 400, "height": 400})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 100, "height": 50})).unwrap();
+    let job = s.execute("cutting.job", &json!({})).unwrap();
+    assert!(!job["job"]["warnings"].to_string().contains("pixels"), "{job}");
+    assert!(s.execute("cutting.scaleFromPixels", &json!({})).is_err());
+}
