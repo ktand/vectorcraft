@@ -16,6 +16,12 @@ not from the sources.
 - **[WIN]** What Windows records for the owner's Cameo 4 (read 2026-10-28 with the device absent; see
   [ARCHITECTURE.md › R3](ARCHITECTURE.md)).
 - **[SA]** Silhouette's published Cameo 4 specifications, <https://www.silhouetteamerica.com/cameo-4>.
+- **[SS]** Silhouette School (a user blog, read 2026-10-30) on the Cameo 4's tools and holders:
+  [tools and blades](https://silhouetteschoolblog.com/2019/10/silhouette-cameo-4-tools-blades.html),
+  [tools FAQ](https://www.silhouetteschoolblog.com/2019/10/pre-order-cameo-4-tools-faqs-on.html),
+  [dual tool carriage](https://www.silhouetteschoolblog.com/2019/06/silhouette-cameo-4-dual-tool-carriage.html),
+  [adapters](https://www.silhouetteschoolblog.com/2019/09/silhouette-cameo-4-adapters-explained.html),
+  [Studio V5 Send panel, Tool 2](https://www.silhouetteschoolblog.com/2026/03/silhouette-studio-v5-send-panel-tool-2.html).
 
 Each fact is marked **to confirm** until it has been checked on the owner's Cameo 4 (C4.6). Facts the encoder
 relies on most are listed again in [Checks on the machine](#checks-on-the-machine).
@@ -28,6 +34,17 @@ relies on most are listed again in [Checks on the machine](#checks-on-the-machin
 | The Cameo 4 presents a USB printer-class interface (class 7, subclass 1, protocol 2: bidirectional); Windows binds it to its own `usbprint.sys`, with no vendor driver. | [WIN] |
 | Commands go to the bulk OUT endpoint and replies come from the bulk IN endpoint of interface 0 (`0x01` and `0x82`). Through `usbprint.sys` these are a file's writes and reads. | [IS]; the usbprint mapping is ours, **to confirm** |
 | Writes are sent in pieces of at most 4,096 bytes; a careful mode sends 1,024 bytes and waits for the machine to be ready before the next. A write that times out is tried again, up to five times, a second apart. | [IS], **to confirm** |
+
+## Tools and holders
+
+| Fact | Source |
+|---|---|
+| The Cameo 4 has two holders. Holder 1 (left) is the fast one, about 210 g of force; holder 2 (right) is driven by another kind of motor and presses with up to 5 kg. | [SS] |
+| Holder 1 takes the Cameo 4 AutoBlade and the Cameo 4 pen holder, and older Silhouette tools in the four adapters that come with the machine (marked "1": blade/premium, sketch pen/pen holder, deep-cut, 2 mm Kraft blade); the Cameo 3 AutoBlade doesn't fit. | [SS] |
+| Holder 2 takes only the 3 mm Kraft blade (thick material: leather, balsa, mat board), the rotary blade (fabric without a stabiliser, crepe paper) and the punch tool (marks what to weed); the 2 mm Kraft blade can go in holder 1 with its adapter. | [SS] |
+| Both holders have a tool sensor, as do the Cameo 4's tools and adapters: the machine can tell what is fitted, and the maker's software adjusts its suggested settings to it; the material is still chosen by hand, and for the 3 mm Kraft blade the settings are made by hand. | [SS] |
+| The maker's software (V5) gives each cut line a holder (red lines holder 1, blue holder 2) and says "incompatible" when a line's action doesn't suit the tool fitted in its holder. | [SS] |
+| The query for what is fitted, and its codes, are under [Status](#status); no code for the punch tool is known (**to confirm**). | [IS] |
 
 ## Framing and units
 
@@ -54,17 +71,23 @@ In the order the encoder sends them. "n" is a whole number.
 |---|---|---|---|
 | Initialise | ESC + EOT (`0x1B 0x04`) | resets the machine to take a job | [IS] |
 | Mat | `TG` n, then `FN0`, then `TB50` and boundary commands | which mat is loaded; the orientation; the area | [IS] |
-| Tool holder | `J1` or `J2` | which holder cuts next (two-holder machines such as the Cameo 4) | [IS] |
-| Force | `FX` n | blade pressure, 1–33 on the Cameo 4 | [IS] |
-| Speed | `!` n | 1–30 on the Cameo 4 family (1–10 on older models); the units of a step aren't given | [IS] |
-| Depth | `TF` n | AutoBlade depth 0–10, holder 1 only | [IS] |
-| Acceleration | `TJ` n | 1–3 | [IS] |
+| Tool holder | `J1` or `J2` | which holder cuts next (two-holder machines such as the Cameo 4): `J` and the holder's digit, nothing else | [IS] |
+| Force | `FX` n`,`h | blade pressure, 1–33 on the Cameo 4, then a comma and the holder h it is for (C10.1) | [IS] |
+| Speed | `!` n`,`h | 1–30 on the Cameo 4 family (1–10 on older models); the units of a step aren't given; then the holder | [IS] |
+| Depth | `TF` n`,`h | AutoBlade depth 0–10, holder 1 only (not sent for holder 2) | [IS] |
+| Acceleration | `TJ` n | 1–3; no holder | [IS] |
 | Track enhancing | `FY0` / `FY1` | one turns it on, the other off; which is which isn't stated (**to confirm**; the encoder sends `FY1` for on) | [IS] |
-| Blade offset | `FC` n | the blade's offset in machine units (0.9 mm, 18 units, by default); `FC0` for a pen. The machine turns the blade round corners by it, so the paths sent are where the tip cuts (we send each operation's `bladeOffsetMm`, C5.4) | [IS] |
-| Corners, lift | `FF` …, `FE` … | corner handling and lift between strokes | [IS] |
+| Blade offset | `FC` n`,1,`h | the blade's offset in machine units (0.9 mm, 18 units, by default; 0 for a pen), then a second value that is always 1 unit (0.05 mm), then the holder. The machine turns the blade round corners by it, so the paths sent are where the tip cuts (we send each operation's `bladeOffsetMm`, C5.4) | [IS] |
+| Corners, lift | `FF` …, `FE` … | corner handling and lift between strokes, each ending in the holder; the reference sends them for every tool (lift off, corners off for a pen), we send neither and leave the machine's own (**to confirm** that it needs none) | [IS] |
 | Move | `M` y,x | travel with the blade up | [IS] |
 | Cut | `D` y,x | cut a straight line to the point, blade down | [IS] |
 | End | a move past the cut, then `SO0` | leave the head out of the way; end of job | [IS] |
+
+On the Cameo 3 and 4 family every tool setting but acceleration and track enhancing carries the holder it is for,
+holder 1 included; older one-holder models take the bare forms (`FX` n, `!` n, `FC0` for a pen) [IS, `Graphtec.py`
+at the commit above, the tool class and `setup()`]. A tool's settings go in this order: `J`h, `FX`, `!`, `FC`, `TF`
+(holder 1 only); the reference also resets acceleration and sends `FC`, `FE` and `FF` once more around a second
+`FX`, which we don't (**to confirm** on the machine that the shorter form is taken).
 
 Mat codes for `TG`: 0 none, 1 the 12 × 12 in mat, 2 the 12 × 24 in mat, 3 the Portrait's 8 × 12 in, 8 a 15 × 15
 in, 9 a 24 × 24 in, 11 an 8.5 × 12 in [IS]. Media codes 100–138 and 300 (custom) name materials for the machine's
