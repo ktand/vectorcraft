@@ -21,6 +21,7 @@ pub mod registry;
 pub mod send;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod simulated;
+pub mod tools;
 
 pub use device::{Check, DeviceInfo, DeviceProvider, DeviceStatus, Driver, Encoded, Transport, TransportError};
 pub use memory::{MemoryTransport, Recorded};

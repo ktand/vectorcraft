@@ -112,4 +112,17 @@ pub trait Driver: Send + Sync {
     fn status_query(&self) -> &[u8];
     /// The machine's answer to [`Driver::status_query`].
     fn parse_status(&self, reply: &[u8]) -> DeviceStatus;
+    /// Fork (C10.3): what asks the machine which tools are fitted; none for a family that can't
+    /// tell.
+    fn tools_query(&self) -> Option<&[u8]> {
+        None
+    }
+    /// Whether `answer` (to [`Driver::tools_query`]) is all there.
+    fn tools_answer_done(&self, _answer: &[u8]) -> bool {
+        false
+    }
+    /// The machine's answer to [`Driver::tools_query`]: what is in each holder, holder 1 first.
+    fn parse_tools(&self, _answer: &[u8]) -> Vec<crate::tools::Fitted> {
+        vec![]
+    }
 }

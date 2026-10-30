@@ -324,3 +324,20 @@ fn the_tool_decides_the_holder() {
     assert!(encode(Some("kraft3"), &cameo3).unwrap_err().contains("Cameo 4 and later"));
     assert!(encode(Some("kraft2"), &cameo3).is_ok(), "holder 1's adapter tools are any model's");
 }
+
+/// C10.3: the answer to the tools query, read: a code per holder, the Kraft blade's by holder;
+/// any bytes at all read without a panic, at most four holders.
+#[test]
+fn the_tools_answer_is_read() {
+    use vectorcraft_cutter::tools::Fitted;
+    let tool = |id: &str| Fitted::Tool(id.into());
+    assert_eq!(Silhouette.parse_tools(b"2,0\x03"), vec![tool("autoblade"), Fitted::Empty]);
+    assert_eq!(Silhouette.parse_tools(b"4,4\x03"), vec![tool("kraft2"), tool("kraft3")]);
+    assert_eq!(Silhouette.parse_tools(b" 7 , 5 \x03"), vec![tool("pen"), tool("rotary")]);
+    assert_eq!(Silhouette.parse_tools(b"6,255\x03"), vec![Fitted::Unknown("6".into()), Fitted::Error]);
+    assert_eq!(Silhouette.parse_tools(b"\x03"), vec![]);
+    assert!(Silhouette.tools_answer_done(b"2,0\x03") && !Silhouette.tools_answer_done(b"2,0"));
+    proptest::proptest!(|(bytes in proptest::collection::vec(proptest::prelude::any::<u8>(), 0..200))| {
+        proptest::prop_assert!(Silhouette.parse_tools(&bytes).len() <= 4);
+    });
+}

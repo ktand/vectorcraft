@@ -221,7 +221,32 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     s.execute("edit.clear", &json!({})).unwrap();
     assert!(s.execute("cutting.history.send", &json!({"index": cut["index"]})).unwrap_err().to_string().contains("nothing to cut"));
     assert_eq!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"]["passes"], json!(1));
+
+    // C10.3: which tools are fitted. The simulated Cameo 4 has the AutoBlade in holder 1 and
+    // nothing in holder 2; a job that needs the rotary blade is warned about. A machine
+    // answering with codes this version doesn't know, or nothing, is read as far as it goes.
+    s.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+    let t = s.execute("cutting.tools", &json!({})).unwrap();
+    assert_eq!((t["canTell"].clone(), t["answered"].clone()), (json!(true), json!(true)), "{t}");
+    assert_eq!(t["holders"][0], json!({"holder": 1, "state": "tool", "tool": "autoblade", "label": "AutoBlade", "code": null}));
+    assert_eq!(t["holders"][1]["state"], json!("empty"));
+    assert_eq!(t["warnings"], json!([]), "the AutoBlade is what the job needs");
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"tool": "rotary"}}})).unwrap();
+    let t = s.execute("cutting.tools", &json!({})).unwrap();
+    assert_eq!(t["warnings"], json!(["The cut uses the Rotary blade in holder 2, but holder 2 is empty"]), "{t}");
+    for (answer, states) in
+        [(&b"4,4\x03"[..], vec!["tool", "tool"]), (b"6,255\x03", vec!["unknown", "error"]), (b"\x03", vec![]), (b"junk,,", vec!["unknown"; 4])]
+    {
+        registry::install(Some(Arc::new(FakeCameo(MemoryTransport::answering(answer)))));
+        let t = s.execute("cutting.tools", &json!({})).unwrap();
+        let got: Vec<&str> = t["holders"].as_array().unwrap().iter().map(|h| h["state"].as_str().unwrap()).collect();
+        assert_eq!(got, states, "{t}");
+    }
+    registry::install(Some(Arc::new(FakeCameo(MemoryTransport::answering(b"4,4\x03")))));
+    let t = s.execute("cutting.tools", &json!({})).unwrap();
+    assert_eq!((t["holders"][0]["tool"].clone(), t["holders"][1]["tool"].clone()), (json!("kraft2"), json!("kraft3")), "by holder");
     registry::install(None);
+    assert!(s.execute("cutting.tools", &json!({})).unwrap_err().to_string().contains("no cutter is connected"));
 
     // A damaged file gives what it can.
     std::fs::write(dir.join("History.json"), b"[{\"outcome\": \"done\"}, 7, \"junk\"]").unwrap();

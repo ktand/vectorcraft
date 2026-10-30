@@ -13,6 +13,8 @@
 #![forbid(unsafe_code)]
 
 use vectorcraft_cutjob::{CutJob, ToolSettings};
+/// What a holder has in it (C10.3), for those that read [`tool_warnings`]' holders.
+pub use vectorcraft_cutter::tools::Fitted;
 use vectorcraft_cutter::{Check, DeviceInfo, DeviceStatus, Driver, Encoded};
 
 /// Graphtec's USB vendor id, which Silhouette's machines use.
@@ -32,6 +34,29 @@ const ESC: u8 = 0x1B;
 const EOT: u8 = 0x04;
 const ENQ: u8 = 0x05;
 const ETX: u8 = 0x03;
+const NAK: u8 = 0x15;
+/// The most holders read from an answer to the tools query.
+const MAX_HOLDERS: usize = 4;
+
+/// What a holder's code in the answer to the tools query stands for (protocol notes › Status):
+/// an empty holder, a tool, or a code this version doesn't know; the Kraft blade's one code is
+/// the 2 mm blade in holder 1 and the 3 mm one in holder 2.
+fn fitted(code: &str, holder: usize) -> vectorcraft_cutter::tools::Fitted {
+    use vectorcraft_cutter::tools::Fitted;
+    let id = match code.trim().parse::<u32>() {
+        Ok(0) => return Fitted::Empty,
+        Ok(255) => return Fitted::Error,
+        Ok(1) => "ratchet",
+        Ok(2) => "autoblade",
+        Ok(3) => "deepcut",
+        Ok(4) if holder == 1 => "kraft2",
+        Ok(4) => "kraft3",
+        Ok(5) => "rotary",
+        Ok(7) => "pen",
+        _ => return Fitted::Unknown(code.trim().chars().take(8).collect()),
+    };
+    Fitted::Tool(id.to_string())
+}
 
 /// The machines this driver knows: USB product id, name, cut width (mm).
 pub const MODELS: [(u16, &str, f64); 6] = [
@@ -89,6 +114,29 @@ pub fn tool(id: Option<&str>) -> Option<&'static Tool> {
         None => Some(&AUTOBLADE),
         Some(id) => TOOLS.iter().find(|t| t.id == id),
     }
+}
+
+/// Where `job` needs a tool that `holders` (holder 1 first) doesn't have: a message for each
+/// operation whose holder has another tool or none. Holders the machine couldn't tell say nothing.
+pub fn tool_warnings(job: &vectorcraft_cutjob::CutJob, holders: &[vectorcraft_cutter::tools::Fitted]) -> Vec<String> {
+    let mut out = vec![];
+    for op in &job.operations {
+        let Some(want) = tool(op.tool.tool.as_deref()) else { continue };
+        let what = if op.kind == vectorcraft_cutjob::OpKind::Score { "The score" } else { "The cut" };
+        let h = want.holder;
+        let message = match holders.get(usize::from(h).saturating_sub(1)) {
+            Some(vectorcraft_cutter::tools::Fitted::Empty) => format!("{what} uses the {} in holder {h}, but holder {h} is empty", want.label),
+            Some(vectorcraft_cutter::tools::Fitted::Tool(id)) if id != want.id => {
+                let has = tool(Some(id)).map_or(id.as_str(), |t| t.label);
+                format!("{what} uses the {} in holder {h}, but holder {h} has the {has}", want.label)
+            }
+            _ => continue,
+        };
+        if !out.contains(&message) {
+            out.push(message);
+        }
+    }
+    out
 }
 
 /// The product id of the one model here whose holder 2 doesn't take the specialty tools.
@@ -413,6 +461,23 @@ impl Driver for Silhouette {
         &[ESC, ENQ]
     }
 
+    fn tools_query(&self) -> Option<&[u8]> {
+        Some(&[ESC, NAK])
+    }
+
+    fn tools_answer_done(&self, answer: &[u8]) -> bool {
+        answer.contains(&ETX)
+    }
+
+    /// A code per holder, comma-separated, up to ETX (protocol notes › Status; to confirm).
+    fn parse_tools(&self, answer: &[u8]) -> Vec<vectorcraft_cutter::tools::Fitted> {
+        let text = String::from_utf8_lossy(answer.split(|b| *b == ETX).next().unwrap_or_default()).to_string();
+        if text.trim().is_empty() {
+            return vec![];
+        }
+        text.split(',').take(MAX_HOLDERS).enumerate().map(|(i, code)| fitted(code, i + 1)).collect()
+    }
+
     fn parse_status(&self, reply: &[u8]) -> DeviceStatus {
         match reply.iter().copied().find(|b| *b != ETX && !b.is_ascii_whitespace()) {
             Some(b'0') => DeviceStatus::Ready,
@@ -440,6 +505,8 @@ pub fn simulated_cameo4() -> vectorcraft_cutter::simulated::SimulatedMachine {
             busy_per_byte: Duration::from_millis(1),
             // It always finds the registration marks.
             answers: vec![(b"TB123,".to_vec(), MARKS_FOUND.to_vec())],
+            // The AutoBlade in holder 1, holder 2 empty.
+            replies: vec![(vec![ESC, NAK], b"2,0\x03".to_vec())],
         },
         sent: Sent::default(),
     }
