@@ -251,6 +251,65 @@ fn stone_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     crate::panels::set_pstate(&ctx, "cutting-stones", c);
 }
 
+/// What the Puzzle section keeps between frames: its size, tabs, variety and seed, and what the
+/// last Add Puzzle said.
+#[derive(Clone, Debug)]
+struct PuzzleChoice {
+    rows: f64,
+    cols: f64,
+    tab_pct: f64,
+    variety_pct: f64,
+    seed: f64,
+    note: Option<(bool, String)>,
+}
+
+impl Default for PuzzleChoice {
+    fn default() -> Self {
+        PuzzleChoice { rows: 4.0, cols: 5.0, tab_pct: vectorcraft_cutting::puzzle::DEFAULT_TAB_PCT, variety_pct: 50.0, seed: 1.0, note: None }
+    }
+}
+
+/// A whole-number field in the Puzzle section, `lo` to `hi`.
+fn count_row(ui: &mut Ui, label: &str, id: &'static str, v: &mut f64, suffix: &str, (lo, hi): (f64, f64)) {
+    widgets::label_row(ui, label, LABEL_W, |ui| {
+        if let Some(n) = widgets::spin_plain(ui, ("cutting", id), *v, suffix, 0, 60.0, 1.0, lo, &[]) {
+            *v = n.round().clamp(lo, hi);
+        }
+    });
+}
+
+/// A jigsaw over the selection, or the artboard with nothing selected (C13.5): rows and columns,
+/// the tabs' size, how much they vary, and which puzzle (`cutting.puzzle`, one undo step).
+fn puzzle_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    use vectorcraft_cutting::puzzle::{ROWS, TAB_PCT};
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut c: PuzzleChoice = crate::panels::pstate(&ctx, "cutting-puzzle");
+    let rows = (f64::from(ROWS.0), f64::from(ROWS.1));
+    count_row(ui, tl!("Rows"), "puzzle-rows", &mut c.rows, "", rows);
+    count_row(ui, tl!("Columns"), "puzzle-cols", &mut c.cols, "", rows);
+    count_row(ui, tl!("Tabs"), "puzzle-tabs", &mut c.tab_pct, " %", TAB_PCT);
+    count_row(ui, tl!("Variety"), "puzzle-variety", &mut c.variety_pct, " %", (0.0, 100.0));
+    count_row(ui, tl!("Seed"), "puzzle-seed", &mut c.seed, "", (0.0, 1_000_000.0));
+    let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
+    let label = if selected { tl!("Add Puzzle over Selection") } else { tl!("Add Puzzle over Artboard") };
+    if ui
+        .button(label)
+        .on_hover_text(tl!("A jigsaw's cut lines on top of the art, which stays as it is to be printed. Another seed makes another puzzle."))
+        .clicked()
+    {
+        let p = json!({ "rows": c.rows, "cols": c.cols, "tabPct": c.tab_pct, "variety": c.variety_pct / 100.0, "seed": c.seed });
+        c.note = Some(match app.run("cutting.puzzle", p) {
+            Ok(r) => (false, format!("{} {}", r["pieces"], tl!("pieces"))),
+            Err(e) => (true, e),
+        });
+    }
+    if let Some((bad, note)) = &c.note {
+        ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
+    }
+    crate::panels::set_pstate(&ctx, "cutting-puzzle", c);
+}
+
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     let Ok(info) = app.session.execute("cutting.settings.get", &json!({})) else {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
@@ -267,6 +326,9 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Rhinestones"));
     stone_rows(app, ui);
+    widgets::divider(ui);
+    widgets::section_header(ui, tl!("Puzzle"));
+    puzzle_rows(app, ui);
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Weeding"));
     weeding_rows(app, ui, &info);
@@ -364,5 +426,19 @@ mod tests {
         );
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 100, "height": 100})).unwrap();
         assert!(app.run("cutting.rhinestones", json!({})).unwrap()["stones"].as_u64().unwrap() > 20);
+    }
+
+    /// C13.5: the Puzzle section; with nothing selected it goes over the artboard.
+    #[test]
+    fn the_panel_adds_a_puzzle() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(
+            texts.iter().any(|t| t == "Puzzle") && texts.iter().any(|t| t == "Add Puzzle over Artboard") && texts.iter().any(|t| t == "Seed"),
+            "{texts:?}"
+        );
+        assert_eq!(app.run("cutting.puzzle", json!({})).unwrap()["pieces"], json!(20));
     }
 }

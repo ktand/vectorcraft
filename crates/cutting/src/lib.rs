@@ -38,6 +38,7 @@ pub mod order;
 pub mod placement;
 pub mod prepare;
 pub mod preview;
+pub mod puzzle;
 pub mod select;
 pub mod setups;
 pub mod stones;
