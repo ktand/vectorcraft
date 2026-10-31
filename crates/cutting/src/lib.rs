@@ -22,6 +22,7 @@
 //!   the job is made from it each time.
 #![forbid(unsafe_code)]
 
+pub mod bleed;
 pub mod bridges;
 pub mod clip;
 pub mod contour;

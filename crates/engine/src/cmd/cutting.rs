@@ -50,7 +50,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Settings",
             [],
             None,
-            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm, tool}}, ordering, clipToMat, trackEnhancing, grouping, printAndCut, markInsetMm, markInsetsMm?, markLengthMm, markLineMm, weedBox, weedMarginMm, weedLines, weedLineSpacingMm, material?, colorSetups?}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
+            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm, tool}}, ordering, clipToMat, trackEnhancing, grouping, printAndCut, markInsetMm, markInsetsMm?, markLengthMm, markLineMm, bleedMm, weedBox, weedMarginMm, weedLines, weedLineSpacingMm, material?, colorSetups?}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
             has_doc,
             settings_get
         ),
@@ -59,7 +59,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Cutting Settings",
             [],
             None,
-            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none|outline (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5, depth?: 1–10 or null (an automatic blade's depth; null: the machine's own), accel?: 1–3 or null, cornerOvercutMm?: 0–2 (run past sharp corners and back), bladeOffsetMm?: 0–2 or null (how far the blade's tip trails its axis, for the machine to turn it round corners; 0: a pen; null: the usual blade's), tool?: a tool id from cutting.tools.list or null (the usual, the AutoBlade; the tool decides the holder)}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job), trackEnhancing?: bool (the machine grips the material harder), grouping?: none|layer|color (cut in groups, by top-level layer or by stroke colour, else fill, pausing before each group after the first so the tool or material can be changed), printAndCut?: bool (the artboard is printed with registration marks and the machine cuts from them: portrait only, art between the marks), markInsetMm?: 10–84 (how far in from the artboard's edges the marks go; default 15.88, 5/8 in), markInsetsMm?: [left, top, right, bottom] (10–84 each) or null (each edge's own inset, in place of markInsetMm), markLengthMm?: 5–20 (the L marks' arms; default 20), markLineMm?: 0.3–1 (the width the marks are drawn; default 0.5; the machine is told both), weedBox?: bool (a box cut round the design, each group's, after it), weedMarginMm?: 0–50 (how far the box is from the design), weedLines?: bool (lines from the box in to the design, stopping short of it), weedLineSpacingMm?: 0–200 (0: one from the middle of each side, else one every this many mm)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
+            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none|outline (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5, depth?: 1–10 or null (an automatic blade's depth; null: the machine's own), accel?: 1–3 or null, cornerOvercutMm?: 0–2 (run past sharp corners and back), bladeOffsetMm?: 0–2 or null (how far the blade's tip trails its axis, for the machine to turn it round corners; 0: a pen; null: the usual blade's), tool?: a tool id from cutting.tools.list or null (the usual, the AutoBlade; the tool decides the holder)}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job), trackEnhancing?: bool (the machine grips the material harder), grouping?: none|layer|color (cut in groups, by top-level layer or by stroke colour, else fill, pausing before each group after the first so the tool or material can be changed), printAndCut?: bool (the artboard is printed with registration marks and the machine cuts from them: portrait only, art between the marks), markInsetMm?: 10–84 (how far in from the artboard's edges the marks go; default 15.88, 5/8 in), markInsetsMm?: [left, top, right, bottom] (10–84 each) or null (each edge's own inset, in place of markInsetMm), markLengthMm?: 5–20 (the L marks' arms; default 20), markLineMm?: 0.3–1 (the width the marks are drawn; default 0.5; the machine is told both), bleedMm?: 0.1–5 (how far cutting.bleed.add spreads the print past the art; default 1.27), weedBox?: bool (a box cut round the design, each group's, after it), weedMarginMm?: 0–50 (how far the box is from the design), weedLines?: bool (lines from the box in to the design, stopping short of it), weedLineSpacingMm?: 0–200 (0: one from the middle of each side, else one every this many mm)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
             has_doc,
             settings_set
         ),
@@ -118,6 +118,24 @@ pub fn specs() -> Vec<CommandSpec> {
             marks_add
         ),
         cmd!(
+            "cutting.bleed.add",
+            "Add Print Bleed",
+            [],
+            None,
+            "{radiusMm?: 0.1–5 (default: the settings' bleedMm)} a print bleed for Print & Cut: the Print Bleed layer (replacing one there is), at the bottom, locked and not cut, holding each printed object's painted outline grown radiusMm with round corners and filled with its stroke's colour, else its fill's, so a cut a little off the print lands in colour; the job warns when the art changes after; one undo step → {layer, objects}",
+            has_doc,
+            bleed_add
+        ),
+        cmd!(
+            "cutting.bleed.remove",
+            "Remove Print Bleed",
+            [],
+            None,
+            "{} the Print Bleed layer taken out, one undo step → {removed: whether there was one}",
+            has_doc,
+            bleed_remove
+        ),
+        cmd!(
             "cutting.marks.remove",
             "Remove Registration Marks",
             [],
@@ -160,6 +178,37 @@ fn marks_remove(s: &mut Session, _: &Value) -> Result<Value> {
     };
     s.edit("Remove Registration Marks", |d, _| {
         d.remove(layer).map_err(|e| bad("cutting.marks.remove", e.to_string()))?;
+        Ok(())
+    })?;
+    Ok(json!({ "removed": true }))
+}
+
+fn bleed_add(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "cutting.bleed.add";
+    check_numbers(p, &["radiusMm"], CMD)?;
+    let radius = p
+        .get("radiusMm")
+        .and_then(Value::as_f64)
+        .unwrap_or_else(|| s.doc().map_or(CuttingSettings::DEFAULT_BLEED_MM, |st| vectorcraft_cutting::settings(&st.doc).bleed_mm));
+    let mut added = None;
+    s.edit("Add Print Bleed", |d, _| {
+        if let Some(old) = vectorcraft_cutting::bleed::bleed_layer(d) {
+            d.remove(old).map_err(|e| bad(CMD, e.to_string()))?;
+        }
+        let (layer, objects) = vectorcraft_cutting::bleed::bleed_layer_node(d, radius).map_err(|e| bad(CMD, e))?;
+        added = Some((d.insert(None, 0, layer).map_err(|e| bad(CMD, e.to_string()))?, objects));
+        Ok(())
+    })?;
+    let (layer, objects) = added.ok_or_else(|| bad(CMD, "the bleed wasn't added"))?;
+    Ok(json!({ "layer": layer.0, "objects": objects }))
+}
+
+fn bleed_remove(s: &mut Session, _: &Value) -> Result<Value> {
+    let Some(layer) = vectorcraft_cutting::bleed::bleed_layer(&s.doc()?.doc) else {
+        return Ok(json!({ "removed": false }));
+    };
+    s.edit("Remove Print Bleed", |d, _| {
+        d.remove(layer).map_err(|e| bad("cutting.bleed.remove", e.to_string()))?;
         Ok(())
     })?;
     Ok(json!({ "removed": true }))
@@ -244,7 +293,7 @@ fn settings_get(s: &mut Session, _: &Value) -> Result<Value> {
 }
 
 /// The keys `cutting.settings.set` takes at the top, in `operations` and in each tool's.
-const TOP_KEYS: [&str; 21] = [
+const TOP_KEYS: [&str; 22] = [
     "mat",
     "customMatMm",
     "orientation",
@@ -262,6 +311,7 @@ const TOP_KEYS: [&str; 21] = [
     "markInsetsMm",
     "markLengthMm",
     "markLineMm",
+    "bleedMm",
     "weedBox",
     "weedMarginMm",
     "weedLines",

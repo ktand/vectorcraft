@@ -212,8 +212,11 @@ Result:
 - Art in the hatched areas: the job warns. Check a print with a dark shape just inside a hatched corner is
   refused by the sensor or misread (optional: it costs a sheet).
 
+- Print bleed (C12.3): a filled circle with **Add Bleed** at 1.27 mm and a contour at 0 mm. Print, cut: no white
+  edge round the sticker, wherever the cut lands.
+
 Note: found the marks (yes / no); the four distances, mm; what the machine did with the turned sheet; found the
-12 mm / 0.8 mm marks (yes / no).
+12 mm / 0.8 mm marks (yes / no); a white edge with the bleed (yes / no).
 
 Result:
 

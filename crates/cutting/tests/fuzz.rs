@@ -160,6 +160,7 @@ fn json_value() -> impl Strategy<Value = Value> {
         Just("markInsetsMm"),
         Just("markLengthMm"),
         Just("markLineMm"),
+        Just("bleedMm"),
         Just("weedBox"),
         Just("weedMarginMm"),
         Just("weedLines"),
@@ -300,6 +301,17 @@ proptest! {
             if let Ok(c) = vectorcraft_cutting::contour::contour(&d, &all, vectorcraft_cutting::contour::Options { offset_mm: 2.0, holes }) {
                 prop_assert!(c.subpaths.iter().all(|s| s.anchors.iter().all(|a| a.p.x.is_finite() && a.p.y.is_finite())));
             }
+        }
+        // C12.3: a print bleed: a layer of finite paths, or a reason.
+        let mut bled = d.clone();
+        if let Ok((layer, _)) = vectorcraft_cutting::bleed::bleed_layer_node(&mut bled, 1.27) {
+            let mut finite = true;
+            layer.walk(&mut |n| {
+                if let Some(p) = n.path_data() {
+                    finite &= p.subpaths.iter().all(|s| s.anchors.iter().all(|a| a.p.x.is_finite() && a.p.y.is_finite()));
+                }
+            });
+            prop_assert!(finite);
         }
         // C11.5: stencil bridges both ways: a finite path or a reason.
         use vectorcraft_cutting::bridges::{Direction, Options, bridged};

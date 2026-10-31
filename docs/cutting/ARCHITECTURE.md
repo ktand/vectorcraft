@@ -148,6 +148,12 @@ set to `cut:op="none"`, so they print with the artboard and are never cut. The l
 attribute in the same namespace, `cut:marks="1"`, whatever it has been renamed to; `cutting.marks.add` replaces
 it, `cutting.marks.remove` takes it out. Nothing else marks it.
 
+**The print bleed layer (C12.3).** Like the marks, a top-level layer, locked and set to `cut:op="none"`, at the
+bottom of the document: each printed object's painted outline grown by `bleedMm` (a document setting, 4.1),
+filled with its outer colour. It is found again by `cut:bleed`, whose value is a fingerprint (64-bit FNV-1a, hex)
+of the art and distance it was made from, so the job can say when the art has changed since.
+`cutting.bleed.add` replaces it, `cutting.bleed.remove` takes it out.
+
 **What an object is cut along (C11.4).** A second per-object attribute in the namespace, `cut:edge`, with the
 value `"path"` or `"stroke"`, inherited as the operation is (an object without one takes its nearest group's or
 layer's, else `"path"`). `"stroke"` cuts round the edge of what each path paints, its strokes' outlines as drawn

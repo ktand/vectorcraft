@@ -97,6 +97,9 @@ pub fn registration(
         Some(layer) if !matches_settings(d, layer, s, &m) => warnings.push(JobWarning { source: None, message: STALE_MARKS.into() }),
         Some(_) => {}
     }
+    if crate::bleed::is_stale(d, s.bleed_mm) {
+        warnings.push(JobWarning { source: None, message: crate::bleed::STALE_BLEED.into() });
+    }
     let clear: Vec<RectMm> = m.no_go().into_iter().map(on_mat).collect();
     let mut warned = std::collections::HashSet::new();
     for p in paths {

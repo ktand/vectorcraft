@@ -224,6 +224,12 @@ To print a design and then cut round the print:
 4. Send. The machine finds the marks, then cuts where the print is. If it can't find them (a sheet turned round,
    marks too faint), the job stops before anything is cut.
 
+**Print bleed.** A cut a little off the print leaves a thin white edge. In the Print & Cut panel, **Print
+Bleed** › **Add Bleed** spreads each printed object's outer colour (its outline's colour, else its fill's) past
+its edge, by **Bleed** mm (default 1.27), on a locked layer at the bottom called Print Bleed. Behind the art only
+the spread shows, and it isn't cut. Move or change the art afterwards and the job says so: press **Update Bleed**,
+then print again. Images get no bleed.
+
 **Keep the hatched areas clear.** With Print & Cut on, the mat shows hatched areas round the marks and across the
 top of the page. The machine's sensor looks there for the marks, so anything printed or cut there can stop it
 finding them. The job warns about each object that comes into one, and nesting keeps pieces out of them.
