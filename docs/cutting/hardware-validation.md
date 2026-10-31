@@ -194,7 +194,7 @@ Result:
 
 ## Step 13: Print & Cut (C6.1, C6.2)
 
-- A Letter or A4 artboard with a 50 mm circle in the middle. Cutting Mat tab › Print & Cut › **Print & Cut** on,
+- A Letter or A4 artboard with a 50 mm circle in the middle. Print & Cut panel › **Print & Cut** on,
   **Add Marks**; print it at 100 % (no "fit to page"). Put the sheet on the mat at its top-left corner, the
   square mark at the top left; load it.
 - Send: the machine should look for the marks (the head moves to each), then cut the circle round the print.

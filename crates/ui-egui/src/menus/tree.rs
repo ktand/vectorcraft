@@ -634,6 +634,7 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
                 panel("Color Guide", "colorGuide"),
                 panel("Color Themes", "colorThemes"),
                 panel("CSS Properties", crate::panels::css_properties::ID),
+                panel("Cut Lines", crate::panels::cutting::lines::ID),
                 panel("Cut Settings", crate::panels::cutting::ID),
                 panel("Cutting Mat", crate::panels::cutting::mat::ID),
                 panel("Document Info", "docInfo"),
