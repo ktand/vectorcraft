@@ -108,7 +108,7 @@ pub fn bridged(d: &Document, ids: &[NodeId], opt: Options) -> Result<Bridged, St
 }
 
 /// The filled area of the art under `ids`: each object's closed outlines even-odd, all united.
-fn area(d: &Document, ids: &[NodeId]) -> Result<PathData, String> {
+pub(crate) fn area(d: &Document, ids: &[NodeId]) -> Result<PathData, String> {
     let mut items = crate::select::art_under(d, ids);
     for item in &mut items {
         item.stroke_edge = crate::edge::resolve(d, item.id).is_some_and(|(e, _)| e == crate::edge::Edge::Stroke);

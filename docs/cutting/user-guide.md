@@ -182,6 +182,19 @@ shape, named **Stencil**, is added above the art and is what's cut. The art is h
 see what will be cut. Undo takes the stencil away and brings the art back. If the panel says holes were missed
 (a bar through a hole's middle doesn't cross the art beside it, as in some odd shapes), try the other direction.
 
+### Sketch fill: shading for the pen
+
+A pen draws lines, not areas. Cut Lines › **Sketch Fill** fills the selected shapes with straight lines for the pen
+to draw:
+
+- **Spacing:** how far apart the lines are (default 2 mm).
+- **Angle:** their slope (default 45°).
+- **Cross-Hatch:** a second set of lines across the first.
+- **Add Sketch Fill:** adds the lines as a path just above the art. Holes are left empty.
+
+To draw them, choose the **Pen** as the tool in Cut Settings (or cut by colour, with the lines in a colour of their
+own and the pen in that group's setup).
+
 ### Weeding
 
 In Cut Lines › **Weeding**, for vinyl and heat-transfer material, where the waste around the design is peeled away:

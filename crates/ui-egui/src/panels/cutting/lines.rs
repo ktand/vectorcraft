@@ -142,6 +142,61 @@ fn bridge_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     crate::panels::set_pstate(&ctx, "cutting-bridges", c);
 }
 
+/// What the Sketch Fill section keeps between frames: the spacing, angle and cross-hatching asked
+/// for, and what the last Add Sketch Fill said.
+#[derive(Clone, Debug)]
+struct SketchChoice {
+    spacing_mm: f64,
+    angle_deg: f64,
+    cross: bool,
+    note: Option<(bool, String)>,
+}
+
+impl Default for SketchChoice {
+    fn default() -> Self {
+        use vectorcraft_cutting::hatch::{DEFAULT_ANGLE_DEG, DEFAULT_SPACING_MM};
+        SketchChoice { spacing_mm: DEFAULT_SPACING_MM, angle_deg: DEFAULT_ANGLE_DEG, cross: false, note: None }
+    }
+}
+
+/// Sketch fill for the selected art (C13.3): lines across it for a pen, how far apart, at what
+/// angle, crossed or not (`cutting.sketchFill`, one undo step).
+fn sketch_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut c: SketchChoice = crate::panels::pstate(&ctx, "cutting-sketch");
+    let (lo, hi) = vectorcraft_cutting::hatch::SPACING_MM;
+    widgets::label_row(ui, tl!("Spacing"), LABEL_W, |ui| {
+        if let Some(v) = mm_field(ui, "sketch-spacing", c.spacing_mm, lo) {
+            c.spacing_mm = v.clamp(lo, hi);
+        }
+    });
+    widgets::label_row(ui, tl!("Angle"), LABEL_W, |ui| {
+        if let Some(v) = widgets::spin_plain(ui, ("cutting", "sketch-angle"), c.angle_deg, "°", 0, 80.0, 15.0, -180.0, &[]) {
+            c.angle_deg = v.clamp(-180.0, 180.0);
+        }
+    });
+    if widgets::check(ui, tl!("Cross-Hatch"), c.cross, true) {
+        c.cross = !c.cross;
+    }
+    let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
+    if ui
+        .add_enabled(selected, egui::Button::new(tl!("Add Sketch Fill")))
+        .on_hover_text(tl!("Lines across the selected shapes for a pen to draw. Choose the Pen as the tool in Cut Settings to draw them."))
+        .clicked()
+    {
+        let p = json!({ "spacingMm": c.spacing_mm, "angleDeg": c.angle_deg, "cross": c.cross });
+        c.note = Some(match app.run("cutting.sketchFill", p) {
+            Ok(r) => (false, format!("{} {}", r["lines"], tl!("lines added"))),
+            Err(e) => (true, e),
+        });
+    }
+    if let Some((bad, note)) = &c.note {
+        ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
+    }
+    crate::panels::set_pstate(&ctx, "cutting-sketch", c);
+}
+
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     let Ok(info) = app.session.execute("cutting.settings.get", &json!({})) else {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
@@ -152,6 +207,9 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Stencil"));
     bridge_rows(app, ui);
+    widgets::divider(ui);
+    widgets::section_header(ui, tl!("Sketch Fill"));
+    sketch_rows(app, ui);
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Weeding"));
     weeding_rows(app, ui, &info);
@@ -219,5 +277,20 @@ mod tests {
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
         let r = app.run("cutting.bridges", json!({})).unwrap();
         assert_eq!(r["bridges"], json!(0), "a square has no hole");
+    }
+
+    /// C13.3: the Sketch Fill section; its button adds lines to the selection.
+    #[test]
+    fn the_panel_adds_a_sketch_fill() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(
+            texts.iter().any(|t| t == "Sketch Fill") && texts.iter().any(|t| t == "Add Sketch Fill") && texts.iter().any(|t| t == "Cross-Hatch"),
+            "{texts:?}"
+        );
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 100, "height": 100})).unwrap();
+        assert!(app.run("cutting.sketchFill", json!({})).unwrap()["lines"].as_u64().unwrap() > 5);
     }
 }

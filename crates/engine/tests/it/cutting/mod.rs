@@ -12,4 +12,5 @@ mod nest;
 mod ops;
 mod placement;
 mod send;
+mod sketch;
 mod svg_size;

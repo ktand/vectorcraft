@@ -313,6 +313,11 @@ proptest! {
             });
             prop_assert!(finite);
         }
+        // C13.3: a sketch fill, crossed: finite lines or a reason.
+        let opt = vectorcraft_cutting::hatch::Options { spacing_mm: 5.0, angle_deg: 30.0, cross: true };
+        if let Ok(h) = vectorcraft_cutting::hatch::hatch(&d, &all, opt) {
+            prop_assert!(h.subpaths.iter().all(|s| s.anchors.iter().all(|a| a.p.x.is_finite() && a.p.y.is_finite())));
+        }
         // C11.5: stencil bridges both ways: a finite path or a reason.
         use vectorcraft_cutting::bridges::{Direction, Options, bridged};
         for direction in [Direction::Vertical, Direction::Horizontal] {
