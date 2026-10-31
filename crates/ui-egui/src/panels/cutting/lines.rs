@@ -197,6 +197,60 @@ fn sketch_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     crate::panels::set_pstate(&ctx, "cutting-sketch", c);
 }
 
+/// What the Rhinestones section keeps between frames: the hole and gap asked for, whether the
+/// inside is filled, and what the last Add Template said.
+#[derive(Clone, Debug)]
+struct StoneChoice {
+    hole_mm: f64,
+    gap_mm: f64,
+    fill: bool,
+    note: Option<(bool, String)>,
+}
+
+impl Default for StoneChoice {
+    fn default() -> Self {
+        use vectorcraft_cutting::stones::{DEFAULT_GAP_MM, DEFAULT_HOLE_MM};
+        StoneChoice { hole_mm: DEFAULT_HOLE_MM, gap_mm: DEFAULT_GAP_MM, fill: false, note: None }
+    }
+}
+
+/// A rhinestone template from the selected art (C13.4): the holes' size and spacing, filled or
+/// not (`cutting.rhinestones`, one undo step; the art hidden and set to No Cut).
+fn stone_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    use vectorcraft_cutting::stones::{GAP_MM, HOLE_MM};
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut c: StoneChoice = crate::panels::pstate(&ctx, "cutting-stones");
+    widgets::label_row(ui, tl!("Hole"), LABEL_W, |ui| {
+        if let Some(v) = mm_field(ui, "stone-hole", c.hole_mm, HOLE_MM.0) {
+            c.hole_mm = v.clamp(HOLE_MM.0, HOLE_MM.1);
+        }
+    });
+    widgets::label_row(ui, tl!("Gap"), LABEL_W, |ui| {
+        if let Some(v) = mm_field(ui, "stone-gap", c.gap_mm, GAP_MM.0) {
+            c.gap_mm = v.clamp(GAP_MM.0, GAP_MM.1);
+        }
+    });
+    if widgets::check(ui, tl!("Fill Inside"), c.fill, true) {
+        c.fill = !c.fill;
+    }
+    let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
+    if ui
+        .add_enabled(selected, egui::Button::new(tl!("Add Template")))
+        .on_hover_text(tl!("Holes for rhinestones round the selected shapes, a little larger than the stones. The art is hidden and set to No Cut."))
+        .clicked()
+    {
+        c.note = Some(match app.run("cutting.rhinestones", json!({ "holeMm": c.hole_mm, "gapMm": c.gap_mm, "fill": c.fill })) {
+            Ok(r) => (false, format!("{} {}", r["stones"], tl!("holes"))),
+            Err(e) => (true, e),
+        });
+    }
+    if let Some((bad, note)) = &c.note {
+        ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
+    }
+    crate::panels::set_pstate(&ctx, "cutting-stones", c);
+}
+
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     let Ok(info) = app.session.execute("cutting.settings.get", &json!({})) else {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
@@ -210,6 +264,9 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Sketch Fill"));
     sketch_rows(app, ui);
+    widgets::divider(ui);
+    widgets::section_header(ui, tl!("Rhinestones"));
+    stone_rows(app, ui);
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Weeding"));
     weeding_rows(app, ui, &info);
@@ -292,5 +349,20 @@ mod tests {
         );
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 100, "height": 100})).unwrap();
         assert!(app.run("cutting.sketchFill", json!({})).unwrap()["lines"].as_u64().unwrap() > 5);
+    }
+
+    /// C13.4: the Rhinestones section; its command makes holes round the selection.
+    #[test]
+    fn the_panel_adds_a_rhinestone_template() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert!(
+            texts.iter().any(|t| t == "Rhinestones") && texts.iter().any(|t| t == "Add Template") && texts.iter().any(|t| t == "Fill Inside"),
+            "{texts:?}"
+        );
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 100, "height": 100})).unwrap();
+        assert!(app.run("cutting.rhinestones", json!({})).unwrap()["stones"].as_u64().unwrap() > 20);
     }
 }

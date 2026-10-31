@@ -32,6 +32,8 @@ mod pixels;
 mod bridges;
 // Sketch fill for the pen (C13.3).
 mod sketch;
+// Rhinestone templates (C13.4).
+mod stones;
 
 const SETTINGS_SET: &str = "cutting.settings.set";
 const OP_SET: &str = "cutting.op.set";
@@ -47,6 +49,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(pixels::specs());
     v.extend(bridges::specs());
     v.extend(sketch::specs());
+    v.extend(stones::specs());
     v.extend(vec![
         cmd!(
             query "cutting.settings.get",

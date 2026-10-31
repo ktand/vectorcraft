@@ -182,6 +182,17 @@ shape, named **Stencil**, is added above the art and is what's cut. The art is h
 see what will be cut. Undo takes the stencil away and brings the art back. If the panel says holes were missed
 (a bar through a hole's middle doesn't cross the art beside it, as in some odd shapes), try the other direction.
 
+### Rhinestones
+
+A rhinestone template is a sheet with a hole for each stone. Select the art, then Cut Lines › **Rhinestones**:
+
+- **Hole:** each hole's diameter (default 3 mm). Make it a little larger than the stones (SS10 stones are about
+  2.8 mm across).
+- **Gap:** the material left between two holes (default 1 mm).
+- **Fill Inside:** holes inside the shape too, in a staggered grid, not only along its outline.
+- **Add Template:** the holes are added as a path named Rhinestones, and that's what is cut. The art is hidden and
+  set to No Cut. Undo brings it back.
+
 ### Sketch fill: shading for the pen
 
 A pen draws lines, not areas. Cut Lines › **Sketch Fill** fills the selected shapes with straight lines for the pen

@@ -13,4 +13,5 @@ mod ops;
 mod placement;
 mod send;
 mod sketch;
+mod stones;
 mod svg_size;

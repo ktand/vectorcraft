@@ -318,6 +318,10 @@ proptest! {
         if let Ok(h) = vectorcraft_cutting::hatch::hatch(&d, &all, opt) {
             prop_assert!(h.subpaths.iter().all(|s| s.anchors.iter().all(|a| a.p.x.is_finite() && a.p.y.is_finite())));
         }
+        // C13.4: a rhinestone template, filled: finite centres or a reason.
+        if let Ok(c) = vectorcraft_cutting::stones::centres(&d, &all, vectorcraft_cutting::stones::Options { hole_mm: 3.0, gap_mm: 1.0, fill: true }) {
+            prop_assert!(c.iter().all(|p| p.x.is_finite() && p.y.is_finite()));
+        }
         // C11.5: stencil bridges both ways: a finite path or a reason.
         use vectorcraft_cutting::bridges::{Direction, Options, bridged};
         for direction in [Direction::Vertical, Direction::Horizontal] {
@@ -362,8 +366,8 @@ proptest! {
     #![proptest_config(ProptestConfig::with_cases(64))]
 
     /// C8.7: the packer takes pieces of any shape, size and coordinates (none, a point, a line,
-    /// not numbers, huge) without a panic, and the rectangles it places lie on the area the gap
-    /// apart from each other.
+    /// not numbers, huge) without a panic, and the rectangles it places (turned by quarter turns)
+    /// lie on the area the gap apart from each other.
     #[test]
     fn the_packer_takes_any_pieces(
         pieces in prop::collection::vec(prop::collection::vec(raw_shape(), 0..3), 0..14),
@@ -387,7 +391,15 @@ proptest! {
             for q in &corners {
                 prop_assert!(q[0] >= area.x0 - 1e-6 && q[1] >= area.y0 - 1e-6 && q[0] <= area.x1 + 1e-6 && q[1] <= area.y1 + 1e-6, "{:?} off the area", q);
             }
-            if shapes.len() == 1 && shapes[0].points.len() == 4 && shapes[0].closed {
+            // Only true rectangles (two xs, two ys) turned by quarter turns are boxes where they go:
+            // a slanted quadrilateral's bounds have empty corners other pieces may use.
+            let axis = |i: usize| {
+                let mut v: Vec<u64> = shapes[0].points.iter().map(|q| q[i].to_bits()).collect();
+                v.sort_unstable();
+                v.dedup();
+                v.len() == 2
+            };
+            if shapes.len() == 1 && shapes[0].points.len() == 4 && shapes[0].closed && axis(0) && axis(1) && at.turn_deg % 90 == 0 {
                 let xs = corners.iter().map(|q| q[0]);
                 let ys = corners.iter().map(|q| q[1]);
                 rects.push(RectMm { x0: xs.clone().fold(f64::INFINITY, f64::min), x1: xs.fold(f64::NEG_INFINITY, f64::max), y0: ys.clone().fold(f64::INFINITY, f64::min), y1: ys.fold(f64::NEG_INFINITY, f64::max) });
