@@ -34,6 +34,8 @@ mod bridges;
 mod sketch;
 // Rhinestone templates (C13.4).
 mod stones;
+// Puzzles (C13.5).
+mod puzzle;
 
 const SETTINGS_SET: &str = "cutting.settings.set";
 const OP_SET: &str = "cutting.op.set";
@@ -50,6 +52,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(bridges::specs());
     v.extend(sketch::specs());
     v.extend(stones::specs());
+    v.extend(puzzle::specs());
     v.extend(vec![
         cmd!(
             query "cutting.settings.get",

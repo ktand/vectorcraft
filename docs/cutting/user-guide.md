@@ -193,6 +193,19 @@ A rhinestone template is a sheet with a hole for each stone. Select the art, the
 - **Add Template:** the holes are added as a path named Rhinestones, and that's what is cut. The art is hidden and
   set to No Cut. Undo brings it back.
 
+### Puzzles
+
+Cut Lines › **Puzzle** cuts a jigsaw over the selected art (a printed picture, say), or over the whole artboard
+when nothing is selected:
+
+- **Rows** and **Columns:** how many pieces (up to 50 each way).
+- **Curvature:** knobs and waves; off, a plain grid of rectangles.
+- **Curve:** the knobs' size. **Ripple:** how much each side waves either side of its knob. **Wobble:** how far
+  the corners and knobs stray from even, so no two pieces are alike (all 100 % at first).
+- **Add Puzzle:** adds the cut lines on top as one path. The art stays as it is, to be printed (Print & Cut).
+- With the puzzle selected, **Apply to Selected Puzzle** makes it again with the settings, and **Randomize
+  Selected Puzzle** with another layout.
+
 ### Sketch fill: shading for the pen
 
 A pen draws lines, not areas. Cut Lines › **Sketch Fill** fills the selected shapes with straight lines for the pen

@@ -251,6 +251,97 @@ fn stone_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     crate::panels::set_pstate(&ctx, "cutting-stones", c);
 }
 
+/// What the Puzzle section keeps between frames: its size and shape, the seed, and what the last
+/// Add Puzzle said.
+#[derive(Clone, Debug)]
+struct PuzzleChoice {
+    rows: f64,
+    cols: f64,
+    curvature: bool,
+    curve: f64,
+    ripple: f64,
+    wobble: f64,
+    seed: u32,
+    note: Option<(bool, String)>,
+}
+
+impl Default for PuzzleChoice {
+    fn default() -> Self {
+        PuzzleChoice { rows: 4.0, cols: 4.0, curvature: true, curve: 100.0, ripple: 100.0, wobble: 100.0, seed: 1, note: None }
+    }
+}
+
+/// A whole-number field in the Puzzle section, `lo` to `hi`.
+fn count_row(ui: &mut Ui, label: &str, id: &'static str, v: &mut f64, suffix: &str, (lo, hi): (f64, f64)) {
+    widgets::label_row(ui, label, LABEL_W, |ui| {
+        if let Some(n) = widgets::spin_plain(ui, ("cutting", id), *v, suffix, 0, 60.0, 1.0, lo, &[]) {
+            *v = n.round().clamp(lo, hi);
+        }
+    });
+}
+
+/// Whether the selection is one puzzle, which Randomize makes again in place.
+fn puzzle_selected(app: &VectorcraftApp) -> bool {
+    app.session.active().is_some_and(|st| {
+        let mut ids = st.selection.objects.iter();
+        match (ids.next(), ids.next()) {
+            (Some(id), None) => st.doc.node(*id).is_some_and(|n| {
+                n.extras().attrs.as_deref().is_some_and(|a| a.foreign.iter().any(|f| f.ns == vectorcraft_cutting::ops::NS && f.name == "puzzle"))
+            }),
+            _ => false,
+        }
+    })
+}
+
+/// A jigsaw over the selection, or the artboard with nothing selected (C13.5): rows and columns,
+/// the knobs' curve, the sides' ripple and the grid's wobble; Randomize makes the selected puzzle
+/// again with another seed (`cutting.puzzle`, one undo step).
+fn puzzle_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut c: PuzzleChoice = crate::panels::pstate(&ctx, "cutting-puzzle");
+    let (lo, hi) = vectorcraft_cutting::puzzle::ROWS;
+    let rows = (f64::from(lo), f64::from(hi));
+    count_row(ui, tl!("Rows"), "puzzle-rows", &mut c.rows, "", rows);
+    count_row(ui, tl!("Columns"), "puzzle-cols", &mut c.cols, "", rows);
+    if widgets::check(ui, tl!("Curvature"), c.curvature, true) {
+        c.curvature = !c.curvature;
+    }
+    if c.curvature {
+        count_row(ui, tl!("Curve"), "puzzle-curve", &mut c.curve, " %", (0.0, 100.0));
+        count_row(ui, tl!("Ripple"), "puzzle-ripple", &mut c.ripple, " %", (0.0, 100.0));
+        count_row(ui, tl!("Wobble"), "puzzle-wobble", &mut c.wobble, " %", (0.0, 100.0));
+    }
+    let one = puzzle_selected(app);
+    let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
+    let run = |app: &mut VectorcraftApp, c: &mut PuzzleChoice| {
+        let p = json!({ "rows": c.rows, "cols": c.cols, "curvature": c.curvature, "curve": c.curve, "ripple": c.ripple, "wobble": c.wobble, "seed": c.seed });
+        c.note = Some(match app.run("cutting.puzzle", p) {
+            Ok(r) => (false, format!("{} {}", r["pieces"], tl!("pieces"))),
+            Err(e) => (true, e),
+        });
+    };
+    let label = if one {
+        tl!("Apply to Selected Puzzle")
+    } else if selected {
+        tl!("Add Puzzle over Selection")
+    } else {
+        tl!("Add Puzzle over Artboard")
+    };
+    if ui.button(label).on_hover_text(tl!("A jigsaw's cut lines on top of the art, which stays as it is to be printed.")).clicked() {
+        run(app, &mut c);
+    }
+    if ui.add_enabled(one, egui::Button::new(tl!("Randomize Selected Puzzle"))).clicked() {
+        // Another seed, the next in a fixed sequence: deterministic, never the same twice running.
+        c.seed = c.seed.wrapping_mul(1_103_515_245).wrapping_add(12_345) % 1_000_000;
+        run(app, &mut c);
+    }
+    if let Some((bad, note)) = &c.note {
+        ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
+    }
+    crate::panels::set_pstate(&ctx, "cutting-puzzle", c);
+}
+
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     let Ok(info) = app.session.execute("cutting.settings.get", &json!({})) else {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
@@ -267,6 +358,9 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Rhinestones"));
     stone_rows(app, ui);
+    widgets::divider(ui);
+    widgets::section_header(ui, tl!("Puzzle"));
+    puzzle_rows(app, ui);
     widgets::divider(ui);
     widgets::section_header(ui, tl!("Weeding"));
     weeding_rows(app, ui, &info);
@@ -364,5 +458,23 @@ mod tests {
         );
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 100, "height": 100})).unwrap();
         assert!(app.run("cutting.rhinestones", json!({})).unwrap()["stones"].as_u64().unwrap() > 20);
+    }
+
+    /// C13.5: the Puzzle section; with nothing selected it goes over the artboard, and with the
+    /// puzzle selected it is made again in place.
+    #[test]
+    fn the_panel_adds_a_puzzle() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        for label in ["Puzzle", "Add Puzzle over Artboard", "Curvature", "Curve", "Ripple", "Wobble", "Randomize Selected Puzzle"] {
+            assert!(texts.iter().any(|t| t == label), "{label}: {texts:?}");
+        }
+        let r = app.run("cutting.puzzle", json!({})).unwrap();
+        assert_eq!(r["pieces"], json!(16));
+        app.run("select.set", json!({"ids": [r["id"]]})).unwrap();
+        assert!(super::puzzle_selected(&app));
+        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Apply to Selected Puzzle"));
     }
 }
