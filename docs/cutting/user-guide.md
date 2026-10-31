@@ -199,10 +199,12 @@ Cut Lines › **Puzzle** cuts a jigsaw over the selected art (a printed picture,
 when nothing is selected:
 
 - **Rows** and **Columns:** how many pieces (up to 50 each way).
-- **Tabs:** how far each tab sticks out, as a share of a piece's side (default 22 %).
-- **Variety:** how much the tabs vary in place and size (0 %: all alike).
-- **Seed:** another number makes another puzzle with the same settings.
+- **Curvature:** knobs and waves; off, a plain grid of rectangles.
+- **Curve:** the knobs' size. **Ripple:** how much each side waves either side of its knob. **Wobble:** how far
+  the corners and knobs stray from even, so no two pieces are alike (all 100 % at first).
 - **Add Puzzle:** adds the cut lines on top as one path. The art stays as it is, to be printed (Print & Cut).
+- With the puzzle selected, **Apply to Selected Puzzle** makes it again with the settings, and **Randomize
+  Selected Puzzle** with another layout.
 
 ### Sketch fill: shading for the pen
 
