@@ -109,7 +109,9 @@ The Cameo 4 width agrees with our mat presets (`vectorcraft_cutjob::MAT_PRESETS`
 The machine's optical sensor finds marks printed on the sheet, then cuts relative to them. Sources:
 **[IS]** `silhouette/Graphtec.py` (as above) for the commands, and **[IS-R]** `render_silhouette_regmarks.py`
 at the same commit ([`f376a083`](https://github.com/fablabnbg/inkscape-silhouette/blob/f376a0836b53826e57f50d7ec44658663e629f05/render_silhouette_regmarks.py))
-for what the marks look like. All **to confirm** on the Cameo 4.
+for what the marks look like. **[ST]**: the Print & Cut panel of the maker's software, Silhouette Studio, in
+screenshots the owner took on 2026-10-31 (defaults, least and greatest values, More Settings, the hatched areas;
+seen, not kept). All **to confirm** on the Cameo 4.
 
 | Fact | Source |
 |---|---|
@@ -121,6 +123,9 @@ for what the marks look like. All **to confirm** on the Cameo 4.
 | The answer to the search is read with a long timeout (40 s): success is four spaces, `0`, ETX. Anything else, or no answer, means the marks weren't found and the job must not be cut. | [IS] |
 | After registration the machine's origin is the top-left mark's anchor: cut positions are measured from it, and the cut area is the rectangle the marks span. | [IS] |
 | The driver's defaults put the origin 15 mm from the left and 20 mm from the top, with marks 180 mm apart across and 230 mm down; the mark drawing's defaults are 10 mm from each edge. Ours come from the marks we draw (C6.1): whatever is printed is what is searched for. | [IS], [IS-R] |
+| The maker's software lets the marks be set: **Length** 5–20 mm (default 20), **Thickness** 0.3–1 mm (default 0.5), **Inset** 10–84 mm (default 15.88, 5/8 in), and under More Settings each edge's inset (left, top, right, bottom) and a choice of **Default** or **Inverted** marks (inverted: the set turned half round, the square at the bottom with the sheet fed the other way). Its defaults, 20 mm and 0.5 mm at 20 machine units a mm, are the `TB51,400` and `TB53,10` above, so we take both numbers as the length and line width in those units and send what is drawn (C12.1). | [ST] |
+| It hatches where nothing may be printed: from each mark out to the page's edges at its corner and a little past the mark's arms (about 1–2 mm, measured off the screen), and a band across the whole page along the top (the square's side), down to the foot of the top marks' areas. In the inverted set the band is along the bottom. Nothing marks the left, right or bottom margins. | [ST] |
+| It also offers a **Print Bleed** (default radius 1.27 mm): the printed colour spread past the cut line, so a cut a little off leaves no white edge. | [ST] |
 
 ## Mapping from the cut job
 

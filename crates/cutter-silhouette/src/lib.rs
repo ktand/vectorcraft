@@ -339,8 +339,12 @@ impl Silhouette {
         if let Some(r) = job.registration {
             // Print & Cut (protocol notes): the portrait marks, then the search, which the machine
             // answers once it has looked; positions are from the top-left mark after it.
-            for cmd in ["TB99", "TB52,2", "TB51,400", "TB53,10", "TB55,1"] {
-                c.cmd(cmd);
+            // The marks' arm length and line width (C12.1), in steps of 1/20 mm; the defaults are
+            // the 400 and 10 the protocol notes give.
+            let steps = |mm: f64, (lo, hi): (f64, f64)| units(if mm.is_finite() { mm.clamp(lo, hi) } else { lo });
+            let (length, line) = (steps(r.length_mm, vectorcraft_cutjob::marks::LENGTH_MM), steps(r.line_mm, vectorcraft_cutjob::marks::LINE_MM));
+            for cmd in ["TB99".to_string(), "TB52,2".into(), format!("TB51,{length}"), format!("TB53,{line}"), "TB55,1".into()] {
+                c.cmd(&cmd);
             }
             let [x, y] = r.origin_mm;
             let (top, left) = ((y - SEARCH_LEAD_MM).max(0.0), (x - SEARCH_LEAD_MM).max(0.0));

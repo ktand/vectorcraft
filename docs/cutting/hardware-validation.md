@@ -205,7 +205,15 @@ Result:
   mark type in the notes). If the cut is offset by a fixed amount, measure it: the anchor may be the line's
   centre rather than its outer edge.
 
-Note: found the marks (yes / no); the four distances, mm; what the machine did with the turned sheet.
+- The marks are now drawn 0.5 mm thick and 20 mm long, 15.88 mm in (C12.1), what the machine is told. Then try
+  set marks: **Mark length** 12 mm, **Thickness** 0.8 mm, **Update Marks**, print, send: the machine should find
+  them too (`TB51,240`, `TB53,16`). If only the usual ones are found, the two numbers aren't length and width
+  in 1/20 mm: note it.
+- Art in the hatched areas: the job warns. Check a print with a dark shape just inside a hatched corner is
+  refused by the sensor or misread (optional: it costs a sheet).
+
+Note: found the marks (yes / no); the four distances, mm; what the machine did with the turned sheet; found the
+12 mm / 0.8 mm marks (yes / no).
 
 Result:
 

@@ -28,6 +28,17 @@ pub(crate) fn pair(m: &Map<String, Value>, key: &str, min: f64, max: f64, defaul
     }
 }
 
+/// `m[key]` as four numbers, each in `min..=max`; `None` for anything but an array of four
+/// finite numbers.
+pub(crate) fn quad(m: &Map<String, Value>, key: &str, min: f64, max: f64) -> Option<[f64; 4]> {
+    let Some([a, b, c, d]) = m.get(key).and_then(Value::as_array).map(Vec::as_slice) else { return None };
+    let v = [a, b, c, d].map(|x| x.as_f64().filter(|x| x.is_finite()));
+    match v {
+        [Some(a), Some(b), Some(c), Some(d)] => Some([a, b, c, d].map(|x| x.clamp(min, max))),
+        _ => None,
+    }
+}
+
 /// `m[key]` as a switch.
 pub(crate) fn flag(m: &Map<String, Value>, key: &str, default: bool) -> bool {
     m.get(key).and_then(Value::as_bool).unwrap_or(default)

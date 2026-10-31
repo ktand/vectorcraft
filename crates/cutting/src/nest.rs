@@ -465,7 +465,8 @@ pub fn default_pieces(d: &vectorcraft_doc::Document) -> Vec<vectorcraft_doc::Nod
 }
 
 /// Nests `ids` (each moved as one piece, with all it holds) on the artboard where it lies on `d`'s
-/// mat: inside the cut area, and between the registration marks for Print & Cut; the other objects that are cut on the artboard
+/// mat: inside the cut area, and between the registration marks and clear of the areas round them
+/// for Print & Cut; the other objects that are cut on the artboard
 /// stay where they are and are packed round. A piece's shape is its cut outline wherever it lies,
 /// or its bounds when nothing of it is cut (art that is only printed). The transforms rotate and
 /// move, never scale.
@@ -538,6 +539,16 @@ pub fn nest_on(d: &vectorcraft_doc::Document, ids: &[vectorcraft_doc::NodeId], o
         {
             let corners = [Point::new(b.x0, b.y0), Point::new(b.x1, b.y0), Point::new(b.x1, b.y1), Point::new(b.x0, b.y1)];
             v.push(Shape { closed: true, points: corners.iter().map(|p| placement.doc_to_mat * *p).map(|p| [p.x, p.y]).collect() });
+        }
+    }
+    // Print & Cut: the areas kept clear round the marks are taken (C12.1).
+    if s.print_and_cut
+        && let Some(m) = crate::marks::layout(&s, d)
+    {
+        let at = placement.artboard_mm;
+        for z in m.no_go() {
+            let (x0, y0, x1, y1) = (at.x0 + z.x0, at.y0 + z.y0, at.x0 + z.x1, at.y0 + z.y1);
+            fixed.push(Shape { closed: true, points: vec![[x0, y0], [x1, y0], [x1, y1], [x0, y1]] });
         }
     }
     let nested = nest(&shapes, &fixed, area, opt);
@@ -767,6 +778,31 @@ mod document {
     use vectorcraft_geom::{Rect, shapes};
 
     use super::*;
+
+    /// C12.1: with Print & Cut, pieces are nested clear of the areas round the marks: the job has
+    /// no warning about them.
+    #[test]
+    fn print_and_cut_pieces_keep_clear_of_the_marks() {
+        let mut d = Document::new(612.0, 792.0);
+        let layer = d.layers[0].id;
+        for k in 0..6 {
+            let x = 700.0 + 80.0 * f64::from(k);
+            let sq = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(x, 50.0, x + 60.0, 110.0)), Appearance::default());
+            d.insert(Some(layer), usize::MAX, sq).unwrap();
+        }
+        let s = vectorcraft_cutjob::CuttingSettings { print_and_cut: true, ..crate::settings(&d) };
+        crate::set_settings(&mut d, &s);
+        let marks = crate::marks::marks_layer_node(&s, &mut d).unwrap();
+        d.insert(None, usize::MAX, marks).unwrap();
+        let n = nest_document(&d, &default_pieces(&d), Options::default()).unwrap();
+        assert!(n.unplaced.is_empty(), "{n:?}");
+        for (id, a) in &n.moves {
+            d.node_mut(*id).unwrap().transform(*a, false);
+        }
+        let job = crate::build_job(&d).unwrap();
+        assert_eq!(job.paths.len(), 6);
+        assert!(job.warnings.is_empty(), "{:?}", job.warnings);
+    }
 
     /// Squares spread past the mat's edge: nested, every one is moved onto the mat, the job builds
     /// (none off the cut area) and each piece is one transform without scaling.

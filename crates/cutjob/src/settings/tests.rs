@@ -34,7 +34,9 @@ fn the_defaults_round_trip_as_documented() {
             "trackEnhancing": false,
             "grouping": "none",
             "printAndCut": false,
-            "markInsetMm": 10.0,
+            "markInsetMm": 15.88,
+            "markLengthMm": 20.0,
+            "markLineMm": 0.5,
             "weedBox": false,
             "weedMarginMm": 3.0,
             "weedLines": false,
@@ -67,6 +69,9 @@ fn every_setting_round_trips() {
         grouping: Grouping::Color,
         print_and_cut: true,
         mark_inset_mm: 12.5,
+        mark_insets_mm: Some([10.0, 12.0, 30.0, 84.0]),
+        mark_length_mm: 7.5,
+        mark_line_mm: 0.8,
         color_setups: [(
             "Gold".to_string(),
             crate::GroupSetup {

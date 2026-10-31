@@ -284,7 +284,7 @@ fn print_and_cut_searches_for_the_marks_first() {
         vec![path(0, false, &[[30.0, 40.0], [50.0, 40.0]])],
         "silhouette.12x12",
     );
-    j.registration = Some(vectorcraft_cutjob::JobRegistration { origin_mm: [20.0, 25.0], size_mm: [180.0, 230.0] });
+    j.registration = Some(vectorcraft_cutjob::JobRegistration { origin_mm: [20.0, 25.0], size_mm: [180.0, 230.0], length_mm: 20.0, line_mm: 0.5 });
     let e = Silhouette.encode(&j, &cameo4()).unwrap();
     let text: Vec<String> = e.chunks.iter().map(|c| String::from_utf8_lossy(c).to_string()).collect();
     let first = &text[0];
@@ -295,6 +295,10 @@ fn print_and_cut_searches_for_the_marks_first() {
     let rest = text[1..].concat();
     assert!(rest.contains("M300,200\u{3}D300,600\u{3}"), "from the mark: (30, 40) − (20, 25) mm: {rest:?}");
     assert!(e.warnings.iter().any(|w| w.contains("Print & Cut")));
+    // C12.1: shorter, wider marks are what the machine is told to look for, in 1/20 mm.
+    j.registration = Some(vectorcraft_cutjob::JobRegistration { origin_mm: [20.0, 25.0], size_mm: [180.0, 230.0], length_mm: 12.5, line_mm: 0.8 });
+    let e = Silhouette.encode(&j, &cameo4()).unwrap();
+    assert!(String::from_utf8_lossy(&e.chunks[0]).contains("TB51,250\u{3}TB53,16\u{3}"));
     // Without it, none of that.
     j.registration = None;
     let plain = Silhouette.encode(&j, &cameo4()).unwrap();
