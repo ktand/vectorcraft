@@ -46,3 +46,35 @@ fn the_pieces_are_nested_on_the_mat_as_one_step() {
     s.execute("file.new", &json!({"width": 200, "height": 200})).unwrap();
     assert!(s.execute("cutting.nest", &json!({})).unwrap_err().to_string().contains("nothing to nest"));
 }
+
+fn objects(s: &mut Session) -> usize {
+    s.doc().unwrap().doc.layers[0].children().map_or(0, Vec::len)
+}
+
+/// C13.1: Replicate: copies nested with their piece in one undo step; the ones that don't fit
+/// left out, or onto new sheets.
+#[test]
+fn copies_are_nested_with_their_piece() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 864, "height": 864})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 100, "height": 100})).unwrap();
+    assert!(s.execute("cutting.nest", &json!({"copies": 501})).is_err());
+    assert!(s.execute("cutting.nest", &json!({"copies": 1.5})).is_err());
+    let r = s.execute("cutting.nest", &json!({"copies": 5})).unwrap();
+    assert_eq!((r["copies"].as_u64(), r["copiesLeftOut"].as_u64(), r["moved"].as_array().map(Vec::len)), (Some(5), Some(0), Some(6)), "{r}");
+    assert_eq!(objects(&mut s), 6);
+    assert_eq!(s.execute("cutting.job", &json!({})).unwrap()["job"]["paths"].as_array().unwrap().len(), 6, "all on the mat");
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(objects(&mut s), 1, "one undo step");
+    // 100 pt squares (35 mm) on a 12 in mat: about 64 fit; the rest are left out.
+    s.execute("select.all", &json!({})).unwrap();
+    let r = s.execute("cutting.nest", &json!({"copies": 99})).unwrap();
+    let (placed, out) = (r["copies"].as_u64().unwrap(), r["copiesLeftOut"].as_u64().unwrap());
+    assert!(placed > 30 && out > 0 && placed + out == 99, "{r}");
+    assert_eq!(objects(&mut s) as u64, placed + 1, "the left-out copies aren't kept");
+    s.execute("edit.undo", &json!({})).unwrap();
+    s.execute("select.all", &json!({})).unwrap();
+    let r = s.execute("cutting.nest", &json!({"copies": 99, "sheets": true})).unwrap();
+    assert_eq!(r["copiesLeftOut"], json!(0), "{r}");
+    assert!(r["created"].as_u64().unwrap() >= 1);
+}

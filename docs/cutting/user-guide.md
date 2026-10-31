@@ -201,6 +201,8 @@ so a small piece can sit in a larger one's hole:
 - **Turn Pieces:** pieces may be turned by quarter turns where that fits better.
 - **Onto New Sheets:** what doesn't fit goes onto new artboards ("Sheet 2", "Sheet 3", …) to the right, each cut
   on its own.
+- **Copies:** Replicate: this many more of each piece are made and nested with them, to fill a sheet with
+  stickers or labels. Copies that don't fit are left out, or with Onto New Sheets go onto more sheets.
 - **Nest Selected** / **Nest All:** each top-level object or group is one piece. Pieces too large for the mat stay
   where they were.
 
