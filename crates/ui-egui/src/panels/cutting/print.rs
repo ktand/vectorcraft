@@ -93,12 +93,51 @@ fn mark_rows(app: &mut VectorcraftApp, ui: &mut Ui, s: &Value) {
     }
 }
 
+/// Print bleed (C12.3): how far, and the bleed layer added, made again or removed; what the last
+/// Add said.
+fn bleed_rows(app: &mut VectorcraftApp, ui: &mut Ui, s: &Value) {
+    let (lo, hi) = vectorcraft_cutjob::CuttingSettings::BLEED_MM;
+    let radius = s["bleedMm"].as_f64().unwrap_or(vectorcraft_cutjob::CuttingSettings::DEFAULT_BLEED_MM);
+    widgets::label_row(ui, tl!("Bleed"), LABEL_W, |ui| {
+        if let Some(v) = mm_field(ui, "bleed", radius, lo) {
+            set(app, json!({ "bleedMm": v.clamp(lo, hi) }));
+        }
+    });
+    let ctx = ui.ctx().clone();
+    let mut note: Option<(bool, String)> = crate::panels::pstate(&ctx, "cutting-bleed");
+    let has = app.session.active().is_some_and(|st| vectorcraft_cutting::bleed::bleed_layer(&st.doc).is_some());
+    ui.horizontal(|ui| {
+        let label = if has { tl!("Update Bleed") } else { tl!("Add Bleed") };
+        let hover = tl!("Spreads each printed object's outer colour past its edge on a layer at the bottom, so a cut a little off the print still lands in colour.");
+        if ui.button(label).on_hover_text(hover).clicked() {
+            note = Some(match app.run("cutting.bleed.add", json!({})) {
+                Ok(r) => (false, format!("{} {}", r["objects"], tl!("objects bleed"))),
+                Err(e) => (true, e),
+            });
+        }
+        if has && ui.button(tl!("Remove Bleed")).clicked() {
+            let _ = app.run("cutting.bleed.remove", json!({}));
+            note = None;
+        }
+    });
+    if let Some((bad, text)) = &note {
+        let t = crate::theme::Tokens::get(ui.ctx());
+        ui.label(egui::RichText::new(text).color(if *bad { t.warning } else { t.text_dim }));
+    }
+    crate::panels::set_pstate(&ctx, "cutting-bleed", note);
+}
+
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     let Ok(info) = app.session.execute("cutting.settings.get", &json!({})) else {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
         return;
     };
     print_and_cut_rows(app, ui, &info);
+    if info["settings"]["printAndCut"].as_bool() == Some(true) {
+        widgets::divider(ui);
+        widgets::section_header(ui, tl!("Print Bleed"));
+        bleed_rows(app, ui, &info["settings"]);
+    }
 }
 
 #[cfg(test)]
@@ -148,5 +187,21 @@ mod tests {
         app.run("cutting.settings.set", json!({"markInsetsMm": [10, 20, 30, 40]})).unwrap();
         let t = texts(&mut app, &ctx);
         assert!(!t.iter().any(|x| x == "Inset"), "each edge's own: {t:?}");
+    }
+
+    /// C12.3: Print Bleed shows with Print & Cut on, and offers Update and Remove once added.
+    #[test]
+    fn the_panel_adds_a_bleed() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 612, "height": 792})).unwrap();
+        assert!(!texts(&mut app, &ctx).iter().any(|x| x == "Add Bleed"), "Print & Cut off");
+        app.run("cutting.settings.set", json!({"printAndCut": true})).unwrap();
+        let t = texts(&mut app, &ctx);
+        assert!(t.iter().any(|x| x == "Print Bleed") && t.iter().any(|x| x == "Add Bleed"), "{t:?}");
+        app.run("shape.rectangle", json!({"x": 200, "y": 300, "width": 100, "height": 100})).unwrap();
+        app.run("cutting.bleed.add", json!({})).unwrap();
+        let t = texts(&mut app, &ctx);
+        assert!(t.iter().any(|x| x == "Update Bleed") && t.iter().any(|x| x == "Remove Bleed"), "{t:?}");
     }
 }

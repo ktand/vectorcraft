@@ -85,3 +85,32 @@ fn the_marks_are_drawn_and_searched_as_set() {
     s.execute("cutting.settings.set", &json!({"markInsetsMm": null})).unwrap();
     assert_eq!(s.execute("cutting.job", &json!({})).unwrap()["job"]["registration"]["originMm"], json!([15.88, 15.88]), "back to the one inset");
 }
+
+/// C12.3: the print bleed: added at the bottom, not cut, one undo step; the job warns once the art
+/// moves, until it is made again; removed.
+#[test]
+fn a_print_bleed_is_added_updated_and_removed() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 612, "height": 792})).unwrap();
+    let rect = s.execute("shape.rectangle", &json!({"x": 200, "y": 300, "width": 100, "height": 100})).unwrap()["id"].clone();
+    s.execute("cutting.settings.set", &json!({"printAndCut": true, "bleedMm": 2})).unwrap();
+    s.execute("cutting.marks.add", &json!({})).unwrap();
+    assert!(s.execute("cutting.bleed.add", &json!({"radiusMm": 9})).is_err(), "out of range");
+    let r = s.execute("cutting.bleed.add", &json!({})).unwrap();
+    assert_eq!(r["objects"], json!(1), "the rectangle, not the marks: {r}");
+    assert_eq!(s.doc().unwrap().doc.layers[0].id.0, r["layer"].as_u64().unwrap(), "at the bottom");
+    let job = s.execute("cutting.job", &json!({})).unwrap();
+    assert_eq!(job["job"]["paths"].as_array().unwrap().len(), 1, "the bleed isn't cut");
+    assert_eq!(job["job"]["warnings"], json!([]));
+    s.execute("select.set", &json!({"ids": [rect]})).unwrap();
+    s.execute("object.move", &json!({"dx": 20, "dy": 0})).unwrap();
+    assert!(s.execute("cutting.job", &json!({})).unwrap()["job"]["warnings"].to_string().contains("Update Bleed"));
+    s.execute("cutting.bleed.add", &json!({})).unwrap();
+    assert_eq!(s.execute("cutting.job", &json!({})).unwrap()["job"]["warnings"], json!([]), "made again");
+    let layers = s.doc().unwrap().doc.layers.len();
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(s.doc().unwrap().doc.layers.len(), layers, "undo puts the first bleed back");
+    assert_eq!(s.execute("cutting.bleed.remove", &json!({})).unwrap()["removed"], json!(true));
+    assert_eq!(s.doc().unwrap().doc.layers.len(), layers - 1);
+    assert_eq!(s.execute("cutting.bleed.remove", &json!({})).unwrap()["removed"], json!(false));
+}

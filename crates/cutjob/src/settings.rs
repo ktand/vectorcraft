@@ -364,6 +364,8 @@ pub struct CuttingSettings {
     /// [`crate::marks::LINE_MM`]).
     pub mark_length_mm: f64,
     pub mark_line_mm: f64,
+    /// How far the print bleed runs past the art, mm (C12.3; `vectorcraft_cutting::bleed`).
+    pub bleed_mm: f64,
     /// Cut by colour (C7.4): each colour's own setup, by the name its group has (a swatch's name
     /// or `#rrggbb`); colours without one are cut with [`Self::operations`]. A layer's own setup is
     /// on the layer (`vectorcraft_cutting::setups`).
@@ -401,6 +403,7 @@ impl Default for CuttingSettings {
             mark_insets_mm: None,
             mark_length_mm: crate::marks::DEFAULT_LENGTH_MM,
             mark_line_mm: crate::marks::DEFAULT_LINE_MM,
+            bleed_mm: Self::DEFAULT_BLEED_MM,
             color_setups: Default::default(),
             weed_box: false,
             weed_margin_mm: 3.0,
@@ -417,7 +420,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 24] = [
+    const KEYS: [&'static str; 25] = [
         "version",
         "mat",
         "customMatMm",
@@ -437,6 +440,7 @@ impl CuttingSettings {
         "markInsetsMm",
         "markLengthMm",
         "markLineMm",
+        "bleedMm",
         "colorSetups",
         "weedBox",
         "weedMarginMm",
@@ -447,6 +451,9 @@ impl CuttingSettings {
     /// The weed box's margin and the weed lines' spacing (0: one from each side's middle), mm.
     pub const WEED_MARGIN_MM: (f64, f64) = (0.0, 50.0);
     pub const WEED_LINE_SPACING_MM: (f64, f64) = (0.0, 200.0);
+    /// The print bleed's distance, mm: the range, and the usual (C12.3).
+    pub const BLEED_MM: (f64, f64) = (0.1, 5.0);
+    pub const DEFAULT_BLEED_MM: f64 = 1.27;
 
     /// The settings in `v` (a document's `unknown["cutting"]`, from a file): anything that isn't an
     /// object gives the defaults. Never fails.
@@ -477,6 +484,7 @@ impl CuttingSettings {
             mark_insets_mm: quad(m, "markInsetsMm", crate::marks::READ_INSET_MM.0, crate::marks::READ_INSET_MM.1),
             mark_length_mm: num(m, "markLengthMm", crate::marks::LENGTH_MM.0, crate::marks::LENGTH_MM.1, d.mark_length_mm),
             mark_line_mm: num(m, "markLineMm", crate::marks::LINE_MM.0, crate::marks::LINE_MM.1, d.mark_line_mm),
+            bleed_mm: num(m, "bleedMm", Self::BLEED_MM.0, Self::BLEED_MM.1, d.bleed_mm),
             material: m.get("material").and_then(Value::as_str).and_then(crate::material::valid_name),
             color_setups: object(m, "colorSetups")
                 .map(|c| {
@@ -522,6 +530,7 @@ impl CuttingSettings {
         }
         m.insert("markLengthMm".into(), json!(self.mark_length_mm));
         m.insert("markLineMm".into(), json!(self.mark_line_mm));
+        m.insert("bleedMm".into(), json!(self.bleed_mm));
         if let Some(name) = &self.material {
             m.insert("material".into(), json!(name));
         }

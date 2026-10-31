@@ -37,6 +37,7 @@ fn the_defaults_round_trip_as_documented() {
             "markInsetMm": 15.88,
             "markLengthMm": 20.0,
             "markLineMm": 0.5,
+            "bleedMm": 1.27,
             "weedBox": false,
             "weedMarginMm": 3.0,
             "weedLines": false,
@@ -72,6 +73,7 @@ fn every_setting_round_trips() {
         mark_insets_mm: Some([10.0, 12.0, 30.0, 84.0]),
         mark_length_mm: 7.5,
         mark_line_mm: 0.8,
+        bleed_mm: 3.5,
         color_setups: [(
             "Gold".to_string(),
             crate::GroupSetup {
