@@ -30,6 +30,8 @@ mod contour;
 mod pixels;
 // Stencil bridges (C11.5).
 mod bridges;
+// Sketch fill for the pen (C13.3).
+mod sketch;
 
 const SETTINGS_SET: &str = "cutting.settings.set";
 const OP_SET: &str = "cutting.op.set";
@@ -44,6 +46,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(contour::specs());
     v.extend(pixels::specs());
     v.extend(bridges::specs());
+    v.extend(sketch::specs());
     v.extend(vec![
         cmd!(
             query "cutting.settings.get",
