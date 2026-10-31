@@ -97,6 +97,9 @@ pub fn detect(name: &str, bytes: &[u8]) -> Option<&'static Format> {
     if psdread::is_psd(bytes) {
         return format(if psdread::is_psb(bytes) { "psb" } else { "psd" });
     }
+    if super::jp2read::is_jpeg2000(bytes) {
+        return format("jpeg2000");
+    }
     if let Some(f) = image::guess_format(bytes).ok().and_then(image_format) {
         return Some(f);
     }
@@ -197,6 +200,42 @@ fn from_editing_data_alone(bytes: &[u8], opts: &LoadOptions) -> Option<Result<(D
     )
 }
 
+/// Is `w` a note on the PDF part as a page, which says nothing was skipped: that the art off the
+/// artboards is in the editing data alone, or that art past the page was clipped to it?
+fn is_page_note(w: &str) -> bool {
+    w == vectorcraft_pdf::OFF_ARTBOARD_NOTE || w == vectorcraft_pdf::PAST_PAGE_NOTE
+}
+
+/// The document read from the editing data alone with its type as outlines when `opts` asks for
+/// them (`textAs: outlines`): the page that would have them has none to give. Threaded type first
+/// flows through its frames (the editing data gives a story in its first frame), and the outlined
+/// frames leave their threads. Each outline group keeps its type's transparency, opacity mask and
+/// effects.
+pub(super) fn outlined_if_asked(mut doc: Document, warnings: Vec<String>, opts: &LoadOptions) -> (Document, Vec<String>) {
+    if opts.text_as != vectorcraft_pdf::TextAs::Outlines {
+        return (doc, warnings);
+    }
+    if !doc.text_threads.is_empty() {
+        crate::cmd::threads::reflow(&Document::new(1.0, 1.0), &mut doc);
+    }
+    let threaded = crate::cmd::threads::frames(&doc);
+    let mut texts = Vec::new();
+    doc.walk(|n| {
+        if matches!(n.kind, vectorcraft_doc::NodeKind::Text(_)) {
+            texts.push(n.clone());
+        }
+    });
+    for t in texts {
+        let Some(o) = crate::cmd::flatten::outlined_text(&t) else { continue };
+        let o = Node { visible: t.visible, locked: t.locked, ..doc.reid(&o) };
+        if let Some(slot) = doc.node_mut(t.id) {
+            *slot = o;
+        }
+    }
+    crate::cmd::threads::leave_threads(&mut doc, &threaded);
+    (doc, warnings)
+}
+
 /// Does `doc` hold no art: only layers, with nothing in them?
 fn draws_nothing(doc: &Document) -> bool {
     let mut art = false;
@@ -282,10 +321,14 @@ pub fn load_with(name: &str, bytes: &[u8], opts: &LoadOptions) -> Result<Loaded>
                     // saved without its PDF part (#1387: else the page, which is the art). So too
                     // pages that draw nothing at all: there is no page art to check the layers
                     // against, and the empty page would lose all of it.
-                    let alone = (r.only_text || draws_nothing(&r.document))
+                    // A page is empty only when nothing on it was skipped (an image that can't be
+                    // decoded draws nothing either): its notes are at most the page's own.
+                    let empty = draws_nothing(&r.document) && r.warnings.iter().all(|w| is_page_note(w));
+                    let alone = (r.only_text || empty)
                         .then(|| from_editing_data_alone(bytes, opts))
                         .flatten()
-                        .and_then(|read| read.ok());
+                        .and_then(|read| read.ok())
+                        .map(|(doc, warnings)| outlined_if_asked(doc, warnings, opts));
                     let (doc, warnings, read) = match alone {
                         Some((doc, warnings)) => (doc, warnings, true),
                         None => through_editing_data(bytes, opts, r.document, r.warnings, r.user_unit),
@@ -299,6 +342,7 @@ pub fn load_with(name: &str, bytes: &[u8], opts: &LoadOptions) -> Result<Loaded>
                     let whole = LoadOptions { pages: None, ..opts.clone() };
                     from_editing_data_alone(bytes, if every_page(bytes, opts) { &whole } else { opts })
                         .unwrap_or(Err(e))
+                        .map(|(doc, warnings)| outlined_if_asked(doc, warnings, opts))
                         .inspect(|_| editing_data = true)
                 }
                 Err(e) => Err(e),
@@ -589,6 +633,9 @@ pub fn raster_image(bytes: &[u8]) -> Result<RasterImage> {
     if psdread::is_psd(bytes) {
         let cms = vectorcraft_color::cms::active();
         return as_png(psdread::decode(bytes, MAX_RASTER_ALLOC, |c| cms.cmyk_to_srgb(c, false)).map_err(err)?, ppi);
+    }
+    if super::jp2read::is_jpeg2000(bytes) {
+        return as_png(super::jp2read::decode(bytes, MAX_RASTER_ALLOC).map_err(err)?, ppi);
     }
     let mut reader = image::ImageReader::new(Cursor::new(bytes)).with_guessed_format().map_err(err)?;
     if reader.format().is_none() && super::tgaread::is_targa(bytes) {

@@ -973,6 +973,35 @@ fn isolation_bar_navigation_and_back_button_steps_up() {
     assert_eq!(app.session.active().unwrap().isolation, Some(NodeId(g2)));
 }
 
+/// Tab goes to the isolation bar's back button and breadcrumbs and does not stop on the bar
+/// behind them, which only keeps the pointer off the canvas.
+#[test]
+fn tab_skips_the_isolation_bars_background() {
+    let mut app = crate::VectorcraftApp::new(Session::new(), Default::default());
+    app.run("file.new", json!({"width": 400, "height": 200})).unwrap();
+    let a = app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 30, "height": 20})).unwrap()["id"].as_u64().unwrap();
+    let b = app.run("shape.rectangle", json!({"x": 50, "y": 10, "width": 30, "height": 20})).unwrap()["id"].as_u64().unwrap();
+    app.run("select.set", json!({"ids": [a, b]})).unwrap();
+    app.run("object.group", json!({})).unwrap();
+    app.run("object.isolate", json!({"id": a})).unwrap();
+    let ctx = egui::Context::default();
+    crate::theme::install_fonts(&ctx);
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 700.0));
+    let mut frame = |events: Vec<egui::Event>| {
+        let mut out = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), events, ..Default::default() }, |ui| {
+            super::isolation_bar(&mut app, ui, screen);
+        });
+        out.textures_delta.clear();
+    };
+    frame(vec![]);
+    let bar = egui::Rect::from_min_size(screen.min, egui::vec2(screen.width(), 24.0));
+    let bar = ctx.viewport(|vp| vp.prev_pass.widgets.layers().flat_map(|(_, w)| w.iter()).find(|w| w.rect == bar).map(|w| w.id));
+    let bar = bar.expect("the isolation bar");
+    let stops = crate::widgets::accessibility_tests::tab_stops(&ctx, 10, frame);
+    assert!(!stops.is_empty(), "Tab reaches the back button and the breadcrumbs");
+    assert!(!stops.contains(&bar), "{stops:?}");
+}
+
 /// The Control bar's Isolate Selected Object isolates a path inside a group that Direct
 /// Selection selected, and Exit Isolation Mode leaves with the path selected. Type, symbol
 /// instances, blends, two objects and an envelope's contents get no isolate button, and pattern
@@ -1029,6 +1058,23 @@ fn the_control_bar_isolates_the_selected_object_and_exits_isolation_mode() {
     app.run("object.pattern.make", json!({"name": "Dots", "width": 20, "height": 20})).unwrap();
     assert!(app.session.active().unwrap().isolation.is_some());
     assert_eq!(isolation_button(&mut app, &ctx, vec![]), None, "the isolation bar ends pattern editing");
+}
+
+/// #4819: with Direct Selection, a selected blend shows the Control bar's and the Properties
+/// panel's Convert buttons, as a path selected whole does; with the Selection tool it doesn't.
+#[test]
+fn a_blend_selected_with_direct_selection_shows_the_convert_buttons() {
+    let mut app = crate::VectorcraftApp::new(Session::new(), Default::default());
+    app.run("file.new", json!({"width": 400, "height": 200})).unwrap();
+    let rect = |app: &mut crate::VectorcraftApp, x: f64| {
+        app.run("shape.rectangle", json!({"x": x, "y": 10, "width": 30, "height": 20})).unwrap()["id"].as_u64().unwrap()
+    };
+    let (a, b) = (rect(&mut app, 10.0), rect(&mut app, 200.0));
+    let blend = app.run("object.blend.make", json!({"ids": [a, b], "steps": 1})).unwrap()["id"].as_u64().unwrap();
+    app.run("select.set", json!({"ids": [blend]})).unwrap();
+    assert!(super::anchor_controls(&app) == super::AnchorControls::None, "the Selection tool");
+    app.select_tool("directSelection");
+    assert!(super::anchor_controls(&app) == super::AnchorControls::Convert);
 }
 
 /// The Zoom tool's hint follows Performance › Animated Zoom (#394): a drag zooms as it goes,
@@ -1632,4 +1678,57 @@ fn full_screen_modes_fill_the_screen_and_normal_mode_restores_the_window() {
     assert!(sent(&mut app, true).is_empty());
     app.ui.screen_mode = 0;
     assert!(sent(&mut app, true).is_empty(), "still full screen, as the user had it");
+}
+
+/// Two or more selected objects show all six Distribute Objects buttons in the Control bar;
+/// a single object keeps the bar as it was. A click distributes as the Align panel's button does.
+#[test]
+fn the_control_bar_shows_the_distribute_buttons_for_two_or_more_objects() {
+    crate::i18n::set_current(crate::i18n::Lang::EN);
+    let mut app = crate::VectorcraftApp::new(Session::new(), Default::default());
+    app.run("file.new", json!({"width": 400, "height": 200})).unwrap();
+    let rect = |app: &mut crate::VectorcraftApp, x: f64| {
+        app.run("shape.rectangle", json!({"x": x, "y": 10, "width": 30, "height": 20})).unwrap()["id"].clone()
+    };
+    let (a, b, c) = (rect(&mut app, 10.0), rect(&mut app, 100.0), rect(&mut app, 200.0));
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    crate::theme::install_fonts(&ctx);
+    let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 300.0));
+    let frame = |app: &mut crate::VectorcraftApp, events: Vec<egui::Event>| {
+        let mut out = ctx.run_ui(egui::RawInput { events, screen_rect: Some(screen), ..Default::default() }, |ui| super::control_bar(app, ui));
+        out.textures_delta.clear();
+        out.platform_output.accesskit_update.map(|u| u.nodes).unwrap_or_default()
+    };
+    const DISTRIBUTE: [&str; 6] = [
+        "Vertical Distribute Top",
+        "Vertical Distribute Center",
+        "Vertical Distribute Bottom",
+        "Horizontal Distribute Left",
+        "Horizontal Distribute Center",
+        "Horizontal Distribute Right",
+    ];
+    let rects = |app: &mut crate::VectorcraftApp| {
+        frame(app, vec![]);
+        let nodes = frame(app, vec![]);
+        DISTRIBUTE.map(|name| {
+            let n = nodes.iter().find(|(_, n)| n.label() == Some(name)).map(|(_, n)| n)?;
+            n.bounds().map(|b| egui::Rect::from_min_max(egui::pos2(b.x0 as f32, b.y0 as f32), egui::pos2(b.x1 as f32, b.y1 as f32)))
+        })
+    };
+    app.run("select.set", json!({"ids": [a]})).unwrap();
+    assert!(rects(&mut app).iter().all(Option::is_none), "one object: no distribute buttons");
+    app.run("select.set", json!({"ids": [a, b, c]})).unwrap();
+    let rects = rects(&mut app);
+    assert!(rects.iter().all(Option::is_some), "three objects: {rects:?}");
+    let r = rects[3].expect("Horizontal Distribute Left");
+    let press =
+        |pressed| egui::Event::PointerButton { pos: r.center(), button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+    for events in [vec![egui::Event::PointerMoved(r.center()), press(true)], vec![press(false)]] {
+        frame(&mut app, events);
+    }
+    let left = |app: &crate::VectorcraftApp, id: &serde_json::Value| {
+        app.session.active().unwrap().doc.node(vectorcraft_doc::NodeId(id.as_u64().unwrap())).unwrap().geometric_bounds().unwrap().x0
+    };
+    assert_eq!((left(&app, &a), left(&app, &b), left(&app, &c)), (10.0, 105.0, 200.0), "{}", app.ui.status);
 }

@@ -6,7 +6,7 @@ use vectorcraft_color::{Color, Paint};
 use vectorcraft_doc::{LiveCorners, LiveShape, NodeKind, Unit, WidthProfile};
 use vectorcraft_engine::cmd::newdoc;
 
-use super::{corner_radius_row, first_selected, pstate, set_pstate};
+use super::{first_selected, pstate, set_pstate};
 use crate::theme::Tokens;
 use crate::widgets::{self, dim_label, divider, section_header};
 use crate::{VectorcraftApp, icons};
@@ -111,10 +111,12 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     section_header(ui, tl!("Quick Actions"));
     let is_group = matches!(first.as_ref().map(|n| &n.kind), Some(NodeKind::Group { .. }));
     let is_live = matches!(first.as_ref().map(|n| &n.kind), Some(NodeKind::Path { live: Some(l), .. }) if !matches!(**l, LiveShape::Path { .. }));
-    // Blend Options for one blend while the Blend tool is in use, Merge Live Paint for a Live
-    // Paint group selected with more to merge into it, as the Properties panel overview lists them
+    // Blend Options for one selected blend, Merge Live Paint for a Live Paint group selected with
+    // more to merge into it, as the Properties panel overview lists them
     // (<https://helpx.adobe.com/illustrator/desktop/get-started/learn-the-basics/properties-panel-overview.html>).
-    let blend_options = n_sel == 1 && app.session.tool_id() == "blend" && matches!(first.as_ref().map(|n| &n.kind), Some(NodeKind::Blend { .. }));
+    // The overview names the Blend tool; the blending page has the button for a blend selected with
+    // any tool (<https://helpx.adobe.com/illustrator/using/blending-objects.html>, #4817).
+    let blend_options = n_sel == 1 && matches!(first.as_ref().map(|n| &n.kind), Some(NodeKind::Blend { .. }));
     let merge_live_paint = n_sel > 1 && can_merge_live_paint(app);
     let mut actions: Vec<(&str, &str)> = vec![];
     if n_sel > 1 {
@@ -796,15 +798,7 @@ pub fn transform_section(app: &mut VectorcraftApp, ui: &mut Ui) {
     if let Some(n) = first_selected(app)
         && let NodeKind::Path { live: Some(live), .. } = &n.kind
     {
-        match &**live {
-            vectorcraft_doc::LiveShape::Rectangle { .. } => corner_radius_row(app, ui, &n, "radius"),
-            vectorcraft_doc::LiveShape::Polygon { .. } => super::transform::polygon_rows(app, ui, &n, live, "props-polygon"),
-            vectorcraft_doc::LiveShape::Ellipse { pie, .. } => {
-                widgets::subheader(ui, tl!("Ellipse Properties:"));
-                super::transform::pie_rows(app, ui, *pie, "props-pie");
-            }
-            _ => {}
-        }
+        super::transform::live_shape_rows(app, ui, &n, live, "props", false);
     }
 }
 
