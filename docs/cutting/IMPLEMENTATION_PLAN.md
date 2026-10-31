@@ -192,6 +192,7 @@ the specialty tools are left for later (PixScan needs the maker's own mat; the t
 | Id | Task | Acceptance |
 |---|---|---|
 | C13.1 | **Replicate** (owner, 2026-10-31, from the maker's software's panel list) — **done**: `nest::add_copies` makes `copies` more of each piece (all it holds, new ids) just above it, at most 500 each and 2,000 pieces in all; `cutting.nest {copies?}` makes them and nests all as one undo step, the copies that don't fit taken out again (with `sheets`, onto new sheets) → `copies`, `copiesLeftOut`; Cutting Mat › Nesting › Copies, the note saying how many were left out | Unit: copies beside their piece, everything they hold, new ids, limits, nested; engine: 5 copies all on the mat, one undo step, 99 more than fit (the extra left out, not kept), onto sheets none left out; refusals; frame test: the field and the note |
+| C13.2 | **Finer turns when nesting** (owner, 2026-10-31) — **done**: `nest::Options::fine`: every 15° (24 turns) besides quarter turns, which stay exact; `Placed::turn_deg`; `cutting.nest {turns?: none\|quarter\|fine}` (in place of `rotate`); Cutting Mat › Nesting › Turn Pieces a choice: Off, Quarter Turns, Every 15° | Unit: a bar lying at 45° fits a strip only with fine turns, turned back flat; quarter turns exact; engine: each choice nests, another refused; fuzz: fine turns on some cases |
 
 Later (outline; size later):
 

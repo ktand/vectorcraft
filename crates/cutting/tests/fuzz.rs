@@ -293,7 +293,7 @@ proptest! {
             }
         }
         let mut sheets = d.clone();
-        let _ = vectorcraft_cutting::nest::nest_sheets(&mut sheets, &pieces, vectorcraft_cutting::nest::Options { gap_mm: 1.0, rotate: true });
+        let _ = vectorcraft_cutting::nest::nest_sheets(&mut sheets, &pieces, vectorcraft_cutting::nest::Options { gap_mm: 1.0, rotate: true, fine: true });
         prop_assert!(sheets.artboards.len() <= d.artboards.len() + vectorcraft_cutting::nest::MAX_SHEETS);
         // C11.1: a contour round everything, holes or not: a path of closed lines or a reason.
         let all: Vec<NodeId> = d.layers.iter().map(|l| l.id).collect();
@@ -369,7 +369,7 @@ proptest! {
         use vectorcraft_cutjob::RectMm;
         use vectorcraft_cutting::nest::{Options, nest_within};
         let area = RectMm { x0: 5.0, y0: 5.0, x1: 305.0, y1: 305.0 };
-        let n = nest_within(&pieces, &fixed, area, Options { gap_mm: gap, rotate }, 20_000_000);
+        let n = nest_within(&pieces, &fixed, area, Options { gap_mm: gap, rotate, fine: rotate && gap > 10.0 }, 20_000_000);
         prop_assert_eq!(n.placed.len(), pieces.len());
         let used_gap = if gap.is_finite() { gap.clamp(0.0, 100.0) } else { 2.0 };
         // The placed pieces made only of rectangles, as rectangles where they went.
