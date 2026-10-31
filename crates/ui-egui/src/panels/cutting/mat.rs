@@ -88,12 +88,14 @@ struct NestChoice {
     rotate: bool,
     /// What doesn't fit goes onto new sheets (C8.6).
     sheets: bool,
+    /// Replicate (C13.1): this many more of each piece, nested with them.
+    copies: usize,
     note: Option<(bool, String)>,
 }
 
 impl Default for NestChoice {
     fn default() -> Self {
-        NestChoice { gap_mm: 2.0, rotate: true, sheets: false, note: None }
+        NestChoice { gap_mm: 2.0, rotate: true, sheets: false, copies: 0, note: None }
     }
 }
 
@@ -114,27 +116,19 @@ fn nest_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     if widgets::check(ui, tl!("Onto New Sheets"), c.sheets, true) {
         c.sheets = !c.sheets;
     }
+    widgets::label_row(ui, tl!("Copies"), LABEL_W, |ui| {
+        let max = vectorcraft_cutting::nest::MAX_COPIES as f64;
+        if let Some(v) = widgets::spin_plain(ui, ("cutting", "nest-copies"), c.copies as f64, "", 0, 60.0, 1.0, 0.0, &[]) {
+            // Whole and in range after the clamp: the cast is exact.
+            c.copies = v.round().clamp(0.0, max) as usize;
+        }
+    });
     let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
     let label = if selected { "Nest Selected" } else { "Nest All" };
     if ui.button(tl!(label)).clicked() {
-        c.note = Some(match app.run("cutting.nest", json!({ "gapMm": c.gap_mm, "rotate": c.rotate, "sheets": c.sheets })) {
-            Ok(r) => {
-                let moved = r["moved"].as_array().map_or(0, Vec::len);
-                let left = r["unplaced"].as_array().map_or(0, Vec::len);
-                let used = r["usedLengthMm"].as_f64().unwrap_or(0.0);
-                let sheets = r["sheets"].as_array().map_or(0, Vec::len);
-                if c.sheets {
-                    let mut text = format!("{moved} {} {sheets} {}", tl!("nested on"), tl!("sheets"));
-                    if left > 0 {
-                        text = format!("{text}; {left} {}", tl!("too large for a sheet stayed where they were"));
-                    }
-                    (left > 0, text)
-                } else if left > 0 {
-                    (true, format!("{moved} {} {used:.0} mm; {left} {}", tl!("nested in"), tl!("didn't fit and stayed where they were")))
-                } else {
-                    (false, format!("{moved} {} {used:.0} mm {}", tl!("nested in"), tl!("of the mat")))
-                }
-            }
+        let p = json!({ "gapMm": c.gap_mm, "rotate": c.rotate, "sheets": c.sheets, "copies": c.copies });
+        c.note = Some(match app.run("cutting.nest", p) {
+            Ok(r) => nest_note(&r, c.sheets),
             Err(e) => (true, e),
         });
     }
@@ -142,6 +136,32 @@ fn nest_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
     }
     crate::panels::set_pstate(&ctx, "cutting-nest", c);
+}
+
+/// What a nesting did, in a line, and whether it calls for attention.
+fn nest_note(r: &Value, sheets: bool) -> (bool, String) {
+    let moved = r["moved"].as_array().map_or(0, Vec::len);
+    let left = r["unplaced"].as_array().map_or(0, Vec::len);
+    let used = r["usedLengthMm"].as_f64().unwrap_or(0.0);
+    let (mut bad, mut text) = if sheets {
+        let n = r["sheets"].as_array().map_or(0, Vec::len);
+        let mut text = format!("{moved} {} {n} {}", tl!("nested on"), tl!("sheets"));
+        if left > 0 {
+            text = format!("{text}; {left} {}", tl!("too large for a sheet stayed where they were"));
+        }
+        (left > 0, text)
+    } else if left > 0 {
+        (true, format!("{moved} {} {used:.0} mm; {left} {}", tl!("nested in"), tl!("didn't fit and stayed where they were")))
+    } else if r.get("copies").is_some() {
+        (false, format!("{moved} {}", tl!("nested")))
+    } else {
+        (false, format!("{moved} {} {used:.0} mm {}", tl!("nested in"), tl!("of the mat")))
+    };
+    if let Some(out) = r["copiesLeftOut"].as_u64().filter(|n| *n > 0) {
+        bad = true;
+        text = format!("{text}; {out} {}", tl!("copies didn't fit and were left out"));
+    }
+    (bad, text)
 }
 
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
@@ -206,5 +226,10 @@ mod tests {
         assert!(app.run("cutting.job", json!({})).is_err(), "off the mat");
         app.run("cutting.nest", json!({})).unwrap();
         assert!(app.run("cutting.job", json!({})).is_ok(), "nested onto it");
+        assert!(texts(&mut app, &ctx).iter().any(|x| x == "Copies"), "Replicate (C13.1)");
+        let r = app.run("cutting.nest", json!({"copies": 3})).unwrap();
+        assert_eq!(super::nest_note(&r, false), (false, "4 nested".to_string()));
+        let left = json!({"moved": [1], "unplaced": [], "copies": 1, "copiesLeftOut": 7});
+        assert!(super::nest_note(&left, false).0 && super::nest_note(&left, false).1.contains("7 copies didn't fit"));
     }
 }

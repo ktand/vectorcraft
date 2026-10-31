@@ -623,6 +623,33 @@ pub fn nest_sheets(d: &mut vectorcraft_doc::Document, ids: &[vectorcraft_doc::No
     Ok(SheetsNested { sheets, created, unplaced: remaining, out_of_work })
 }
 
+/// Most copies of each piece [`add_copies`] makes.
+pub const MAX_COPIES: usize = 500;
+
+/// Replicate (C13.1): `copies` copies of each of `ids` (with all it holds, new ids), each put just
+/// above its original in the same group or layer, for nesting with them. The copies, in order;
+/// an error past [`MAX_COPIES`] or past [`MAX_PIECES`] pieces in all. Edits `d` (the caller makes
+/// that one undo step).
+pub fn add_copies(d: &mut vectorcraft_doc::Document, ids: &[vectorcraft_doc::NodeId], copies: usize) -> Result<Vec<vectorcraft_doc::NodeId>, String> {
+    if copies > MAX_COPIES {
+        return Err(format!("at most {MAX_COPIES} copies of each piece"));
+    }
+    if ids.len().saturating_mul(copies + 1) > MAX_PIECES {
+        return Err(format!("at most {MAX_PIECES} pieces in all, copies included"));
+    }
+    let mut out = Vec::with_capacity(ids.len() * copies);
+    for id in ids {
+        let Some(node) = d.node(*id).cloned() else { continue };
+        let (Some(parent), Some(path)) = (d.parent_of(*id), d.index_path(*id)) else { continue };
+        let at = path.last().map_or(usize::MAX, |i| i + 1);
+        for _ in 0..copies {
+            let copy = d.reid(&node);
+            out.push(d.insert(Some(parent), at, copy).map_err(|e| e.to_string())?);
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -778,6 +805,30 @@ mod document {
     use vectorcraft_geom::{Rect, shapes};
 
     use super::*;
+
+    /// C13.1: copies of a piece go just above it with new ids, all they hold copied; too many are
+    /// refused.
+    #[test]
+    fn copies_are_made_beside_their_piece() {
+        let mut d = Document::new(600.0, 600.0);
+        let layer = d.layers[0].id;
+        let a = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(10.0, 10.0, 60.0, 60.0)), Appearance::default());
+        let b = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(100.0, 10.0, 130.0, 60.0)), Appearance::default());
+        let group = Node::group(d.alloc_id(), vec![std::sync::Arc::new(a), std::sync::Arc::new(b)]);
+        let g = d.insert(Some(layer), usize::MAX, group).unwrap();
+        let copies = add_copies(&mut d, &[g], 3).unwrap();
+        assert_eq!(copies.len(), 3);
+        let order: Vec<_> = d.layers[0].children().unwrap().iter().map(|n| n.id).collect();
+        assert_eq!(order[0], g, "the original first, its copies just above");
+        assert!(copies.iter().all(|c| order.contains(c) && *c != g));
+        assert_eq!(d.node(copies[0]).unwrap().children().map(Vec::len), Some(2), "all it holds");
+        let mut ids = std::collections::HashSet::new();
+        d.walk(|n| assert!(ids.insert(n.id), "ids are new"));
+        assert!(add_copies(&mut d, &[g], MAX_COPIES + 1).is_err());
+        assert!(add_copies(&mut d, &[g, copies[0]], MAX_PIECES).is_err());
+        let n = nest_document(&d, &default_pieces(&d), Options::default()).unwrap();
+        assert!(n.unplaced.is_empty() && n.moves.len() == 4, "{n:?}");
+    }
 
     /// C12.1: with Print & Cut, pieces are nested clear of the areas round the marks: the job has
     /// no warning about them.

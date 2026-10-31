@@ -183,6 +183,16 @@ shows them (protocol notes, [ST]).
 | C12.2 | **Four cutting panels** (owner, 2026-10-31: Cut Settings was crowded) — **done**: Cut Settings keeps how things are cut (the job line and Send, Selected, Cut Along, Default, Groups, Tool Settings, Advanced); Contour, Stencil and Weeding move to a new **Cut Lines** panel (`cuttingLines`); Print & Cut moves out of Cutting Mat to its own **Print & Cut** panel (`cuttingPrint`); both on the Window menu with icons; the Cutting workspace docks them as two groups of two tabs below Layers (four tabs in one group cut their names short), Cut Settings · Cut Lines then Cutting Mat · Print & Cut; the panels' code split to `panels/cutting/lines.rs` and `print.rs` | Frame tests moved with their sections; the workspace test: all four docked open, out of the icon column; screenshot of both groups |
 | C12.3 | **Print bleed** (owner, 2026-10-31; the maker's software has it, protocol notes [ST]) — **done**: `cutting::bleed`: the Print Bleed layer at the bottom (locked, No Cut, `cut:bleed` holding a fingerprint of the art and distance): for each printed object (the marks, contour and bleed layers aside) its painted outline (fill and strokes, as Stroke Edge cuts it) grown `bleedMm` (0.1–5, default 1.27) with round corners, filled with its first painted leaf's stroke colour, else its fill's (type through its outlines, a symbol through its art; images and meshes none); `cutting.bleed.add {radiusMm?}` (replacing the layer) and `cutting.bleed.remove`, one undo step each; the Print & Cut job warns once the art or distance differs from the fingerprint ("press Update Bleed"); Print & Cut panel › Print Bleed (Bleed, Add / Update / Remove Bleed) | Unit: a square's bleed its colour the distance past it, not cut; a stroke's round the stroke in its colour; stale after a move or another distance, not after making it again (the old bleed not bled); refusals; engine: added at the bottom, the marks not bled, not cut, stale after a move, made again, undo, removed; frame test: the section and its buttons; fuzz: random documents' bleeds finite or a reason; checklist step 13 |
 
+## Phase 13 — More from the maker's software
+
+Owner, 2026-10-31: from Silhouette Studio's panel list, the cutting tools VectorCraft doesn't have from upstream:
+Replicate, finer turns when nesting, a sketch fill for the pen, rhinestones, a puzzle. Pop-up cards, PixScan and
+the specialty tools are left for later (PixScan needs the maker's own mat; the tools need the machine).
+
+| Id | Task | Acceptance |
+|---|---|---|
+| C13.1 | **Replicate** (owner, 2026-10-31, from the maker's software's panel list) — **done**: `nest::add_copies` makes `copies` more of each piece (all it holds, new ids) just above it, at most 500 each and 2,000 pieces in all; `cutting.nest {copies?}` makes them and nests all as one undo step, the copies that don't fit taken out again (with `sheets`, onto new sheets) → `copies`, `copiesLeftOut`; Cutting Mat › Nesting › Copies, the note saying how many were left out | Unit: copies beside their piece, everything they hold, new ids, limits, nested; engine: 5 copies all on the mat, one undo step, 99 more than fit (the extra left out, not kept), onto sheets none left out; refusals; frame test: the field and the note |
+
 Later (outline; size later):
 
 Saved device profiles ·
