@@ -202,6 +202,7 @@ fn run_ui_part3(app: &mut VectorcraftApp, id: &str, p: &Value) -> Option<Result<
         "view.cutting" => flag(&mut app.ui.view.cutting),
         crate::cutting::send_window::COMMAND => crate::cutting::send_window::open(app),
         crate::cutting::TOOLPATHS_COMMAND => crate::cutting::toggle_toolpaths(app),
+        crate::cutting::CUT_BORDER_COMMAND => crate::cutting::toggle_cut_border(app),
         "view.cornerWidget" => flag(&mut app.ui.view.corner_widgets),
         // New View: the engine stores the current zoom, centre and rotation under the given name.
         "view.saved.new" if p.get("zoom").is_none() => {

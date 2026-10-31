@@ -272,8 +272,8 @@ its edge, by **Bleed** mm (default 1.27), on a locked layer at the bottom called
 the spread shows, and it isn't cut. Move or change the art afterwards and the job says so: press **Update Bleed**,
 then print again. Images get no bleed.
 
-**Keep the hatched areas clear.** With Print & Cut on, the mat shows hatched areas round the marks and across the
-top of the page. The machine's sensor looks there for the marks, so anything printed or cut there can stop it
+**Keep the hatched areas clear.** With Print & Cut on, the page shows hatched areas: a band across the top, down
+to the marks' line, and a square round each mark. The machine's sensor looks there for the marks, so anything printed or cut there can stop it
 finding them. The job warns about each object that comes into one, and nesting keeps pieces out of them.
 
 A contour (section 5) is the usual cut line for printed stickers.
@@ -281,6 +281,8 @@ A contour (section 5) is the usual cut line for printed stickers.
 ## 8. Checking the job before you cut
 
 - **Cutting View** (View menu): the mat behind the art, with a millimetre grid.
+- **Show Cut Border** (View menu, on at first): what can be cut, as a thin red line: between the marks for Print
+  & Cut, otherwise the mat's cut area.
 - **Show Toolpaths** (View menu): the job's lines in cutting order, numbered, with the moves between them dashed.
 - **Playback:** the **Play**, **Previous** and **Next** buttons at the foot of the canvas play the blade's run, ten
   times faster than the machine. They step from line to line, or open a slider to scrub along it. **Done** puts

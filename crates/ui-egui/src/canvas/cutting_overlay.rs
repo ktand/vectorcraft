@@ -25,6 +25,19 @@ pub(super) fn under(app: &VectorcraftApp, painter: &egui::Painter, xf: &Xf) {
     }
 }
 
+/// What Cutting View draws on the paper, under the art (the canvas's hook after the paper): the
+/// areas Print & Cut keeps clear, hatched (C14.1: under the art, as the maker's software draws
+/// them, so the marks and any art there show whole).
+pub(super) fn on_paper(app: &VectorcraftApp, painter: &egui::Painter, xf: &Xf) {
+    if !app.ui.view.cutting {
+        return;
+    }
+    let Some(pl) = placed(app) else { return };
+    let to_doc = pl.mat_to_doc();
+    let screen = |x: f64, y: f64| xf.to_screen(to_doc * Point::new(x, y));
+    no_go(app, painter, &pl, &screen, &Tokens::get(painter.ctx()));
+}
+
 /// What Cutting View draws over the art (the canvas's hook): the job's overlay and the
 /// playback bar.
 pub(super) fn over(app: &VectorcraftApp, painter: &egui::Painter, xf: &Xf, ctx: &egui::Context) {
@@ -172,10 +185,11 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
     let [w, h] = pl.mat.size_mm;
     let px_per_mm = xf.zoom / MM_PER_PT;
     let cut = pl.mat.cut_area_mm;
-    if cut != (RectMm { x0: 0.0, y0: 0.0, x1: w, y1: h }) {
+    // The cut area, dashed, when the cut border (which shows it) is off.
+    if cut != (RectMm { x0: 0.0, y0: 0.0, x1: w, y1: h }) && !crate::cutting::shows_cut_border(p.ctx()) {
         p.extend(Shape::dashed_line(&ring(cut), Stroke::new(1.0, t.accent), 5.0, 3.0));
     }
-    no_go(app, p, &pl, &screen, &t);
+    cut_border(app, p, &pl, &ring, &t);
     if crate::cutting::shows_toolpaths(p.ctx())
         && let Some(job) = crate::cutting::job(app, p.ctx())
         && let Ok(made) = &*job
@@ -300,6 +314,25 @@ const NUMBER_GAP_PX: f32 = 14.0;
 /// The job's toolpaths in cutting order (C3.6): cuts solid and scores dashed, each in its colour,
 /// the blade's travel between them faint and dashed, an arrow at each path's start along the way
 /// it is cut, and its number in the order.
+/// View › Show Cut Border (C14.1): what can be cut, as a thin red line: between the registration
+/// marks for Print & Cut, else the mat's cut area.
+fn cut_border(app: &VectorcraftApp, p: &egui::Painter, pl: &Placement, ring: &dyn Fn(RectMm) -> Vec<Pos2>, t: &Tokens) {
+    if !crate::cutting::shows_cut_border(p.ctx()) {
+        return;
+    }
+    let mut r = pl.mat.cut_area_mm;
+    if let Some(st) = app.session.active() {
+        let s = vectorcraft_cutting::settings(&st.doc);
+        if s.print_and_cut
+            && let Some(m) = vectorcraft_cutting::marks::layout(&s, &st.doc)
+        {
+            let (a, at) = (m.area(), pl.artboard_mm);
+            r = RectMm { x0: at.x0 + a.x0, y0: at.y0 + a.y0, x1: at.x0 + a.x1, y1: at.y0 + a.y1 };
+        }
+    }
+    p.add(Shape::line(ring(r), Stroke::new(1.0, t.bleed)));
+}
+
 /// Print & Cut (C12.1): the areas round the registration marks where nothing may be printed or
 /// cut, cross-hatched over the art.
 fn no_go(app: &VectorcraftApp, p: &egui::Painter, pl: &Placement, screen: &dyn Fn(f64, f64) -> Pos2, t: &Tokens) {

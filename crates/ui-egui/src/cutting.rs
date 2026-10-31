@@ -126,6 +126,29 @@ pub(crate) fn toggle_toolpaths(app: &mut VectorcraftApp) -> Result<serde_json::V
     Ok(serde_json::Value::Null)
 }
 
+fn cut_border_key() -> egui::Id {
+    egui::Id::unique("cutting-hide-cut-border")
+}
+
+/// Whether Cutting View draws the cut border (C14.1): on until it is switched off.
+pub(crate) fn shows_cut_border(ctx: &egui::Context) -> bool {
+    !ctx.data(|d| d.get_temp::<bool>(cut_border_key())).unwrap_or(false)
+}
+
+pub(crate) fn set_shows_cut_border(ctx: &egui::Context, on: bool) {
+    ctx.data_mut(|d| d.insert_temp(cut_border_key(), !on));
+}
+
+/// View › Show Cut Border (C14.1).
+pub(crate) const CUT_BORDER_COMMAND: &str = "view.cutting.cutBorder";
+
+/// [`CUT_BORDER_COMMAND`]: shows or hides the cut border.
+pub(crate) fn toggle_cut_border(app: &mut VectorcraftApp) -> Result<serde_json::Value, String> {
+    let ctx = app.ui_ctx.clone().ok_or("the app hasn't drawn a frame yet")?;
+    set_shows_cut_border(&ctx, !shows_cut_border(&ctx));
+    Ok(serde_json::Value::Null)
+}
+
 /// Playback runs this many times faster than the machine is estimated to.
 pub(crate) const SPEEDUP: f64 = 10.0;
 
