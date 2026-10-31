@@ -125,6 +125,13 @@ impl Mask {
         false
     }
 
+    /// ORs in `other`, a mask the same size.
+    fn or(&mut self, other: &Mask) {
+        for (a, b) in self.bits.iter_mut().zip(&other.bits) {
+            *a |= *b;
+        }
+    }
+
     /// ORs `piece` in with its top-left cell at (`x`, `y`).
     fn add(&mut self, piece: &Mask, x: i64, y: i64) {
         for py in 0..piece.h {
@@ -375,8 +382,13 @@ pub fn nest_within(pieces: &[Vec<Shape>], fixed: &[Shape], area: RectMm, opt: Op
     let g = if opt.gap_mm.is_finite() { opt.gap_mm.clamp(0.0, 100.0) } else { 2.0 };
     let (gw, gh) = ((aw / c).floor() as i64, (ah / c).floor() as i64);
     let (Ok(w), Ok(h)) = (usize::try_from(gw), usize::try_from(gh)) else { return none(false) };
-    // What stays, grown by the gap.
-    let mut sheet = draw(fixed, [area.x0, area.y0], c, w, h).dilated(g, c);
+    // What stays, grown by the gap: each outline drawn on its own and all of them together, so
+    // where two overlap stays taken (even-odd over all of them would make the overlap a hole).
+    let mut sheet = Mask::new(w, h);
+    for s in fixed {
+        sheet.or(&draw(std::slice::from_ref(s), [area.x0, area.y0], c, w, h));
+    }
+    let mut sheet = sheet.dilated(g, c);
     let turns = turns(opt);
     // Each piece's turns, and the order they are placed in: most cells first. Past
     // [`MAX_PREPARED_CELLS`] the rest get none (and aren't placed).
@@ -841,6 +853,62 @@ mod document {
     use vectorcraft_geom::{Rect, shapes};
 
     use super::*;
+
+    /// A five-pointed star `r` across from its centre (`cx`, `cy`), points.
+    fn star(d: &mut Document, cx: f64, cy: f64, r: f64) -> Node {
+        let pts: Vec<vectorcraft_geom::Point> = (0..10)
+            .map(|k| {
+                let a = std::f64::consts::PI * f64::from(k) / 5.0 - std::f64::consts::FRAC_PI_2;
+                let rr = if k % 2 == 0 { r } else { r * 0.45 };
+                vectorcraft_geom::Point::new(cx + rr * a.cos(), cy + rr * a.sin())
+            })
+            .collect();
+        let path = vectorcraft_geom::PathData::single(vectorcraft_geom::SubPath::polyline(&pts, true));
+        Node::path(d.alloc_id(), path, Appearance::default())
+    }
+
+    /// Stars of two sizes, the small ones placed last, with Print & Cut: none goes into the areas
+    /// round the marks, where the band along the top and the corners' squares meet (they once
+    /// overlapped, and even-odd made the overlap a hole a small star went into).
+    #[test]
+    fn small_pieces_keep_out_of_the_marks_corners() {
+        let mut d = Document::new(612.0, 792.0);
+        let layer = d.layers[0].id;
+        for k in 0..20 {
+            let r = if k < 16 { 40.0 } else { 22.0 };
+            let x = 700.0 + 100.0 * f64::from(k % 5);
+            let sq = star(&mut d, x, 100.0 + 100.0 * f64::from(k / 5), r);
+            d.insert(Some(layer), usize::MAX, sq).unwrap();
+        }
+        let s = vectorcraft_cutjob::CuttingSettings { print_and_cut: true, ..crate::settings(&d) };
+        crate::set_settings(&mut d, &s);
+        let marks = crate::marks::marks_layer_node(&s, &mut d).unwrap();
+        d.insert(None, usize::MAX, marks).unwrap();
+        let n = nest_document(&d, &default_pieces(&d), Options::default()).unwrap();
+        assert!(n.unplaced.is_empty(), "{n:?}");
+        for (id, a) in &n.moves {
+            d.node_mut(*id).unwrap().transform(*a, false);
+        }
+        let job = crate::build_job(&d).unwrap();
+        assert_eq!(job.paths.len(), 20);
+        assert!(job.warnings.is_empty(), "{:?}", job.warnings);
+    }
+
+    /// Two overlapping outlines that stay: their overlap is taken too. A 35 mm piece would fit
+    /// only in the overlap (the free corners are 30 mm), so it isn't placed.
+    #[test]
+    fn where_what_stays_overlaps_is_taken() {
+        let sq = |x0: f64, y0: f64, s: f64| Shape { closed: true, points: vec![[x0, y0], [x0 + s, y0], [x0 + s, y0 + s], [x0, y0 + s]] };
+        let area = RectMm { x0: 0.0, y0: 0.0, x1: 100.0, y1: 100.0 };
+        let piece = vec![sq(500.0, 500.0, 35.0)];
+        let n = nest(
+            std::slice::from_ref(&piece),
+            &[sq(0.0, 0.0, 70.0), sq(30.0, 30.0, 70.0)],
+            area,
+            Options { gap_mm: 0.0, rotate: false, fine: false },
+        );
+        assert!(n.placed[0].is_none(), "not in the overlap: {:?}", n.placed[0]);
+    }
 
     /// C13.1: copies of a piece go just above it with new ids, all they hold copied; too many are
     /// refused.

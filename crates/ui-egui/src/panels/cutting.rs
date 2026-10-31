@@ -9,7 +9,6 @@
 
 use egui::Ui;
 use serde_json::{Value, json};
-use vectorcraft_doc::Unit;
 
 use vectorcraft_cutter_silhouette as silhouette;
 
@@ -23,8 +22,6 @@ pub mod print;
 
 pub const ID: &str = "cutting";
 
-/// Points per millimetre: the number fields take points and show millimetres.
-const PT: f64 = 72.0 / 25.4;
 pub(crate) const LABEL_W: f32 = 80.0;
 /// A number field in the tool table.
 const CELL_W: f32 = 60.0;
@@ -34,8 +31,10 @@ pub(crate) fn set(app: &mut VectorcraftApp, p: Value) {
     let _ = app.run("cutting.settings.set", p);
 }
 
+/// A length in millimetres, stepped by whole millimetres and kept to hundredths: held in mm, not
+/// in points as the document's fields are, so a step lands on 2 mm and not on 1.9999 mm.
 pub(crate) fn mm_field(ui: &mut Ui, id: &'static str, mm: f64, min_mm: f64) -> Option<f64> {
-    widgets::spin_field(ui, ("cutting", id), Some(mm * PT), Unit::Millimeters, 80.0, PT, min_mm * PT, &[]).map(|pt| pt / PT)
+    widgets::spin_plain(ui, ("cutting", id), (mm * 100.0).round() / 100.0, " mm", 2, 80.0, 1.0, min_mm, &[]).map(|v| (v * 100.0).round() / 100.0)
 }
 
 /// What the document cuts by default and how it groups the cut.
