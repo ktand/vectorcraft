@@ -40,6 +40,7 @@ pub mod prepare;
 pub mod preview;
 pub mod select;
 pub mod setups;
+pub mod stones;
 pub mod test_cut;
 pub mod weed;
 pub mod weld;
