@@ -18,6 +18,7 @@ use crate::widgets;
 
 pub mod lines;
 pub mod mat;
+pub mod patterns;
 pub mod print;
 
 pub const ID: &str = "cutting";
@@ -689,6 +690,22 @@ mod tests {
         assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Stroke Edge"));
     }
 
+    /// Every cutting panel is on the Window menu and in the icon column's group.
+    #[test]
+    fn every_cutting_panel_is_on_the_window_menu() {
+        let app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let entries = crate::menus::menu_entries(&app);
+        for panel in [ID, lines::ID, patterns::ID, mat::ID, print::ID] {
+            assert!(
+                entries.iter().any(|e| e.command.as_deref() == Some("window.panel")
+                    && e.params["panel"] == panel
+                    && e.path.first().map(String::as_str) == Some("Window")),
+                "{panel} on the Window menu"
+            );
+            assert!(crate::state::ICON_PANEL_GROUPS.iter().any(|g| g.contains(&panel)), "{panel} in a group");
+        }
+    }
+
     /// Window → Workspace → Cutting is the cutting mode: the mat shows, and the four cutting
     /// panels are docked open under Layers (not in the icon column); another workspace hides the
     /// mat.
@@ -700,7 +717,7 @@ mod tests {
         assert!(app.ui.view.cutting);
         let layout = app.ui.docking.clone().expect("the workspace's own layout");
         assert!(crate::panel_docking::valid(&layout));
-        for panel in [ID, lines::ID, mat::ID, print::ID] {
+        for panel in [ID, lines::ID, patterns::ID, mat::ID, print::ID] {
             assert!(layout.contains(&panel.to_string()) && !crate::panel_docking::in_iconic_column(&layout, panel), "{panel} docked open");
         }
         assert_eq!(app.ui.dock_tab, crate::state::DockTab::Layers);
