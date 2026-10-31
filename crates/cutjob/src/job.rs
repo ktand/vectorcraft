@@ -103,6 +103,9 @@ pub struct JobRegistration {
     pub origin_mm: [f64; 2],
     /// From it across to the top-right mark's anchor and down to the bottom-left one's, mm.
     pub size_mm: [f64; 2],
+    /// The L marks' arms and the width the marks are drawn, mm: what the machine looks for.
+    pub length_mm: f64,
+    pub line_mm: f64,
 }
 
 impl JobRegistration {
@@ -314,7 +317,7 @@ impl CutJob {
             "version": self.version,
             "trackEnhancing": self.track_enhancing,
             "groups": self.groups.iter().map(|g| json!({"name": g.name, "start": g.start, "material": g.material})).collect::<Vec<_>>(),
-            "registration": self.registration.map(|r| json!({"originMm": r.origin_mm, "sizeMm": r.size_mm})),
+            "registration": self.registration.map(|r| json!({"originMm": r.origin_mm, "sizeMm": r.size_mm, "lengthMm": r.length_mm, "lineMm": r.line_mm})),
             "mat": {"id": self.mat.id, "sizeMm": self.mat.size_mm, "cutAreaMm": [a.x0, a.y0, a.x1, a.y1]},
             "operations": self.operations.iter().map(|o| json!({
                 "kind": o.kind.id(),

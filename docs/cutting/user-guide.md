@@ -208,11 +208,21 @@ sheet, load the next, go to the next sheet, Send.
 To print a design and then cut round the print:
 
 1. Cutting Mat › **Print & Cut** on, then **Add Marks**. Registration marks are added round the artboard on a
-   locked layer of their own. **Marks inset** sets how far in from the edges they go.
+   locked layer of their own. Their settings, best left as they are:
+   - **Mark length** (5–20 mm, default 20) and **Thickness** (0.3–1 mm, default 0.5);
+   - **Inset**, how far in from the edges they go (10–84 mm, default 15.88), or under **Each Edge** one for each
+     side;
+   - **Restore Defaults** puts the usual marks back.
+
+   Change a setting after adding the marks and the job says so: press **Update Marks** and print again.
 2. Print the artboard at 100 % (no "fit to page").
 3. Put the sheet on the mat at its top-left corner, the square mark at the top left. Load it.
 4. Send. The machine finds the marks, then cuts where the print is. If it can't find them (a sheet turned round,
    marks too faint), the job stops before anything is cut.
+
+**Keep the hatched areas clear.** With Print & Cut on, the mat shows hatched areas round the marks and across the
+top of the page. The machine's sensor looks there for the marks, so anything printed or cut there can stop it
+finding them. The job warns about each object that comes into one, and nesting keeps pieces out of them.
 
 A contour (section 5) is the usual cut line for printed stickers.
 

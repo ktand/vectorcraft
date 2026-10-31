@@ -4,7 +4,7 @@
 use serde_json::{Map, Value, json};
 
 use crate::mat::{CUSTOM, MAT_PRESETS, MatGeometry};
-use crate::read::{choice, flag, num, object, pair, unknown, whole};
+use crate::read::{choice, flag, num, object, pair, quad, unknown, whole};
 
 /// `Document::unknown` key the settings live under.
 pub const DOCUMENT_KEY: &str = "cutting";
@@ -357,6 +357,13 @@ pub struct CuttingSettings {
     pub print_and_cut: bool,
     /// How far in from the artboard's edges the marks go, mm ([`crate::marks::INSET_MM`]).
     pub mark_inset_mm: f64,
+    /// Each edge's own inset (left, top, right, bottom), mm, in place of [`Self::mark_inset_mm`]
+    /// (C12.1).
+    pub mark_insets_mm: Option<[f64; 4]>,
+    /// The L marks' arms and the width the marks are drawn, mm ([`crate::marks::LENGTH_MM`],
+    /// [`crate::marks::LINE_MM`]).
+    pub mark_length_mm: f64,
+    pub mark_line_mm: f64,
     /// Cut by colour (C7.4): each colour's own setup, by the name its group has (a swatch's name
     /// or `#rrggbb`); colours without one are cut with [`Self::operations`]. A layer's own setup is
     /// on the layer (`vectorcraft_cutting::setups`).
@@ -391,6 +398,9 @@ impl Default for CuttingSettings {
             grouping: Grouping::None,
             print_and_cut: false,
             mark_inset_mm: crate::marks::DEFAULT_INSET_MM,
+            mark_insets_mm: None,
+            mark_length_mm: crate::marks::DEFAULT_LENGTH_MM,
+            mark_line_mm: crate::marks::DEFAULT_LINE_MM,
             color_setups: Default::default(),
             weed_box: false,
             weed_margin_mm: 3.0,
@@ -407,7 +417,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 21] = [
+    const KEYS: [&'static str; 24] = [
         "version",
         "mat",
         "customMatMm",
@@ -424,6 +434,9 @@ impl CuttingSettings {
         "grouping",
         "printAndCut",
         "markInsetMm",
+        "markInsetsMm",
+        "markLengthMm",
+        "markLineMm",
         "colorSetups",
         "weedBox",
         "weedMarginMm",
@@ -460,7 +473,10 @@ impl CuttingSettings {
             track_enhancing: flag(m, "trackEnhancing", d.track_enhancing),
             grouping: choice(m, "grouping", &Grouping::CHOICES, d.grouping),
             print_and_cut: flag(m, "printAndCut", d.print_and_cut),
-            mark_inset_mm: num(m, "markInsetMm", crate::marks::INSET_MM.0, crate::marks::INSET_MM.1, d.mark_inset_mm),
+            mark_inset_mm: num(m, "markInsetMm", crate::marks::READ_INSET_MM.0, crate::marks::READ_INSET_MM.1, d.mark_inset_mm),
+            mark_insets_mm: quad(m, "markInsetsMm", crate::marks::READ_INSET_MM.0, crate::marks::READ_INSET_MM.1),
+            mark_length_mm: num(m, "markLengthMm", crate::marks::LENGTH_MM.0, crate::marks::LENGTH_MM.1, d.mark_length_mm),
+            mark_line_mm: num(m, "markLineMm", crate::marks::LINE_MM.0, crate::marks::LINE_MM.1, d.mark_line_mm),
             material: m.get("material").and_then(Value::as_str).and_then(crate::material::valid_name),
             color_setups: object(m, "colorSetups")
                 .map(|c| {
@@ -501,6 +517,11 @@ impl CuttingSettings {
         m.insert("grouping".into(), json!(self.grouping.id()));
         m.insert("printAndCut".into(), json!(self.print_and_cut));
         m.insert("markInsetMm".into(), json!(self.mark_inset_mm));
+        if let Some(i) = self.mark_insets_mm {
+            m.insert("markInsetsMm".into(), json!(i));
+        }
+        m.insert("markLengthMm".into(), json!(self.mark_length_mm));
+        m.insert("markLineMm".into(), json!(self.mark_line_mm));
         if let Some(name) = &self.material {
             m.insert("material".into(), json!(name));
         }
@@ -513,6 +534,15 @@ impl CuttingSettings {
             m.insert("colorSetups".into(), Value::Object(c));
         }
         Value::Object(m)
+    }
+
+    /// How the registration marks are drawn: each edge's own inset if set, else the one inset.
+    pub fn mark_style(&self) -> crate::marks::MarkStyle {
+        crate::marks::MarkStyle {
+            insets_mm: self.mark_insets_mm.unwrap_or([self.mark_inset_mm; 4]),
+            length_mm: self.mark_length_mm,
+            line_mm: self.mark_line_mm,
+        }
     }
 
     /// The mat the job is laid out on: the preset `mat` names, the custom size, or the default

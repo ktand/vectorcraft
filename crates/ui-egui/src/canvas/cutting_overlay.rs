@@ -175,6 +175,7 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
     if cut != (RectMm { x0: 0.0, y0: 0.0, x1: w, y1: h }) {
         p.extend(Shape::dashed_line(&ring(cut), Stroke::new(1.0, t.accent), 5.0, 3.0));
     }
+    no_go(app, p, &pl, &screen, &t);
     if crate::cutting::shows_toolpaths(p.ctx())
         && let Some(job) = crate::cutting::job(app, p.ctx())
         && let Ok(made) = &*job
@@ -299,6 +300,59 @@ const NUMBER_GAP_PX: f32 = 14.0;
 /// The job's toolpaths in cutting order (C3.6): cuts solid and scores dashed, each in its colour,
 /// the blade's travel between them faint and dashed, an arrow at each path's start along the way
 /// it is cut, and its number in the order.
+/// Print & Cut (C12.1): the areas round the registration marks where nothing may be printed or
+/// cut, cross-hatched over the art.
+fn no_go(app: &VectorcraftApp, p: &egui::Painter, pl: &Placement, screen: &dyn Fn(f64, f64) -> Pos2, t: &Tokens) {
+    let Some(st) = app.session.active() else { return };
+    let s = vectorcraft_cutting::settings(&st.doc);
+    if !s.print_and_cut {
+        return;
+    }
+    let Some(m) = vectorcraft_cutting::marks::layout(&s, &st.doc) else { return };
+    let at = pl.artboard_mm;
+    let stroke = Stroke::new(1.0, t.text_dim.gamma_multiply(0.6));
+    for z in m.no_go() {
+        let r = RectMm { x0: at.x0 + z.x0, y0: at.y0 + z.y0, x1: at.x0 + z.x1, y1: at.y0 + z.y1 };
+        for [a, b] in hatch(r, HATCH_MM) {
+            p.line_segment([screen(a[0], a[1]), screen(b[0], b[1])], stroke);
+        }
+    }
+}
+
+/// The spacing of the hatching, mm.
+const HATCH_MM: f64 = 4.0;
+/// Most hatching lines drawn in one area.
+const MAX_HATCH: usize = 2_000;
+
+/// Lines crossing `r` both ways at 45°, `step` apart on a grid fixed to the mat (so areas that
+/// overlap are hatched alike).
+fn hatch(r: RectMm, step: f64) -> Vec<[[f64; 2]; 2]> {
+    let mut out = vec![];
+    if !(r.x1 > r.x0 && r.y1 > r.y0 && step > 0.0) {
+        return out;
+    }
+    // Down to the right: x = y + c; up to the right: x = c − y.
+    let first = ((r.x0 - r.y1) / step).ceil() as i64;
+    let last = ((r.x1 - r.y0) / step).floor() as i64;
+    for k in first..=last.min(first.saturating_add(MAX_HATCH as i64)) {
+        let c = k as f64 * step;
+        let (ya, yb) = (r.y0.max(r.x0 - c), r.y1.min(r.x1 - c));
+        if ya < yb {
+            out.push([[ya + c, ya], [yb + c, yb]]);
+        }
+    }
+    let first = ((r.x0 + r.y0) / step).ceil() as i64;
+    let last = ((r.x1 + r.y1) / step).floor() as i64;
+    for k in first..=last.min(first.saturating_add(MAX_HATCH as i64)) {
+        let c = k as f64 * step;
+        let (ya, yb) = (r.y0.max(c - r.x1), r.y1.min(c - r.x0));
+        if ya < yb {
+            out.push([[c - ya, ya], [c - yb, yb]]);
+        }
+    }
+    out
+}
+
 fn toolpaths(p: &egui::Painter, job: &vectorcraft_cutjob::CutJob, screen: &dyn Fn(f64, f64) -> Pos2, t: &Tokens) {
     use vectorcraft_cutjob::OpKind;
     let travel = Stroke::new(0.75, t.text_dim.gamma_multiply(0.6));
@@ -369,7 +423,20 @@ fn playback(p: &egui::Painter, sim: &vectorcraft_cutjob::Simulation, mm: f64, sc
 
 #[cfg(test)]
 mod tests {
-    use super::ticks;
+    use super::{RectMm, hatch, ticks};
+
+    /// The hatching stays inside its area, both ways, on a grid fixed to the mat.
+    #[test]
+    fn hatching_stays_inside() {
+        let r = RectMm { x0: 10.0, y0: 20.0, x1: 50.0, y1: 35.0 };
+        let lines = hatch(r, 4.0);
+        assert!(lines.len() > 10);
+        let inside = |p: [f64; 2]| p[0] >= r.x0 - 1e-9 && p[0] <= r.x1 + 1e-9 && p[1] >= r.y0 - 1e-9 && p[1] <= r.y1 + 1e-9;
+        assert!(lines.iter().all(|[a, b]| inside(*a) && inside(*b)), "{lines:?}");
+        assert!(lines.iter().any(|[a, b]| b[1] > a[1] && b[0] > a[0]) && lines.iter().any(|[a, b]| b[1] > a[1] && b[0] < a[0]), "both ways");
+        assert!(hatch(RectMm { x0: 0.0, y0: 0.0, x1: f64::INFINITY, y1: 1.0 }, 4.0).len() <= 2 * (super::MAX_HATCH + 1));
+        assert!(hatch(RectMm { x0: 5.0, y0: 0.0, x1: 1.0, y1: 1.0 }, 4.0).is_empty());
+    }
 
     #[test]
     fn ticks_fall_strictly_inside() {
