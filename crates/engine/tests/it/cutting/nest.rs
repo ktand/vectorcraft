@@ -78,3 +78,17 @@ fn copies_are_nested_with_their_piece() {
     assert_eq!(r["copiesLeftOut"], json!(0), "{r}");
     assert!(r["created"].as_u64().unwrap() >= 1);
 }
+
+/// C13.2: turns: none, quarter or fine; anything else refused.
+#[test]
+fn the_turns_are_chosen() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 1200, "height": 400})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 900, "y": 40, "width": 160, "height": 120})).unwrap();
+    assert!(s.execute("cutting.nest", &json!({"turns": "any"})).is_err());
+    for turns in ["none", "quarter", "fine"] {
+        let r = s.execute("cutting.nest", &json!({"turns": turns})).unwrap();
+        assert_eq!(r["moved"].as_array().map(Vec::len), Some(1), "{turns}: {r}");
+        s.execute("edit.undo", &json!({})).unwrap();
+    }
+}

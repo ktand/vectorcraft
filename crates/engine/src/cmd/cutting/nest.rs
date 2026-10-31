@@ -16,7 +16,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Nest on the Mat",
         [],
         None,
-        "{ids?, gapMm?: 0–50 (default 2), rotate?: bool (default true: quarter turns allowed), sheets?: bool (default false: what doesn't fit goes onto new artboards the cutting artboard's size, Sheet 2, Sheet 3…, each cut on its own), copies?: 0–500 (default 0: Replicate, that many more of each piece made and nested with them; the copies that don't fit are left out)} place the objects (ids, else the selected ones, else every top-level object on visible, unlocked layers) close together on the cutting artboard where it lies on the mat by their cut outlines, each with all it holds, turned where that helps, round what else is cut there, as one undo step; ones that don't fit stay where they were → {moved: [ids], unplaced: [ids], usedLengthMm: how far down the sheet the nested pieces reach (the first sheet), outOfWork: whether it stopped before trying every piece, sheets: [the artboards used], created: new sheets made, copies: the copies nested, copiesLeftOut: those that didn't fit}",
+        "{ids?, gapMm?: 0–50 (default 2), rotate?: bool (default true: quarter turns allowed), turns?: none|quarter|fine (in place of rotate; fine: every 15°, slower), sheets?: bool (default false: what doesn't fit goes onto new artboards the cutting artboard's size, Sheet 2, Sheet 3…, each cut on its own), copies?: 0–500 (default 0: Replicate, that many more of each piece made and nested with them; the copies that don't fit are left out)} place the objects (ids, else the selected ones, else every top-level object on visible, unlocked layers) close together on the cutting artboard where it lies on the mat by their cut outlines, each with all it holds, turned where that helps, round what else is cut there, as one undo step; ones that don't fit stay where they were → {moved: [ids], unplaced: [ids], usedLengthMm: how far down the sheet the nested pieces reach (the first sheet), outOfWork: whether it stopped before trying every piece, sheets: [the artboards used], created: new sheets made, copies: the copies nested, copiesLeftOut: those that didn't fit}",
         has_doc,
         nest
     )]
@@ -40,7 +40,14 @@ fn nest(s: &mut Session, p: &Value) -> Result<Value> {
     if ids.is_empty() {
         return Err(bad(NEST, "nothing to nest"));
     }
-    let opt = Options { gap_mm: gap, rotate };
+    let (rotate, fine) = match super::str_param(p, "turns") {
+        None => (rotate, false),
+        Some("none") => (false, false),
+        Some("quarter") => (true, false),
+        Some("fine") => (true, true),
+        Some(other) => return Err(bad(NEST, format!("turns must be none, quarter or fine, not {other:?}"))),
+    };
+    let opt = Options { gap_mm: gap, rotate, fine };
     let copies = match p.get("copies") {
         None => 0,
         Some(v) => v

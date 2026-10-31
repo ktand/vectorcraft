@@ -198,7 +198,9 @@ Cutting Mat › **Nesting** packs pieces close together on the mat by their real
 so a small piece can sit in a larger one's hole:
 
 - **Gap:** the least space between pieces.
-- **Turn Pieces:** pieces may be turned by quarter turns where that fits better.
+- **Turn Pieces:** **Quarter Turns** (the usual) lets each piece be turned by 90° steps where that fits better;
+  **Every 15°** tries more angles, which packs odd shapes (stars, leaves, crescents) tighter but takes longer;
+  **Off** keeps every piece as drawn.
 - **Onto New Sheets:** what doesn't fit goes onto new artboards ("Sheet 2", "Sheet 3", …) to the right, each cut
   on its own.
 - **Copies:** Replicate: this many more of each piece are made and nested with them, to fill a sheet with

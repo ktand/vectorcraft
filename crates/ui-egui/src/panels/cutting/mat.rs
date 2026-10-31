@@ -86,6 +86,8 @@ fn mat_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
 struct NestChoice {
     gap_mm: f64,
     rotate: bool,
+    /// Every 15°, not quarter turns (C13.2).
+    fine: bool,
     /// What doesn't fit goes onto new sheets (C8.6).
     sheets: bool,
     /// Replicate (C13.1): this many more of each piece, nested with them.
@@ -95,7 +97,7 @@ struct NestChoice {
 
 impl Default for NestChoice {
     fn default() -> Self {
-        NestChoice { gap_mm: 2.0, rotate: true, sheets: false, copies: 0, note: None }
+        NestChoice { gap_mm: 2.0, rotate: true, fine: false, sheets: false, copies: 0, note: None }
     }
 }
 
@@ -110,9 +112,17 @@ fn nest_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             c.gap_mm = v.clamp(0.0, 50.0);
         }
     });
-    if widgets::check(ui, tl!("Turn Pieces"), c.rotate, true) {
-        c.rotate = !c.rotate;
-    }
+    let choices = ["Off", "Quarter Turns", "Every 15°"];
+    let shown = match (c.rotate, c.fine) {
+        (false, _) => 0,
+        (true, false) => 1,
+        (true, true) => 2,
+    };
+    widgets::label_row(ui, tl!("Turn Pieces"), LABEL_W, |ui| {
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "nest-turns"), choices[shown], &choices, 120.0) {
+            (c.rotate, c.fine) = (i > 0, i == 2);
+        }
+    });
     if widgets::check(ui, tl!("Onto New Sheets"), c.sheets, true) {
         c.sheets = !c.sheets;
     }
@@ -126,7 +136,14 @@ fn nest_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
     let label = if selected { "Nest Selected" } else { "Nest All" };
     if ui.button(tl!(label)).clicked() {
-        let p = json!({ "gapMm": c.gap_mm, "rotate": c.rotate, "sheets": c.sheets, "copies": c.copies });
+        let turns = if !c.rotate {
+            "none"
+        } else if c.fine {
+            "fine"
+        } else {
+            "quarter"
+        };
+        let p = json!({ "gapMm": c.gap_mm, "turns": turns, "sheets": c.sheets, "copies": c.copies });
         c.note = Some(match app.run("cutting.nest", p) {
             Ok(r) => nest_note(&r, c.sheets),
             Err(e) => (true, e),

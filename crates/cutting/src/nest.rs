@@ -38,21 +38,25 @@ pub struct Shape {
 pub struct Options {
     /// The least distance between two pieces, and between a piece and what stays, mm.
     pub gap_mm: f64,
-    /// Pieces may be turned by quarter turns.
+    /// Pieces may be turned: by quarter turns, or with `fine` every [`FINE_STEP_DEG`]° (C13.2).
     pub rotate: bool,
+    pub fine: bool,
 }
+
+/// The step between the turns tried with [`Options::fine`], degrees.
+pub const FINE_STEP_DEG: u16 = 15;
 
 impl Default for Options {
     fn default() -> Self {
-        Options { gap_mm: 2.0, rotate: true }
+        Options { gap_mm: 2.0, rotate: true, fine: false }
     }
 }
 
-/// Where a piece went: turned by `quarter_turns` (clockwise on the mat), then moved; `affine` maps
+/// Where a piece went: turned by `turn_deg` degrees (clockwise on the mat), then moved; `affine` maps
 /// its points as they were to where they go (kurbo's order: x' = a·x + c·y + e, y' = b·x + d·y + f).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Placed {
-    pub quarter_turns: u8,
+    pub turn_deg: u16,
     pub affine: [f64; 6],
 }
 
@@ -261,13 +265,27 @@ fn bounds<'a>(points: impl Iterator<Item = &'a [f64; 2]>) -> Option<RectMm> {
     r
 }
 
-/// The linear part of `q` quarter turns clockwise on the mat (+y down): (a, b, c, d).
-fn turn(q: u8) -> [f64; 4] {
-    match q % 4 {
-        1 => [0.0, 1.0, -1.0, 0.0],
-        2 => [-1.0, 0.0, 0.0, -1.0],
-        3 => [0.0, -1.0, 1.0, 0.0],
-        _ => [1.0, 0.0, 0.0, 1.0],
+/// The linear part of a turn of `deg` degrees clockwise on the mat (+y down): (a, b, c, d); exact
+/// at quarter turns.
+fn turn(deg: u16) -> [f64; 4] {
+    match deg % 360 {
+        0 => [1.0, 0.0, 0.0, 1.0],
+        90 => [0.0, 1.0, -1.0, 0.0],
+        180 => [-1.0, 0.0, 0.0, -1.0],
+        270 => [0.0, -1.0, 1.0, 0.0],
+        d => {
+            let (sin, cos) = f64::from(d).to_radians().sin_cos();
+            [cos, sin, -sin, cos]
+        }
+    }
+}
+
+/// The turns tried, degrees.
+fn turns(opt: Options) -> Vec<u16> {
+    match (opt.rotate, opt.fine) {
+        (false, _) => vec![0],
+        (true, false) => vec![0, 90, 180, 270],
+        (true, true) => (0..360).step_by(usize::from(FINE_STEP_DEG)).collect(),
     }
 }
 
@@ -279,7 +297,7 @@ fn apply(m: [f64; 4], p: [f64; 2]) -> [f64; 2] {
 /// added to the sheet once it is placed ([`Turned::grown`], made only then: growing is the costly
 /// part).
 struct Turned {
-    q: u8,
+    deg: u16,
     /// The outline's bounds' top-left, mm, after the turn: cell (0, 0) of `mask`.
     min: [f64; 2],
     /// The outlines, turned.
@@ -291,8 +309,8 @@ struct Turned {
     order: Vec<usize>,
 }
 
-fn turned(shapes: &[Shape], q: u8, c: f64, gap: f64) -> Option<Turned> {
-    let m = turn(q);
+fn turned(shapes: &[Shape], deg: u16, c: f64, gap: f64) -> Option<Turned> {
+    let m = turn(deg);
     let shapes: Vec<Shape> = shapes.iter().map(|s| Shape { closed: s.closed, points: s.points.iter().map(|p| apply(m, *p)).collect() }).collect();
     let b = bounds(shapes.iter().flat_map(|s| s.points.iter()))?;
     // Counted as floats and checked before they become integers: a huge outline is no piece.
@@ -313,7 +331,7 @@ fn turned(shapes: &[Shape], q: u8, c: f64, gap: f64) -> Option<Turned> {
     let mask = draw(&shapes, [b.x0, b.y0], c, w, h);
     let mut order: Vec<usize> = (0..h).collect();
     order.sort_by_key(|&y| std::cmp::Reverse(mask.row(y).iter().map(|v| v.count_ones()).sum::<u32>()));
-    Some(Turned { q, min: [b.x0, b.y0], shapes, mask, inset, order })
+    Some(Turned { deg, min: [b.x0, b.y0], shapes, mask, inset, order })
 }
 
 impl Turned {
@@ -359,7 +377,7 @@ pub fn nest_within(pieces: &[Vec<Shape>], fixed: &[Shape], area: RectMm, opt: Op
     let (Ok(w), Ok(h)) = (usize::try_from(gw), usize::try_from(gh)) else { return none(false) };
     // What stays, grown by the gap.
     let mut sheet = draw(fixed, [area.x0, area.y0], c, w, h).dilated(g, c);
-    let turns: &[u8] = if opt.rotate { &[0, 1, 2, 3] } else { &[0] };
+    let turns = turns(opt);
     // Each piece's turns, and the order they are placed in: most cells first. Past
     // [`MAX_PREPARED_CELLS`] the rest get none (and aren't placed).
     let mut out_of_work = false;
@@ -367,7 +385,7 @@ pub fn nest_within(pieces: &[Vec<Shape>], fixed: &[Shape], area: RectMm, opt: Op
     let mut prepared: Vec<(usize, Vec<Turned>, u64)> = Vec::with_capacity(pieces.len());
     for (i, shapes) in pieces.iter().enumerate() {
         let mut ts: Vec<Turned> = vec![];
-        for &q in turns {
+        for &q in &turns {
             if cells > MAX_PREPARED_CELLS {
                 out_of_work = true;
                 break;
@@ -430,12 +448,12 @@ pub fn nest_within(pieces: &[Vec<Shape>], fixed: &[Shape], area: RectMm, opt: Op
         let Some(t) = ts.get(k) else { continue };
         work = work.saturating_add(t.growth_work(g, c));
         sheet.add(&t.grown(g, c), x - t.inset, y - t.inset);
-        let m = turn(t.q);
+        let m = turn(t.deg);
         let target = [area.x0 + x as f64 * c, area.y0 + y as f64 * c];
         let affine = [m[0], m[1], m[2], m[3], target[0] - t.min[0], target[1] - t.min[1]];
         lowest = lowest.max((y + t.mask.h as i64) as f64 * c);
         if let Some(slot) = placed.get_mut(*i) {
-            *slot = Some(Placed { quarter_turns: t.q, affine });
+            *slot = Some(Placed { turn_deg: t.deg, affine });
         }
     }
     Nested { placed, used_length_mm: lowest, out_of_work }
@@ -686,7 +704,7 @@ mod tests {
     #[test]
     fn rectangles_pack_from_the_top_left_the_gap_apart() {
         let pieces: Vec<Vec<Shape>> = (0..6).map(|i| vec![rect(500.0 + 70.0 * i as f64, 500.0, 60.0, 40.0)]).collect();
-        let n = nest(&pieces, &[], AREA, Options { gap_mm: 2.0, rotate: false });
+        let n = nest(&pieces, &[], AREA, Options { gap_mm: 2.0, rotate: false, fine: false });
         assert!(n.placed.iter().all(Option::is_some) && !n.out_of_work);
         let rects: Vec<RectMm> = pieces.iter().zip(&n.placed).map(|(p, at)| rect_of(&moved(&p[0], at.as_ref().unwrap()))).collect();
         check_apart(&rects, 2.0);
@@ -704,7 +722,7 @@ mod tests {
         assert!(nest(std::slice::from_ref(&piece), &[], area, Options { rotate: false, ..Options::default() }).placed[0].is_none());
         let n = nest(std::slice::from_ref(&piece), &[], area, Options::default());
         let at = n.placed[0].unwrap();
-        assert!(at.quarter_turns % 2 == 1, "{at:?}");
+        assert!(at.turn_deg % 180 == 90, "{at:?}");
         let r = rect_of(&moved(&piece[0], &at));
         assert!((r.width() - 20.0).abs() < 1e-9 && (r.height() - 200.0).abs() < 1e-9 && r.x0 >= 0.0 && r.y1 <= 300.0, "{r:?}");
     }
@@ -715,7 +733,7 @@ mod tests {
         let ring = vec![rect(0.0, 0.0, 100.0, 100.0), rect(20.0, 20.0, 60.0, 60.0)];
         let small = vec![rect(0.0, 0.0, 30.0, 30.0)];
         let area = RectMm { x0: 0.0, y0: 0.0, x1: 120.0, y1: 120.0 };
-        let n = nest(&[ring.clone(), small.clone()], &[], area, Options { gap_mm: 2.0, rotate: false });
+        let n = nest(&[ring.clone(), small.clone()], &[], area, Options { gap_mm: 2.0, rotate: false, fine: false });
         let (ring_at, small_at) = (n.placed[0].unwrap(), n.placed[1].unwrap());
         let hole = rect_of(&moved(&ring[1], &ring_at));
         let s = rect_of(&moved(&small[0], &small_at));
@@ -725,7 +743,7 @@ mod tests {
         );
         // A fixed square at the top left: the piece goes beside it, the gap away.
         let fixed = [rect(0.0, 0.0, 50.0, 50.0)];
-        let n = nest(std::slice::from_ref(&small), &fixed, area, Options { gap_mm: 2.0, rotate: false });
+        let n = nest(std::slice::from_ref(&small), &fixed, area, Options { gap_mm: 2.0, rotate: false, fine: false });
         let s = rect_of(&moved(&small[0], &n.placed[0].unwrap()));
         assert!(s.x0 >= 52.0 - 1e-9 || s.y0 >= 52.0 - 1e-9, "round what stays: {s:?}");
     }
@@ -740,12 +758,30 @@ mod tests {
         assert_eq!(nest(&[vec![rect(0.0, 0.0, 1.0, 1.0)]], &[], empty, Options::default()).placed, [None]);
     }
 
+    /// C13.2: a bar lying at 45° fits a strip only turned flat, which quarter turns can't do and
+    /// fine turns can; quarter turns stay exact.
+    #[test]
+    fn fine_turns_find_the_angle_that_fits() {
+        let (sin, cos) = 45f64.to_radians().sin_cos();
+        let bar: Vec<[f64; 2]> =
+            [[0.0, 0.0], [140.0, 0.0], [140.0, 10.0], [0.0, 10.0]].iter().map(|p| [p[0] * cos - p[1] * sin, p[0] * sin + p[1] * cos]).collect();
+        let piece = vec![Shape { closed: true, points: bar }];
+        let strip = RectMm { x0: 0.0, y0: 0.0, x1: 160.0, y1: 30.0 };
+        let quarter = nest(std::slice::from_ref(&piece), &[], strip, Options { gap_mm: 1.0, rotate: true, fine: false });
+        assert!(quarter.placed[0].is_none(), "no quarter turn fits");
+        let fine = nest(std::slice::from_ref(&piece), &[], strip, Options { gap_mm: 1.0, rotate: true, fine: true });
+        let at = fine.placed[0].expect("a fine turn fits");
+        assert_eq!(at.turn_deg % 180, 135, "turned back flat: {at:?}");
+        assert_eq!(turn(90), [0.0, 1.0, -1.0, 0.0]);
+        assert_eq!(turns(Options { rotate: true, fine: true, ..Options::default() }).len(), 24);
+    }
+
     /// The grid never lets two pieces closer than the gap, whatever their shapes and turns.
     #[test]
     fn triangles_and_turns_keep_the_gap() {
         let tri = |s: f64| Shape { closed: true, points: vec![[0.0, 0.0], [s, 0.0], [0.0, s]] };
         let pieces: Vec<Vec<Shape>> = (0..12).map(|i| vec![tri(30.0 + 5.0 * i as f64)]).collect();
-        let n = nest(&pieces, &[], AREA, Options { gap_mm: 3.0, rotate: true });
+        let n = nest(&pieces, &[], AREA, Options { gap_mm: 3.0, rotate: true, fine: false });
         let placed: Vec<Shape> = pieces.iter().zip(&n.placed).filter_map(|(p, at)| at.map(|at| moved(&p[0], &at))).collect();
         assert!(placed.len() >= 10, "most fit: {}", placed.len());
         // Point-to-segment distance between every two triangles.
@@ -890,7 +926,7 @@ mod document {
         let circle = d.insert(Some(layer), usize::MAX, circle).unwrap();
         let small = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(1500.0, 1000.0, 1520.0, 1020.0)), Appearance::default());
         let small = d.insert(Some(layer), usize::MAX, small).unwrap();
-        let n = nest_document(&d, &[circle, small], Options { gap_mm: 2.0, rotate: false }).unwrap();
+        let n = nest_document(&d, &[circle, small], Options { gap_mm: 2.0, rotate: false, fine: false }).unwrap();
         assert!(n.unplaced.is_empty(), "{n:?}");
         for (id, a) in &n.moves {
             d.node_mut(*id).unwrap().transform(*a, false);
