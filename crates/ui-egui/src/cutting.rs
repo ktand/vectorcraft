@@ -32,14 +32,15 @@ struct Cached {
 }
 
 /// The Cutting workspace's panels (C7.2): the dock's main column keeps Properties · Layers ·
-/// Libraries (Layers in front: a cut by layer is set up there) and gains Cut Settings and Cutting
-/// Mat below it, taken out of the icon column, so the settings show without opening anything; the
-/// two share one group as tabs (C9.1: the mat is mostly set once), so each gets the column's height.
+/// Libraries (Layers in front: a cut by layer is set up there) and gains the cutting panels below
+/// it, taken out of the icon column, so the settings show without opening anything: Cut Settings,
+/// Cut Lines as the tabs of one group, Cutting Mat and Print & Cut of another below it (C9.1,
+/// C12.2: four tabs in one group don't fit their names), sharing the height Layers leaves.
 pub(crate) fn workspace_layout() -> craft_ui::docking::Layout<String> {
     use craft_ui::docking::{Group, Node};
     let ui = crate::state::UiState { dock_tab: crate::state::DockTab::Layers, ..Default::default() };
     let mut layout = crate::panel_docking::default_layout(&ui);
-    let ours = [crate::panels::cutting::ID, crate::panels::cutting::mat::ID];
+    let ours = [crate::panels::cutting::ID, crate::panels::cutting::lines::ID, crate::panels::cutting::mat::ID, crate::panels::cutting::print::ID];
     if let Some(Node::Split { second, .. }) = layout.root.as_mut()
         && let Node::Dock { columns, .. } = second.as_mut()
     {
@@ -55,14 +56,18 @@ pub(crate) fn workspace_layout() -> craft_ui::docking::Layout<String> {
             if let Some(tabs) = main.groups.first_mut() {
                 tabs.height = Some(LAYERS_HEIGHT);
             }
-            main.groups.push(Group::new(ours.iter().map(|p| p.to_string()).collect(), 0));
+            // Two tabs a group, so their names fit the column: what is set for each cut, then
+            // what is set once for the document.
+            for pair in ours.chunks(2) {
+                main.groups.push(Group::new(pair.iter().map(|p| p.to_string()).collect(), 0));
+            }
         }
     }
     layout
 }
 
-/// The height Layers starts at in the Cutting workspace, points: about six rows.
-const LAYERS_HEIGHT: f32 = 300.0;
+/// The height Layers starts at in the Cutting workspace, points: about five rows.
+const LAYERS_HEIGHT: f32 = 240.0;
 
 fn key() -> egui::Id {
     egui::Id::unique("cutting-job")

@@ -14,18 +14,22 @@ Window › Workspace › **Cutting**. It turns on Cutting View (the mat drawn be
 panels on the right:
 
 - **Layers** at the top. Cutting by layer is set up here.
-- **Cut Settings** and **Cutting Mat**, as two tabs below it.
+- **Cut Settings** and **Cut Lines**, as two tabs below it: what you change for each cut.
+- **Cutting Mat** and **Print & Cut**, as two tabs below those: what you set once per document.
 
 If your Cutting workspace looks different (you moved its panels, or saved it with an older version), Window ›
 Workspace › Reset Cutting brings back this layout.
 
-The two panels:
+The four panels (each also on the Window menu):
 
-- **Cut Settings:** what you change for each design and each cut. At the top, a summary of the job ("2 paths ·
-  392 mm · 5 s") and **Send to Cutter…**. Below it: what the selection is cut as, the default, groups, weeding,
-  contour, the material and tool settings, and **Advanced**.
-- **Cutting Mat:** what you set once per document. The mat and where the artboard sits on it, nesting, and Print
-  & Cut.
+- **Cut Settings:** how things are cut. At the top, a summary of the job ("2 paths · 392 mm · 5 s") and **Send
+  to Cutter…**. Below it: what the selection is cut as and along, the default, groups, the material and tool
+  settings, and **Advanced**.
+- **Cut Lines:** what adds cut lines: a contour round the art, stencil bridges, and weeding.
+- **Cutting Mat:** the mat and where the artboard sits on it, and nesting.
+- **Print & Cut:** printing with registration marks and cutting round the print.
+
+Each group can be made taller by dragging the line above it.
 
 ## 2. Setting up the mat
 
@@ -154,7 +158,7 @@ backing. Then **Save as Material…** (or **Update**).
 
 ### Contour: a cut line round your art
 
-For stickers and shapes printed and cut out. Select the art, then Cut Settings › **Contour**:
+For stickers and shapes printed and cut out. Select the art, then Cut Lines › **Contour**:
 
 - **Offset:** how far out the line runs (default 2 mm). Corners are rounded.
 - **Keep Holes:** also cut round the holes inside the art. Off, only the outside is cut.
@@ -167,7 +171,7 @@ contour away and puts the art's operation back.
 ### Stencils: bridges
 
 Cut a letter O out of a stencil sheet and its middle falls out with it. **Stencil** › **Add Bridges** keeps such
-middles joined to the sheet by narrow bridges:
+middles joined to the sheet by narrow bridges (Cut Lines › **Stencil**):
 
 - **Bridges:** how wide each bridge is (default 1.5 mm). Wider holds better; narrower shows less.
 - **Direction:** **Vertical** puts a bridge above and below each hole, **Horizontal** one either side.
@@ -180,7 +184,7 @@ see what will be cut. Undo takes the stencil away and brings the art back. If th
 
 ### Weeding
 
-For vinyl and heat-transfer material, where the waste around the design is peeled away:
+In Cut Lines › **Weeding**, for vinyl and heat-transfer material, where the waste around the design is peeled away:
 
 - **Weed Box:** a box cut round the design, **Margin** mm out.
 - **Weed Lines:** lines from the box in towards the design, stopping just short of it, so the waste comes off in
@@ -207,7 +211,7 @@ sheet, load the next, go to the next sheet, Send.
 
 To print a design and then cut round the print:
 
-1. Cutting Mat › **Print & Cut** on, then **Add Marks**. Registration marks are added round the artboard on a
+1. In the **Print & Cut** panel, tick **Print & Cut**, then **Add Marks**. Registration marks are added round the artboard on a
    locked layer of their own. Their settings, best left as they are:
    - **Mark length** (5–20 mm, default 20) and **Thickness** (0.3–1 mm, default 0.5);
    - **Inset**, how far in from the edges they go (10–84 mm, default 15.88), or under **Each Edge** one for each

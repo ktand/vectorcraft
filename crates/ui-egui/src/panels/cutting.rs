@@ -2,8 +2,10 @@
 //! saved workspaces open it): the job in a line with Send to Cutter… (the Send window, C7.1, runs
 //! the cut), the selection's operation, the document's default operation and groups, the
 //! material and tool settings (cut and score side by side, C9.1), the rarely changed ones behind
-//! Advanced (C7.2). The mat and Print & Cut are the Cutting Mat panel's ([`mat`]). It reads the
-//! engine's `cutting.*` queries and acts through `app.run`, as every panel does.
+//! Advanced (C7.2). The mat and nesting are the Cutting Mat panel's ([`mat`]), contour, stencil
+//! and weeding the Cut Lines panel's ([`lines`]), the registration marks the Print & Cut panel's
+//! ([`print`]) (C12.2). It reads the engine's `cutting.*` queries and acts through `app.run`, as
+//! every panel does.
 
 use egui::Ui;
 use serde_json::{Value, json};
@@ -15,23 +17,25 @@ use crate::VectorcraftApp;
 use crate::theme::Tokens;
 use crate::widgets;
 
+pub mod lines;
 pub mod mat;
+pub mod print;
 
 pub const ID: &str = "cutting";
 
 /// Points per millimetre: the number fields take points and show millimetres.
 const PT: f64 = 72.0 / 25.4;
-const LABEL_W: f32 = 80.0;
+pub(crate) const LABEL_W: f32 = 80.0;
 /// A number field in the tool table.
 const CELL_W: f32 = 60.0;
 
-fn set(app: &mut VectorcraftApp, p: Value) {
+pub(crate) fn set(app: &mut VectorcraftApp, p: Value) {
     // A refusal (a value out of range) leaves the settings as they were; the field shows them.
     let _ = app.run("cutting.settings.set", p);
 }
 
-fn mm_field(ui: &mut Ui, id: &'static str, mm: f64, min_mm: f64) -> Option<f64> {
-    widgets::spin_field(ui, ("cutting", id), Some(mm * PT), Unit::Millimeters, 72.0, PT, min_mm * PT, &[]).map(|pt| pt / PT)
+pub(crate) fn mm_field(ui: &mut Ui, id: &'static str, mm: f64, min_mm: f64) -> Option<f64> {
+    widgets::spin_field(ui, ("cutting", id), Some(mm * PT), Unit::Millimeters, 80.0, PT, min_mm * PT, &[]).map(|pt| pt / PT)
 }
 
 /// What the document cuts by default and how it groups the cut.
@@ -55,136 +59,6 @@ fn job_settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             set(app, json!({ "grouping": grouping_ids.get(i).copied().unwrap_or("none") }));
         }
     });
-}
-
-/// Weeding (C8.2, C8.3): a box round the design and lines from it in to the design, cut by the
-/// job (not added to the art), so vinyl's waste comes away easily.
-fn weeding_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
-    let s = &info["settings"];
-    let boxed = s["weedBox"].as_bool() == Some(true);
-    if widgets::check(ui, tl!("Weed Box"), boxed, true) {
-        set(app, json!({ "weedBox": !boxed }));
-    }
-    if boxed {
-        let margin = s["weedMarginMm"].as_f64().unwrap_or(3.0);
-        widgets::label_row(ui, tl!("Margin"), LABEL_W, |ui| {
-            if let Some(v) = mm_field(ui, "weed-margin", margin, 0.0) {
-                set(app, json!({ "weedMarginMm": v.clamp(0.0, 50.0) }));
-            }
-        });
-    }
-    let lines = s["weedLines"].as_bool() == Some(true);
-    if widgets::check(ui, tl!("Weed Lines"), lines, true) {
-        set(app, json!({ "weedLines": !lines }));
-    }
-    if lines {
-        let spacing = s["weedLineSpacingMm"].as_f64().unwrap_or(0.0);
-        widgets::label_row(ui, tl!("Every"), LABEL_W, |ui| {
-            if let Some(v) = mm_field(ui, "weed-spacing", spacing, 0.0) {
-                set(app, json!({ "weedLineSpacingMm": v.clamp(0.0, 200.0) }));
-            }
-        });
-        widgets::dim_label(ui, tl!("0: one line in from the middle of each side."));
-    }
-}
-
-/// What the Contour section keeps between frames: the distance and holes asked for, and what the
-/// last Add Contour said.
-#[derive(Clone, Debug)]
-struct ContourChoice {
-    offset_mm: f64,
-    holes: bool,
-    note: Option<(bool, String)>,
-}
-
-impl Default for ContourChoice {
-    fn default() -> Self {
-        ContourChoice { offset_mm: vectorcraft_cutting::contour::DEFAULT_OFFSET_MM, holes: false, note: None }
-    }
-}
-
-/// A cut line round the selected art (C11.1): how far out, whether holes are kept, and Add
-/// Contour (`cutting.contour`, one undo step; the art set to No Cut).
-fn contour_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
-    let t = Tokens::get(ui.ctx());
-    let ctx = ui.ctx().clone();
-    let mut c: ContourChoice = super::pstate(&ctx, "cutting-contour");
-    widgets::label_row(ui, tl!("Offset"), LABEL_W, |ui| {
-        if let Some(v) = mm_field(ui, "contour-offset", c.offset_mm, 0.0) {
-            c.offset_mm = v.clamp(0.0, vectorcraft_cutting::contour::MAX_OFFSET_MM);
-        }
-    });
-    if widgets::check(ui, tl!("Keep Holes"), c.holes, true) {
-        c.holes = !c.holes;
-    }
-    let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
-    if ui
-        .add_enabled(selected, egui::Button::new(tl!("Add Contour")))
-        .on_hover_text(tl!("A cut line round the selected art; the art itself is set to No Cut."))
-        .clicked()
-    {
-        c.note = Some(match app.run("cutting.contour", json!({ "offsetMm": c.offset_mm, "holes": c.holes })) {
-            Ok(r) => (false, format!("{} {}", r["pieces"], tl!("contour lines on the Cut Contour layer"))),
-            Err(e) => (true, e),
-        });
-    }
-    if let Some((bad, note)) = &c.note {
-        ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
-    }
-    super::set_pstate(&ctx, "cutting-contour", c);
-}
-
-/// What the Stencil section keeps between frames: the bridges' width and direction, and what the
-/// last Add Bridges said.
-#[derive(Clone, Debug)]
-struct BridgeChoice {
-    width_mm: f64,
-    horizontal: bool,
-    note: Option<(bool, String)>,
-}
-
-impl Default for BridgeChoice {
-    fn default() -> Self {
-        BridgeChoice { width_mm: vectorcraft_cutting::bridges::DEFAULT_WIDTH_MM, horizontal: false, note: None }
-    }
-}
-
-/// Stencil bridges for the selected art (C11.5): how wide, which way, and Add Bridges
-/// (`cutting.bridges`, one undo step; the art set to No Cut and hidden under the stencil).
-fn bridge_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
-    let t = Tokens::get(ui.ctx());
-    let ctx = ui.ctx().clone();
-    let mut c: BridgeChoice = super::pstate(&ctx, "cutting-bridges");
-    let range = vectorcraft_cutting::bridges::WIDTH_MM;
-    widgets::label_row(ui, tl!("Bridges"), LABEL_W, |ui| {
-        if let Some(v) = mm_field(ui, "bridge-width", c.width_mm, *range.start()) {
-            c.width_mm = v.clamp(*range.start(), *range.end());
-        }
-    });
-    let labels = ["Vertical", "Horizontal"];
-    widgets::label_row(ui, tl!("Direction"), LABEL_W, |ui| {
-        let shown = if c.horizontal { labels[1] } else { labels[0] };
-        if let Some(i) = widgets::dropdown(ui, ("cutting", "bridge-direction"), shown, &labels, 110.0) {
-            c.horizontal = i == 1;
-        }
-    });
-    let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
-    if ui
-        .add_enabled(selected, egui::Button::new(tl!("Add Bridges")))
-        .on_hover_text(tl!("Joins each hole's middle (the inside of an O) to the art round it, so a stencil keeps it. The stencil is added over the art, which is hidden and set to No Cut."))
-        .clicked()
-    {
-        let direction = if c.horizontal { "horizontal" } else { "vertical" };
-        c.note = Some(match app.run("cutting.bridges", json!({ "widthMm": c.width_mm, "direction": direction })) {
-            Ok(r) if r["unbridged"].as_u64().unwrap_or(0) > 0 => (true, format!("{} {} · {} {}", r["bridges"], tl!("bridges"), r["unbridged"], tl!("holes missed: try the other direction"))),
-            Ok(r) => (false, format!("{} {}", r["bridges"], tl!("bridges"))),
-            Err(e) => (true, e),
-        });
-    }
-    if let Some((bad, note)) = &c.note {
-        ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
-    }
-    super::set_pstate(&ctx, "cutting-bridges", c);
 }
 
 /// A group row's material choices: the document's setup first, then every material.
@@ -598,15 +472,6 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         group_rows(app, ui, &info);
         widgets::divider(ui);
     }
-    widgets::section_header(ui, tl!("Weeding"));
-    weeding_rows(app, ui, &info);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Contour"));
-    contour_rows(app, ui);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Stencil"));
-    bridge_rows(app, ui);
-    widgets::divider(ui);
     widgets::section_header(ui, tl!("Tool Settings"));
     tool_rows(app, ui, &info);
     advanced_rows(app, ui, &info);
@@ -708,21 +573,6 @@ mod tests {
         assert!(groups["groups"][1]["setup"].is_null(), "back to the document's");
     }
 
-    /// C8.2, C8.3: the weeding switches, their numbers shown once they are on.
-    #[test]
-    fn the_panel_switches_weeding_on() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
-        let ctx = egui::Context::default();
-        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
-        assert!(texts.iter().any(|t| t == "Weed Box") && texts.iter().any(|t| t == "Weed Lines"), "{texts:?}");
-        assert!(!texts.iter().any(|t| t == "Margin" || t == "Every"), "off: no numbers");
-        app.run("cutting.settings.set", json!({"weedBox": true, "weedLines": true, "weedMarginMm": 5})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
-        assert!(texts.iter().any(|t| t == "Margin") && texts.iter().any(|t| t == "Every"), "{texts:?}");
-        assert!(app.run("cutting.settings.set", json!({"weedMarginMm": 80})).is_err(), "out of range");
-    }
-
     /// C7.2: the settings most cuts leave alone are behind Advanced, closed at first.
     #[test]
     fn advanced_settings_start_folded() {
@@ -812,22 +662,6 @@ mod tests {
         assert!(texts.iter().any(|t| t == "—"), "no depth for the rotary blade: {texts:?}");
     }
 
-    /// C11.1: the Contour section; Add Contour works on the selection.
-    #[test]
-    fn the_panel_adds_a_contour() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
-        let ctx = egui::Context::default();
-        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
-        assert!(
-            texts.iter().any(|t| t == "Contour") && texts.iter().any(|t| t == "Add Contour") && texts.iter().any(|t| t == "Keep Holes"),
-            "{texts:?}"
-        );
-        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
-        app.run("cutting.contour", json!({"offsetMm": 2})).unwrap();
-        assert!(app.session.active().unwrap().doc.layers.iter().any(|l| l.name.as_deref() == Some("Cut Contour")));
-    }
-
     /// C11.3: a document in pixels offers the scale, and the button's command scales it.
     #[test]
     fn a_pixel_document_offers_the_scale() {
@@ -840,22 +674,6 @@ mod tests {
         assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Scale from 96 px/in"));
         app.run("cutting.scaleFromPixels", json!({})).unwrap();
         assert!(!panel_texts(&mut app, &ctx).iter().any(|t| t == "Scale from 96 px/in"));
-    }
-
-    /// C11.5: the Stencil section; Add Bridges works on the selection.
-    #[test]
-    fn the_panel_adds_bridges() {
-        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
-        let ctx = egui::Context::default();
-        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
-        assert!(
-            texts.iter().any(|t| t == "Stencil") && texts.iter().any(|t| t == "Add Bridges") && texts.iter().any(|t| t == "Vertical"),
-            "{texts:?}"
-        );
-        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
-        let r = app.run("cutting.bridges", json!({})).unwrap();
-        assert_eq!(r["bridges"], json!(0), "a square has no hole");
     }
 
     /// C11.4: with a selection, Cut Along says what it is cut along.
@@ -872,9 +690,9 @@ mod tests {
         assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Stroke Edge"));
     }
 
-    /// Window → Workspace → Cutting is the cutting mode: the mat shows, and Cut Settings and
-    /// Cutting Mat are docked open under Layers (not in the icon column); another workspace hides
-    /// the mat.
+    /// Window → Workspace → Cutting is the cutting mode: the mat shows, and the four cutting
+    /// panels are docked open under Layers (not in the icon column); another workspace hides the
+    /// mat.
     #[test]
     fn the_cutting_workspace_is_the_cutting_mode() {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
@@ -883,7 +701,7 @@ mod tests {
         assert!(app.ui.view.cutting);
         let layout = app.ui.docking.clone().expect("the workspace's own layout");
         assert!(crate::panel_docking::valid(&layout));
-        for panel in [ID, mat::ID] {
+        for panel in [ID, lines::ID, mat::ID, print::ID] {
             assert!(layout.contains(&panel.to_string()) && !crate::panel_docking::in_iconic_column(&layout, panel), "{panel} docked open");
         }
         assert_eq!(app.ui.dock_tab, crate::state::DockTab::Layers);
