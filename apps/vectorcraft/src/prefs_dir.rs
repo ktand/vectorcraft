@@ -55,6 +55,7 @@ pub fn attach_cutting_materials() {
     if let Some(dir) = store_dir("Cutting") {
         vectorcraft_engine::cmd::cutting::materials::attach(dir.join("Materials.json"));
         vectorcraft_engine::cmd::cutting::history::attach(dir.join("History.json"));
+        vectorcraft_engine::cmd::cutting::machine::attach(dir.join("Machine.json"));
     }
 }
 

@@ -406,7 +406,44 @@ fn test_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     if let Some((bad, note)) = &c.note {
         ui.label(egui::RichText::new(note).color(if *bad { t.bleed } else { t.text_dim }));
     }
+    origin_rows(app, ui, &mut c.note);
     crate::panels::set_pstate(&ctx, "cutting-test", c);
+}
+
+/// The machine's origin adjustment (C4.6), under the test cut that measures it: how far every
+/// cut is moved on the mat, for a machine and mat that cut off the grid (`cutting.machine.set`,
+/// kept next to the preferences). An error goes to the test's note.
+fn origin_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, note: &mut Option<(bool, String)>) {
+    let now = app.session.execute("cutting.machine.get", &json!({})).unwrap_or_default();
+    let adjust = |i: usize| now["originAdjustMm"][i].as_f64().unwrap_or(0.0);
+    let (mut across, mut down) = (adjust(0), adjust(1));
+    let lim = vectorcraft_engine::cmd::cutting::machine::ORIGIN_ADJUST_MM;
+    let mut changed = false;
+    // Closed at first, set once for the machine and mat; what it is set to shows when it isn't 0.
+    let title = if across == 0.0 && down == 0.0 {
+        tl!("Origin Adjustment").to_string()
+    } else {
+        format!("{} ({across:+.1}, {down:+.1} mm)", tl!("Origin Adjustment"))
+    };
+    if !crate::panels::cutting::fold(ui, "cutting-origin", &title) {
+        return;
+    }
+    let t = Tokens::get(ui.ctx());
+    ui.label(
+        egui::RichText::new(tl!("Moves every cut on the mat, + to the right and down: set how far a test cut lands from where it should."))
+            .color(t.text_dim),
+    );
+    for (label, id, v) in [(tl!("Across"), "origin-across", &mut across), (tl!("Down"), "origin-down", &mut down)] {
+        widgets::label_row(ui, label, 60.0, |ui| {
+            if let Some(n) = widgets::spin_plain(ui, ("cutting", id), *v, " mm", 1, 80.0, 0.1, -lim, &[]) {
+                *v = ((n * 10.0).round() / 10.0).clamp(-lim, lim);
+                changed = true;
+            }
+        });
+    }
+    if changed && let Err(e) = app.run("cutting.machine.set", json!({ "originAdjustMm": [across, down] })) {
+        *note = Some((true, e));
+    }
 }
 
 /// With more than one artboard, which sheet is on the mat (C8.6), and the next one once this is
@@ -633,6 +670,12 @@ mod tests {
         let texts = window_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t == "Bottom Right") && !texts.iter().any(|t| t.contains("lands on the design")), "{texts:?}");
         assert!(!texts.iter().any(|t| t == "Setup"), "not cut in groups");
+        // C4.6: the origin adjustment, closed at first.
+        assert!(texts.iter().any(|t| t == "Origin Adjustment") && !texts.iter().any(|t| t == "Across"), "{texts:?}");
+        crate::panels::set_pstate(&ctx, "cutting-origin", true);
+        let texts = window_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Across") && texts.iter().any(|t| t == "Down"), "{texts:?}");
+        crate::panels::set_pstate(&ctx, "cutting-origin", false);
         app.run("cutting.settings.set", json!({"grouping": "layer"})).unwrap();
         assert!(window_texts(&mut app, &ctx).iter().any(|t| t == "Setup"));
     }

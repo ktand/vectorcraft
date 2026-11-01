@@ -98,6 +98,9 @@ pub struct Check {
     pub failure: String,
 }
 
+/// The largest origin adjustment, mm, either way on each axis (C4.6).
+pub const ORIGIN_ADJUST_MM: f64 = 10.0;
+
 /// One family of machines: what it accepts and how it answers. No I/O: the sender does that.
 pub trait Driver: Send + Sync {
     /// Its name, for messages ("Silhouette").
@@ -106,8 +109,14 @@ pub trait Driver: Send + Sync {
     fn drives(&self, device: &DeviceInfo) -> bool;
     /// What `device` should be called, for menus ("Cameo 4").
     fn model(&self, device: &DeviceInfo) -> String;
-    /// `job` as what `device` takes.
-    fn encode(&self, job: &CutJob, device: &DeviceInfo) -> Result<Encoded, String>;
+    /// `job` as what `device` takes, every position moved `adjust_mm` (across, down) on the mat:
+    /// the user's origin adjustment (C4.6), for a machine and mat whose origin isn't the grid's
+    /// corner. At most [`ORIGIN_ADJUST_MM`] each way.
+    fn encode_adjusted(&self, job: &CutJob, device: &DeviceInfo, adjust_mm: [f64; 2]) -> Result<Encoded, String>;
+    /// `job` as what `device` takes, not adjusted.
+    fn encode(&self, job: &CutJob, device: &DeviceInfo) -> Result<Encoded, String> {
+        self.encode_adjusted(job, device, [0.0, 0.0])
+    }
     /// What asks the machine how it is.
     fn status_query(&self) -> &[u8];
     /// The machine's answer to [`Driver::status_query`].

@@ -147,7 +147,8 @@ choices a shape inside another (the counter of an O) is cut before it, so the pi
   that the rollers might shift or crease.
 - **As in the Document:** the order the objects are stacked in, bottom first.
 
-After the last line the head moves out of the way, below the work.
+After the last line the head goes home, to the top left (with Print & Cut, to the top-left mark), and the mat
+stays loaded.
 
 ### Tools and holders
 
@@ -184,6 +185,14 @@ that corner, the window warns before cutting.
 
 To tune a material: test, then raise or lower Force until the triangle lifts out cleanly without cutting the
 backing. Then **Save as Material…** (or **Update**).
+
+**Origin Adjustment** (under the test cut, closed at first): if the cuts land a little off the mat's grid, the
+same amount everywhere, move them back. Cut a test, measure from the grid's corner where it landed against where
+the preview shows it, and set the difference: **Across** + moves the cuts to the right, **Down** + toward you
+(at most 10 mm each way, in steps of 0.1 mm). It belongs to your machine and mat, not to the document, so it is
+kept with your preferences and used for every send until you change it; the heading shows it while it isn't 0.
+A mat that isn't Silhouette's may put its grid a little differently: check it when you change mats. With Print &
+Cut the machine measures from the marks, so the adjustment only moves where it starts looking for them.
 
 ## 5. Making cut lines
 

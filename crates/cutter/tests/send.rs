@@ -22,7 +22,7 @@ impl Driver for TestDriver {
     fn model(&self, _: &DeviceInfo) -> String {
         "Test machine".into()
     }
-    fn encode(&self, job: &CutJob, _: &DeviceInfo) -> Result<Encoded, String> {
+    fn encode_adjusted(&self, job: &CutJob, _: &DeviceInfo, _: [f64; 2]) -> Result<Encoded, String> {
         Ok(Encoded {
             chunks: job.paths.iter().map(|p| format!("{}", p.points.len()).into_bytes()).collect(),
             warnings: vec![],

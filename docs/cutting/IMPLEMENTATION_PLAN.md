@@ -73,7 +73,7 @@ These requirements come from the plan's §4 initial acceptance criteria. No hard
 | C4.3 | **Protocol note** — **done** (to be confirmed on the machine): [`protocol-silhouette.md`](protocol-silhouette.md), facts from inkscape-silhouette (`Graphtec.py` at `f376a083`, read for facts only), Windows' device record and Silhouette's specifications, each cited, in our own words; with the mapping from the cut job and the checks to make on the machine | Reviewed; no copied code, tables or comments |
 | C4.4 | **Encoder** — **done** (to be confirmed on the machine): `vectorcraft-cutter-silhouette` (L3), the `Silhouette` driver written from the protocol notes: models by USB id with their cut widths, ESC ENQ status, a job as initialise, mat (`TG`), per operation `J1`/`FX`/`!`/`FC`, `M`/`D` moves in 1/20 mm vertical first, passes, overcut, end (`SO0`); chunks of at most 4,096 bytes split between commands; an unknown mat is "no mat" with a warning, a job wider than the machine an error, speeds approximate (10 mm/s a step) with a warning | Golden bytes written from the notes; the moves read back from the bytes equal the simulation; chunks; a full send to a recording transport answering ready |
 | C4.5 | **Send / monitor / cancel** — **done, to be checked on the machine**: the desktop app's USB transport (`apps/vectorcraft/src/cutters.rs`: SetupDi listing of the USB-printer interface, overlapped `CreateFile`/`WriteFile`/`ReadFile`, no driver change; Windows only for now), `cutting.devices`, `cutting.send {device?}`, `cutting.status`, `cutting.cancel` (engine, through the registry; one send at a time), and the Cutting panel's Cutter section (machine, Send to Cutter, Cancel, progress, outcome, Find Cutters). The first checks on the Cameo 4 are [`hardware-validation.md`](hardware-validation.md) | Against a fake Cameo 4 in CI: listing, a send to done (status, initialise, job, `SO0`), no mat stops it with its message, unknown device and empty job refused; app: device path ids, listing doesn't fail |
-| C4.6 | **Hardware validation** (person in the loop): cut the test sheet (100 mm square, 50 mm circle, 10 mm text, nested "O") on one Cameo model | Measured within ±0.3 mm (target to confirm); results recorded in `docs/cutting/hardware-validation.md` |
+| C4.6 | **Hardware validation** (person in the loop): cut the test sheet (100 mm square, 50 mm circle, 10 mm text, nested "O") on one Cameo model. **Begun 2026-11-01:** checklist steps 1–3 passed on the owner's Cameo 4; from them, the origin adjustment (Send window, `cutting.machine.set`, kept next to the preferences) and the head going home at the end of a job | Measured within ±0.3 mm (target to confirm); results recorded in `docs/cutting/hardware-validation.md` |
 | C4.7 | **Tool holders and Sketch** — each operation chooses its holder (the Cameo 4 has two: `J1`/`J2`), and a Sketch (pen) operation draws instead of cutting; after the machine checks, since it depends on how holder 2 behaves | Encoder golden bytes per holder; checked on the machine with a pen in holder 2 |
 | C4.8 | **Simulated cutter** — **done**: `vectorcraft --virtual-cutter` lists a simulated Cameo 4 next to the USB cutters ("Cameo 4 (simulated)" in the panel, `simulated: true` in `cutting.devices`); a send to it goes through everything a real one does (status, chunks, progress, the pauses between groups, Continue, Cancel), the machine busy two seconds and a millisecond a byte for each part of the job. `cutter::simulated` (a paced transport, providers listed as one), `cutter_silhouette::simulated_cameo4` | The paced transport is busy then ready, queries aren't work; providers list together and open their own; the simulated Cameo is driven as a Cameo 4 and answers like one |
 
@@ -220,6 +220,28 @@ Saved device profiles ·
 software blade-offset compensation for a cutter family that can't do it itself (R10) · job history and error
 reports · more cutter families as their own `cutter-*` crates · upstream PRs for command and overlay
 extension points (ARCHITECTURE §7).
+
+## Phase 15 — Templates made to size (idea)
+
+Owner, 2026-11-01: an idea, not yet planned or sized. Sites such as [Templatemaker](https://www.templatemaker.nl/en/)
+make papercraft and packaging templates to the size asked for: boxes (with a lid, tuck-end, gift, pillow, heart,
+star), trays and inserts, envelopes and mailers, cylinders and cones, pyramids, prisms and the Platonic solids,
+bags. A cutting app could make them in place: the net drawn as paths in the document, its lines already set to
+cut or score, ready to print on, nest and send.
+
+- **Clean-room.** Only the list of what kinds of templates exist comes from such sites. Every net is our own,
+  worked out from its geometry (a box's panels from its inside sizes, a cone's from its radii and slant, a
+  polyhedron's from its faces), never traced from or compared against another tool's output; its licence terms
+  aren't known.
+- **How it would fit.** One command per family (`cutting.template.box`, `….envelope`, `….cone`…) adding one
+  group: the outline set to Cut, the folds to Score (or Perforate), the glue flaps marked; parameters in mm
+  (inside or outside sizes, material thickness taken up at each fold, flap width and angle, lid clearance);
+  remade in place with new settings as the puzzle is (C13.5); a Templates section in the Patterns panel with a
+  picture of the folded shape. Folds would show in the preview as score lines already do.
+- **First candidates.** A tuck-end box, a box with a separate lid, a tray, an envelope, a pillow box, a
+  cylinder and a cone (with a top diameter of 0 a true cone), a pyramid of n sides, the five Platonic solids.
+- **To decide.** Which families first; whether the folds go in a layer of their own; whether a template can wrap
+  the selected art (a box sized to it).
 
 ## How agents should work on this
 

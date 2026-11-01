@@ -36,7 +36,7 @@ fn cameo4() -> DeviceInfo {
     DeviceInfo { id: "usb".into(), vendor_id: 0x0B4D, product_id: 0x1137, name: "Silhouette CAMEO 4".into() }
 }
 
-/// A 10 mm square at (10, 20) mm, cut once at half force and 100 mm/s.
+/// A 10 mm square at (10, 20) mm, cut once at half force and 100 mm/s; then home.
 #[test]
 fn a_square_as_bytes() {
     let j = job(
@@ -47,8 +47,7 @@ fn a_square_as_bytes() {
     let e = Silhouette.encode(&j, &cameo4()).unwrap();
     let got = e.chunks.concat();
     let mut want = vec![0x1B, 0x04];
-    for c in
-        ["TG1", "FN0", "TB50,0", "J1", "FX17,1", "!10,1", "FC18,1,1", "M400,200", "D400,400", "D600,400", "D600,200", "D400,200", "M600,0", "SO0"]
+    for c in ["TG1", "FN0", "TB50,0", "J1", "FX17,1", "!10,1", "FC18,1,1", "M400,200", "D400,400", "D600,400", "D600,200", "D400,200", "M0,0", "SO0"]
     {
         want.extend(c.as_bytes());
         want.push(0x03);
@@ -95,7 +94,7 @@ fn the_bytes_replay_the_simulation() {
             want.push((false, u(m.to[0]), u(m.to[1])));
         }
     }
-    // The bytes end with the head moved out of the way, which the simulation doesn't.
+    // The bytes end with the head sent home, which the simulation doesn't.
     let (end, body) = moves.split_last().unwrap();
     assert!(!end.0);
     assert_eq!(body, want.as_slice());
@@ -321,6 +320,37 @@ fn print_and_cut_searches_for_the_marks_first() {
     j.registration = None;
     let plain = Silhouette.encode(&j, &cameo4()).unwrap();
     assert!(plain.checks.is_empty() && !String::from_utf8_lossy(&plain.chunks.concat()).contains("TB123"));
+}
+
+/// C4.6: the origin adjustment moves every position on the mat (40 units a mm across: the owner's
+/// Cameo 4 on its mat cut 2 mm left of the grid) and where the mark search starts, not the
+/// positions measured from the marks; home is still the origin. Too large, or moving the cut
+/// past the top or left, is refused.
+#[test]
+fn the_origin_adjustment_moves_the_cut() {
+    let mut j = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }],
+        vec![path(0, false, &[[20.0, 20.0], [280.0, 20.0]])],
+        "silhouette.12x12",
+    );
+    let text = |j: &CutJob, a: [f64; 2]| String::from_utf8_lossy(&Silhouette.encode_adjusted(j, &cameo4(), a).unwrap().chunks.concat()).to_string();
+    assert!(text(&j, [0.0, 0.0]).contains("M400,400\u{3}D400,5600\u{3}"));
+    let moved = text(&j, [2.0, -1.0]);
+    assert!(moved.contains("M380,440\u{3}D380,5640\u{3}") && moved.ends_with("M0,0\u{3}SO0\u{3}"), "{moved}");
+    assert!(Silhouette.encode_adjusted(&j, &cameo4(), [10.5, 0.0]).is_err());
+    assert!(Silhouette.encode_adjusted(&j, &cameo4(), [f64::NAN, 0.0]).is_err());
+    assert!(Silhouette.encode_adjusted(&j, &cameo4(), [-25.0 + 15.0, 0.0]).is_ok());
+    let edge = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }],
+        vec![path(0, false, &[[1.0, 1.0], [5.0, 1.0]])],
+        "silhouette.12x12",
+    );
+    assert!(Silhouette.encode_adjusted(&edge, &cameo4(), [-2.0, 0.0]).unwrap_err().contains("left edge"));
+    // Print & Cut: the search starts 2 mm further across; the cut after it is from the mark.
+    j.paths = vec![path(0, false, &[[30.0, 40.0], [50.0, 40.0]])];
+    j.registration = Some(vectorcraft_cutjob::JobRegistration { origin_mm: [20.0, 25.0], size_mm: [180.0, 230.0], length_mm: 20.0, line_mm: 0.5 });
+    let pc = text(&j, [2.0, 0.0]);
+    assert!(pc.contains("TB123,4600,3600,300,240\u{3}") && pc.contains("M300,200\u{3}D300,600\u{3}"), "{pc}");
 }
 
 /// C10.2: the tool decides the holder: a holder 2 tool's settings name holder 2 and take no

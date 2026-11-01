@@ -1,7 +1,7 @@
 # Cutting on the machine: first checks
 
-> **Status:** not yet run · **Machine:** the owner's Silhouette Cameo 4 (USB `0x0B4D:0x1137`) · **For:** C4.2 and
-> C4.6 and every task marked "to confirm on the machine" · **Revised:** 2026-10-30 (C9.3: reordered safest
+> **Status:** steps 1–3 passed 2026-11-01 (a 2 mm origin adjustment on a Nicapa mat), the rest not yet run · **Machine:** the owner's Silhouette Cameo 4 (USB `0x0B4D:0x1137`) · **For:** C4.2 and
+> C4.6 and every task marked "to confirm on the machine" · **Revised:** 2026-11-01 (C4.6: steps 1–3 run, results recorded, the origin adjustment); 2026-10-30 (C9.3: reordered safest
 > first, the controls named as the panels show them since C9.1, what to note at each step)
 
 The steps to confirm on a real Cameo 4 what the encoder takes from the
@@ -16,9 +16,9 @@ control is and what it does: the [user guide](user-guide.md).
 
 | Step | What | Pass / fail | Note |
 |---|---|---|---|
-| 1 | The machine answers | | |
-| 2 | Which way the axes go | | |
-| 3 | Size | | |
+| 1 | The machine answers | Pass | Found, answered, moved; holders read right |
+| 2 | Which way the axes go | Pass | As the preview: nothing mirrored or swapped |
+| 3 | Size | Pass | 10.0 × 10.0 mm; 2 mm left of where sent on a Nicapa mat: Origin Adjustment Across +2 |
 | 4 | Test cut at each corner | | |
 | 5 | Speed | | |
 | 6 | Blade depth, acceleration, track enhancing, corners | | |
@@ -72,7 +72,11 @@ are worth passing on.
 
 Note: what the window said at the end; did the machine move? What the holders line said.
 
-Result:
+Result: **pass** (2026-11-01, sent over the control channel from a dev build with Silhouette Studio closed). The
+app found one machine, "Cameo 4" (USB `0b4d:1137`, through `usbprint.sys`, no driver change). The tools query
+answered in time: Holder 1 AutoBlade, Holder 2 empty, which is what was fitted. The send went as one chunk and
+ended "done" within 2 s; the mat was loaded, so the ready check passed. The machine moved and scored the square
+at Force 1, which looked right. To tidy: the machine is listed as "USB device 0b4d:1137" rather than by its name.
 
 ## Step 2: which way the axes go
 
@@ -82,7 +86,7 @@ Result:
 
 Note: where it landed compared with the preview (right / mirrored left–right / mirrored top–bottom / swapped).
 
-Result:
+Result: **pass**: where the preview shows it, across to the right and down toward the user.
 
 ## Step 3: size
 
@@ -92,7 +96,14 @@ Result:
 
 Note: the two sides, mm; the distance from the corner, mm, against what the preview shows.
 
-Result:
+Result: **pass after a correction.** The square sent at 20 mm across and 20 mm down measured 10 × 10 mm, 18 mm
+from the grid's left line and 20 mm from its top. A second one sent at 280 mm across landed at 278 mm, 20 mm
+down, 10 × 10 mm: a fixed 2 mm shift, not a scale. The mat is a Nicapa clone, not Silhouette's; its grid sits
+10.8 mm from the left edge, 9.5 mm from the right, 19.4 mm from the top and 20.5 mm from the bottom (overall
+324.5 × 344.5 mm, the grid 304.8 mm square). The machine lines the mat up by its edge, so the shift may be the
+mat's rather than the machine's: Send window › **Origin Adjustment** (C4.6) takes it, set once for the machine
+and mat, here **Across** +2 mm. To check on the next sheet, with it set: a square sent at 20 mm lands at 20 mm,
+and the head goes home at the end. On a genuine Silhouette mat, measure again.
 
 ## Step 4: the test cut at each corner (C8.1)
 

@@ -38,6 +38,8 @@ mod stones;
 mod puzzle;
 // Tiles larger than the mat (C14.7).
 mod tile;
+// The machine's origin adjustment (C4.6).
+pub mod machine;
 
 const SETTINGS_SET: &str = "cutting.settings.set";
 const OP_SET: &str = "cutting.op.set";
@@ -56,6 +58,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(stones::specs());
     v.extend(puzzle::specs());
     v.extend(tile::specs());
+    v.extend(machine::specs());
     v.extend(vec![
         cmd!(
             query "cutting.settings.get",
