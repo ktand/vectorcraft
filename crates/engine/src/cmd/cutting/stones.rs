@@ -1,4 +1,4 @@
-//! Fork: rhinestone templates (C13.4): the selected art as holes for stones
+//! Fork: rhinestone templates (C13.4, radial fill C14.5): the selected art as holes for stones
 //! (`vectorcraft_cutting::stones`), added as a path above the art and set to Cut; the art itself
 //! set to No Cut and hidden, as Stencil does, so what shows is what is cut. One undo step.
 
@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use vectorcraft_color::{Color, Paint};
 use vectorcraft_cutjob::Op;
 use vectorcraft_cutting::ops::set_own_op;
-use vectorcraft_cutting::stones::{DEFAULT_GAP_MM, DEFAULT_HOLE_MM, GAP_MM, HOLE_MM, Options, centres, holes};
+use vectorcraft_cutting::stones::{DEFAULT_GAP_MM, DEFAULT_HOLE_MM, Fill, GAP_MM, HOLE_MM, Options, centres, holes};
 use vectorcraft_doc::{Appearance, Node};
 
 use super::{CommandSpec, Result, Session, bad, check_numbers, cmd, has_doc};
@@ -21,7 +21,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Add Rhinestone Template",
         [],
         None,
-        "{ids?, holeMm?: 1–10 (default 3: a hole's diameter, a little more than the stone's), gapMm?: 0.3–20 (default 1: the material between holes), fill?: bool (default false: holes inside as well, a staggered grid kept a row clear of the outline)} the art of the objects (ids, else the selected ones), taken as filled as it is cut, as a rhinestone template: round holes evenly spaced along each outline; added as a path above the art (set to Cut), the art set to No Cut and hidden; one undo step → {id, stones}",
+        "{ids?, holeMm?: 1–10 (default 3: a hole's diameter, a little more than the stone's), gapMm?: 0.3–20 (default 1: the material between holes), fill?: none|grid|radial (default none: the outline only; grid: a staggered grid inside kept a row clear of the outline; radial: rows following the outline inward; true is grid and false none)} the art of the objects (ids, else the selected ones), taken as filled as it is cut, as a rhinestone template: round holes evenly spaced along each outline; added as a path above the art (set to Cut), the art set to No Cut and hidden; one undo step → {id, stones}",
         has_doc,
         add
     )]
@@ -35,8 +35,14 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad(CMD, format!("holeMm is {} to {} and gapMm {} to {}", HOLE_MM.0, HOLE_MM.1, GAP_MM.0, GAP_MM.1)));
     }
     let fill = match p.get("fill") {
-        None => false,
-        Some(v) => v.as_bool().ok_or_else(|| bad(CMD, "fill must be true or false"))?,
+        None | Some(Value::Null) | Some(Value::Bool(false)) => Fill::None,
+        Some(Value::Bool(true)) => Fill::Grid,
+        Some(v) => match v.as_str() {
+            Some("none") => Fill::None,
+            Some("grid") => Fill::Grid,
+            Some("radial") => Fill::Radial,
+            _ => return Err(bad(CMD, format!("fill must be none, grid or radial, not {v}"))),
+        },
     };
     let ids = super::objects(s, p, CMD)?;
     let Some(&last) = ids.last() else {

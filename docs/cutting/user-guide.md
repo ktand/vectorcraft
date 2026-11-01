@@ -190,10 +190,13 @@ see what will be cut. Undo takes the stencil away and brings the art back. If th
 
 A rhinestone template is a sheet with a hole for each stone. Select the art, then Patterns › **Rhinestones**:
 
-- **Hole:** each hole's diameter (default 3 mm). Make it a little larger than the stones (SS10 stones are about
-  2.8 mm across).
+- **Stone:** the stones' size, SS6 to SS30; the hole is made 0.2 mm larger than the stone. Choose Custom and set
+  **Hole** for any other size.
+- **Hole:** each hole's diameter (default 3 mm, for SS10 stones).
 - **Gap:** the material left between two holes (default 1 mm).
-- **Fill Inside:** holes inside the shape too, in a staggered grid, not only along its outline.
+- **Fill Inside:** Outline Only (holes along the outline); Grid (a staggered grid inside too); or Radial (rows
+  following the outline inward, ring after ring). Holes that would come too close where a row turns sharply are
+  left out. The note under the button says how many holes there are, so you know how many stones you'll need.
 - **Add Template:** the holes are added as a path named Rhinestones, and that's what is cut. The art is hidden and
   set to No Cut. Undo brings it back.
 
@@ -212,12 +215,13 @@ when nothing is selected:
 
 ### Sketch fill: shading for the pen
 
-A pen draws lines, not areas. Patterns › **Sketch Fill** fills the selected shapes with straight lines for the pen
-to draw:
+A pen draws lines, not areas. Patterns › **Sketch Fill** fills the selected shapes with lines for the pen to draw:
 
-- **Spacing:** how far apart the lines are (default 2 mm).
-- **Angle:** their slope (default 45°).
-- **Cross-Hatch:** a second set of lines across the first.
+- **Pattern:** Lines (straight lines across); Concentric (rings following the outline inward); or Spiral (one line
+  from the middle out).
+- **Spacing:** how far apart the lines, rings or turns are (default 2 mm).
+- **Angle:** the lines' slope (default 45°; Lines only).
+- **Cross-Hatch:** a second set of lines across the first (Lines only).
 - **Add Sketch Fill:** adds the lines as a path just above the art. Holes are left empty.
 
 To draw them, choose the **Pen** as the tool in Cut Settings (or cut by colour, with the lines in a colour of their

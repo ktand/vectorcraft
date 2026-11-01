@@ -21,4 +21,9 @@ fn a_square_becomes_a_rhinestone_template() {
     assert_eq!(job["job"]["paths"][0]["source"]["node"], sq, "one undo step: the square back");
     let filled = s.execute("cutting.rhinestones", &json!({"ids": [sq], "fill": true})).unwrap();
     assert!(filled["stones"].as_u64().unwrap() > 100, "{filled}");
+    // C14.5: rows following the outline inward; a fill that isn't one.
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(s.execute("cutting.rhinestones", &json!({"ids": [sq], "fill": "spots"})).is_err());
+    let radial = s.execute("cutting.rhinestones", &json!({"ids": [sq], "fill": "radial"})).unwrap();
+    assert!(radial["stones"].as_u64().unwrap() > 100, "{radial}");
 }

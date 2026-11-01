@@ -107,6 +107,20 @@ pub fn bridged(d: &Document, ids: &[NodeId], opt: Options) -> Result<Bridged, St
     Ok(Bridged { path, bridges, unbridged })
 }
 
+/// `area` (non-zero) shrunk by `by` points: the area less a band `by` wide each side of its
+/// outlines, so it shrinks whichever way they wind (an inward offset depends on it). Empty when
+/// nothing is left: also once `by` is half the bounds' smaller side, as nothing inside is further
+/// from the edge (a band wider than the shape turns its inner edge inside out, and leaves the
+/// middle uncovered).
+pub(crate) fn shrunk(area: &PathData, by: f64) -> Result<PathData, String> {
+    if area.bounds().is_none_or(|b| !(by.is_finite() && by * 2.0 < b.width().min(b.height()))) {
+        return Ok(PathData::new(vec![]));
+    }
+    let band = vectorcraft_pathops::outline_stroke(area, 2.0 * by, vectorcraft_pathops::Cap::Round, vectorcraft_pathops::Join::Round, 4.0);
+    try_boolean(area, FillRule::NonZero, &band, FillRule::NonZero, BoolOp::Difference, DEFAULT_PRECISION)
+        .map_err(|e| format!("the inside couldn't be worked out: {e}"))
+}
+
 /// The filled area of the art under `ids`: each object's closed outlines even-odd, all united.
 pub(crate) fn area(d: &Document, ids: &[NodeId]) -> Result<PathData, String> {
     let mut items = crate::select::art_under(d, ids);

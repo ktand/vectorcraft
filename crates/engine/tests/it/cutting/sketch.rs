@@ -22,3 +22,17 @@ fn a_square_gets_a_sketch_fill() {
     s.execute("select.none", &json!({})).unwrap();
     assert!(s.execute("cutting.sketchFill", &json!({})).unwrap_err().to_string().contains("select the art"));
 }
+
+/// C14.5: rings and a spiral, and a pattern that isn't one.
+#[test]
+fn rings_and_a_spiral() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 400, "height": 400})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 50, "y": 50, "width": 142, "height": 142})).unwrap();
+    assert!(s.execute("cutting.sketchFill", &json!({"pattern": "waves"})).is_err());
+    let rings = s.execute("cutting.sketchFill", &json!({"pattern": "concentric", "spacingMm": 5})).unwrap();
+    assert_eq!(rings["lines"], json!(5), "50 mm square: rings 0, 5, 10, 15 and 20 mm in: {rings}");
+    s.execute("edit.undo", &json!({})).unwrap();
+    let spiral = s.execute("cutting.sketchFill", &json!({"pattern": "spiral", "spacingMm": 5})).unwrap();
+    assert!(spiral["lines"].as_u64().unwrap() >= 1, "{spiral}");
+}
