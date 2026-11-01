@@ -192,6 +192,16 @@ fn marks_remove(s: &mut Session, _: &Value) -> Result<Value> {
     Ok(json!({ "removed": true }))
 }
 
+/// After each edit ([`Session::edit`]): the registration marks and the print bleed drawn again
+/// when what they were drawn from changed, in the same undo step (`vectorcraft_cutting::live`).
+/// Nothing to do without a marks or bleed layer.
+pub(crate) fn refresh(doc: &mut std::sync::Arc<Document>) {
+    if vectorcraft_cutting::marks::marks_layer(doc).is_none() && vectorcraft_cutting::bleed::bleed_layer(doc).is_none() {
+        return;
+    }
+    vectorcraft_cutting::live::refresh(std::sync::Arc::make_mut(doc));
+}
+
 fn bleed_add(s: &mut Session, p: &Value) -> Result<Value> {
     const CMD: &str = "cutting.bleed.add";
     check_numbers(p, &["radiusMm"], CMD)?;
@@ -201,11 +211,18 @@ fn bleed_add(s: &mut Session, p: &Value) -> Result<Value> {
         .unwrap_or_else(|| s.doc().map_or(CuttingSettings::DEFAULT_BLEED_MM, |st| vectorcraft_cutting::settings(&st.doc).bleed_mm));
     let mut added = None;
     s.edit("Add Print Bleed", |d, _| {
+        // The distance asked for becomes the document's, so the bleed is kept at it.
+        let mut settings = vectorcraft_cutting::settings(d);
+        if settings.bleed_mm != radius && (CuttingSettings::BLEED_MM.0..=CuttingSettings::BLEED_MM.1).contains(&radius) {
+            settings.bleed_mm = radius;
+            vectorcraft_cutting::set_settings(d, &settings);
+        }
         if let Some(old) = vectorcraft_cutting::bleed::bleed_layer(d) {
             d.remove(old).map_err(|e| bad(CMD, e.to_string()))?;
         }
         let (layer, objects) = vectorcraft_cutting::bleed::bleed_layer_node(d, radius).map_err(|e| bad(CMD, e))?;
         added = Some((d.insert(None, 0, layer).map_err(|e| bad(CMD, e.to_string()))?, objects));
+        vectorcraft_cutting::bleed::prune_images(d);
         Ok(())
     })?;
     let (layer, objects) = added.ok_or_else(|| bad(CMD, "the bleed wasn't added"))?;
@@ -218,6 +235,7 @@ fn bleed_remove(s: &mut Session, _: &Value) -> Result<Value> {
     };
     s.edit("Remove Print Bleed", |d, _| {
         d.remove(layer).map_err(|e| bad("cutting.bleed.remove", e.to_string()))?;
+        vectorcraft_cutting::bleed::prune_images(d);
         Ok(())
     })?;
     Ok(json!({ "removed": true }))

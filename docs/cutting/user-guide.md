@@ -260,7 +260,8 @@ To print a design and then cut round the print:
      side;
    - **Restore Defaults** puts the usual marks back.
 
-   Change a setting after adding the marks and the job says so: press **Update Marks** and print again.
+   The marks follow the artboard: change its size, or a mark setting, and they are drawn again (one undo puts
+   back both). A sheet printed before that has to be printed again.
 2. Print the artboard at 100 % (no "fit to page").
 3. Put the sheet on the mat at its top-left corner, the square mark at the top left. Load it.
 4. Send. The machine finds the marks, then cuts where the print is. If it can't find them (a sheet turned round,
@@ -269,8 +270,10 @@ To print a design and then cut round the print:
 **Print bleed.** A cut a little off the print leaves a thin white edge. In the Print & Cut panel, **Print
 Bleed** › **Add Bleed** spreads each printed object's outer colour (its outline's colour, else its fill's) past
 its edge, by **Bleed** mm (default 1.27), on a locked layer at the bottom called Print Bleed. Behind the art only
-the spread shows, and it isn't cut. Move or change the art afterwards and the job says so: press **Update Bleed**,
-then print again. Images get no bleed.
+the spread shows, and it isn't cut. The bleed follows the art: move or change it and the bleed is made again (one
+undo puts back both). A thin outline (narrower than the bleed) doesn't colour it: the fill's colour is spread. An
+image bleeds its own edge pixels, stretched outward, inside its clipping mask when it has one. With more than 200
+printed objects the bleed isn't remade on every change: the job says when to press **Update Bleed**.
 
 **Keep the hatched areas clear.** With Print & Cut on, the page shows hatched areas: a band across the top, down
 to the marks' line, and a square round each mark. The machine's sensor looks there for the marks, so anything printed or cut there can stop it

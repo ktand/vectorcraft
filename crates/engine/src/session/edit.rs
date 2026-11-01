@@ -44,6 +44,8 @@ impl Session {
                     // Type in no thread numbers its list paragraphs from 1 (before the mask copies
                     // its editing layer's art).
                     cmd::threads::restart_unthreaded_counts(&mut st.doc);
+                    // Fork: the cutting marks and print bleed follow the edit (C14.2).
+                    cmd::cutting::refresh(&mut st.doc);
                     // Opacity-mask editing: the mask follows its art on the editing layer.
                     if st.doc.mask_edit.is_some() {
                         cmd::maskedit::sync(Arc::make_mut(&mut st.doc));
