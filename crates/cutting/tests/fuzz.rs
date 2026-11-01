@@ -315,13 +315,19 @@ proptest! {
             prop_assert!(finite);
         }
         // C13.3: a sketch fill, crossed: finite lines or a reason.
-        let opt = vectorcraft_cutting::hatch::Options { spacing_mm: 5.0, angle_deg: 30.0, cross: true };
-        if let Ok(h) = vectorcraft_cutting::hatch::hatch(&d, &all, opt) {
-            prop_assert!(h.subpaths.iter().all(|s| s.anchors.iter().all(|a| a.p.x.is_finite() && a.p.y.is_finite())));
+        use vectorcraft_cutting::hatch::Pattern;
+        for pattern in [Pattern::Lines, Pattern::Concentric, Pattern::Spiral] {
+            let opt = vectorcraft_cutting::hatch::Options { pattern, spacing_mm: 5.0, angle_deg: 30.0, cross: true };
+            if let Ok(h) = vectorcraft_cutting::hatch::hatch(&d, &all, opt) {
+                prop_assert!(h.subpaths.iter().all(|s| s.anchors.iter().all(|a| a.p.x.is_finite() && a.p.y.is_finite())));
+            }
         }
         // C13.4: a rhinestone template, filled: finite centres or a reason.
-        if let Ok(c) = vectorcraft_cutting::stones::centres(&d, &all, vectorcraft_cutting::stones::Options { hole_mm: 3.0, gap_mm: 1.0, fill: true }) {
-            prop_assert!(c.iter().all(|p| p.x.is_finite() && p.y.is_finite()));
+        use vectorcraft_cutting::stones::Fill;
+        for fill in [Fill::Grid, Fill::Radial] {
+            if let Ok(c) = vectorcraft_cutting::stones::centres(&d, &all, vectorcraft_cutting::stones::Options { hole_mm: 3.0, gap_mm: 1.0, fill }) {
+                prop_assert!(c.iter().all(|p| p.x.is_finite() && p.y.is_finite()));
+            }
         }
         // C11.5: stencil bridges both ways: a finite path or a reason.
         use vectorcraft_cutting::bridges::{Direction, Options, bridged};
