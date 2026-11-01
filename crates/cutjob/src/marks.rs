@@ -115,18 +115,19 @@ impl MarkLayout {
         ]
     }
 
-    /// Where nothing may be printed or cut, page mm: from each mark out to the page's edges at its
-    /// corner and [`NO_GO_MARGIN_MM`] past its arms, and the band along the top the sensor reads
-    /// across, from edge to edge down to the top marks' areas' foot.
+    /// Where nothing may be printed or cut, page mm, as the maker's software hatches it (protocol
+    /// notes [ST]): the band along the top, from edge to edge down to the marks' line, and below
+    /// it each mark's square, from the page's edges at its corner to [`NO_GO_MARGIN_MM`] past its
+    /// arms. The areas don't overlap.
     pub fn no_go(&self) -> Vec<RectMm> {
         let [x, y] = self.origin_mm;
         let [w, h] = self.size_mm;
         let [pw, ph] = self.page_mm;
         let reach = self.length_mm.max(SQUARE_MM) + NO_GO_MARGIN_MM;
         vec![
-            RectMm { x0: 0.0, y0: 0.0, x1: pw, y1: y + reach },
-            RectMm { x0: 0.0, y0: 0.0, x1: x + reach, y1: y + reach },
-            RectMm { x0: x + w - reach, y0: 0.0, x1: pw, y1: y + reach },
+            RectMm { x0: 0.0, y0: 0.0, x1: pw, y1: y },
+            RectMm { x0: 0.0, y0: y, x1: x + reach, y1: y + reach },
+            RectMm { x0: x + w - reach, y0: y, x1: pw, y1: y + reach },
             RectMm { x0: 0.0, y0: y + h - reach, x1: x + reach, y1: ph },
         ]
     }
@@ -165,7 +166,11 @@ mod tests {
         assert!(tr[0][0] < tr[1][0] && tr[2][1] > tr[1][1], "arms pointing in: {tr:?}");
         let Mark::Corner(bl) = bottom_left else { panic!() };
         assert!(bl[1][0] == 10.0 && (bl[1][1] - 269.4).abs() < 1e-9 && bl[0][1] < bl[1][1] && bl[2][0] > bl[1][0], "{bl:?}");
-        assert_eq!(m.no_go()[0], RectMm { x0: 0.0, y0: 0.0, x1: 215.9, y1: 32.0 }, "the band along the top");
+        assert_eq!(m.no_go()[0], RectMm { x0: 0.0, y0: 0.0, x1: 215.9, y1: 10.0 }, "the band along the top, to the marks' line");
+        assert_eq!(m.no_go()[1], RectMm { x0: 0.0, y0: 10.0, x1: 32.0, y1: 32.0 }, "the square mark's corner, below it");
+        let z = m.no_go();
+        let overlap = |a: &RectMm, b: &RectMm| a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+        assert!(z.iter().enumerate().all(|(i, a)| z.iter().skip(i + 1).all(|b| !overlap(a, b))), "no two overlap: {z:?}");
         let bl = m.no_go()[3];
         assert!(bl.x0 == 0.0 && bl.x1 == 32.0 && (bl.y0 - 247.4).abs() < 1e-9 && bl.y1 == 279.4, "the bottom-left mark to the page's corner: {bl:?}");
         assert_eq!(m.machine_steps(), (400, 10), "the usual marks are what the machine was always told");
