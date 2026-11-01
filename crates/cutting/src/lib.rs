@@ -36,6 +36,7 @@ pub mod marks;
 pub mod nest;
 pub mod ops;
 pub mod order;
+pub mod perforate;
 pub mod placement;
 pub mod prepare;
 pub mod preview;
@@ -99,6 +100,37 @@ fn with_tool(setup: &vectorcraft_cutjob::ToolSettings, document: &vectorcraft_cu
 /// inch, and art drawn at 96 px/in (most SVGs with no units) cuts a third larger than meant.
 pub const PIXELS_WARNING: &str = "the document is measured in pixels, cut at 72 per inch: art drawn at 96 px/in cuts a third larger than meant";
 
+/// `polylines` with those of the objects set to Perforate (C14.4) cut in dashes: the object's
+/// stroke's dash pattern when it has one (points, as mm on the mat), else the settings' lengths.
+fn perforated(d: &Document, s: &CuttingSettings, items: &[select::Item], polylines: Vec<prepare::Polyline>) -> Vec<prepare::Polyline> {
+    let mut patterns = std::collections::HashMap::new();
+    for item in items.iter().filter(|i| i.perforate) {
+        let own = d.node(item.id).and_then(|n| n.appearance.stroke().and_then(|k| k.dash.clone())).filter(|dash| dash.is_dashed());
+        let mm: Vec<f64> = match own {
+            Some(dash) => dash.pattern.iter().map(|v| v * placement::MM_PER_PT).collect(),
+            None => vec![s.perforate_cut_mm, s.perforate_gap_mm],
+        };
+        if let Some(p) = perforate::pairs(&mm) {
+            patterns.insert(item.id.0, p);
+        }
+    }
+    if patterns.is_empty() {
+        return polylines;
+    }
+    let mut out = Vec::with_capacity(polylines.len());
+    for p in polylines {
+        match patterns.get(&p.source.node) {
+            Some(pattern) => {
+                for points in perforate::dashes(&p.points, p.closed, pattern) {
+                    out.push(prepare::Polyline { op: p.op, source: p.source, closed: false, points });
+                }
+            }
+            None => out.push(p),
+        }
+    }
+    out
+}
+
 /// The cut job `d` makes with its cutting settings: what [`select`] picks, cut along its
 /// [`geometry`], laid on the mat by [`prepare`] and put in [`order`], validated. The same document
 /// and settings always make the same job.
@@ -111,6 +143,7 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     warnings.extend(welding);
     let (polylines, more) = prepare::prepare(&outlines, &placement, s.tolerance_mm, s.clip_to_mat).map_err(BuildError::Prepare)?;
     warnings.extend(more);
+    let polylines = perforated(d, &s, &items, polylines);
     if d.units == vectorcraft_doc::Unit::Pixels && !polylines.is_empty() {
         warnings.push(vectorcraft_cutjob::JobWarning { source: None, message: PIXELS_WARNING.into() });
     }

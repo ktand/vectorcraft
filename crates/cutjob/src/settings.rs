@@ -34,10 +34,13 @@ pub enum Op {
     /// Cut along the outline of all the shapes set to it, united: where they overlap, the lines
     /// inside aren't cut (C3.10).
     Outline,
+    /// Cut in dashes, so the sheet tears along the line (C14.4): the stroke's dash pattern, else
+    /// the settings' perforation lengths.
+    Perforate,
 }
 
 impl Op {
-    pub const ALL: [Op; 4] = [Op::Cut, Op::Score, Op::NoCut, Op::Outline];
+    pub const ALL: [Op; 5] = [Op::Cut, Op::Score, Op::NoCut, Op::Outline, Op::Perforate];
 
     /// The id files and commands use.
     pub fn id(self) -> &'static str {
@@ -46,6 +49,7 @@ impl Op {
             Op::Score => "score",
             Op::NoCut => "none",
             Op::Outline => "outline",
+            Op::Perforate => "perforate",
         }
     }
 
@@ -54,7 +58,7 @@ impl Op {
         Op::ALL.into_iter().find(|o| o.id() == id)
     }
 
-    fn choices() -> [(&'static str, Op); 4] {
+    fn choices() -> [(&'static str, Op); 5] {
         Op::ALL.map(|o| (o.id(), o))
     }
 }
@@ -336,7 +340,7 @@ impl Operations {
             Op::Cut => Some(&self.cut),
             Op::Score => Some(&self.score),
             Op::NoCut => None,
-            Op::Outline => Some(&self.cut),
+            Op::Outline | Op::Perforate => Some(&self.cut),
         }
     }
 }
@@ -390,6 +394,10 @@ pub struct CuttingSettings {
     pub mark_line_mm: f64,
     /// How far the print bleed runs past the art, mm (C12.3; `vectorcraft_cutting::bleed`).
     pub bleed_mm: f64,
+    /// Perforating (C14.4): the cuts' and the gaps' length, mm, for an object without a dashed
+    /// stroke of its own.
+    pub perforate_cut_mm: f64,
+    pub perforate_gap_mm: f64,
     /// Cut by colour (C7.4): each colour's own setup, by the name its group has (a swatch's name
     /// or `#rrggbb`); colours without one are cut with [`Self::operations`]. A layer's own setup is
     /// on the layer (`vectorcraft_cutting::setups`).
@@ -430,6 +438,8 @@ impl Default for CuttingSettings {
             mark_length_mm: crate::marks::DEFAULT_LENGTH_MM,
             mark_line_mm: crate::marks::DEFAULT_LINE_MM,
             bleed_mm: Self::DEFAULT_BLEED_MM,
+            perforate_cut_mm: 3.0,
+            perforate_gap_mm: 1.0,
             color_setups: Default::default(),
             group_options: Default::default(),
             weed_box: false,
@@ -447,7 +457,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 26] = [
+    const KEYS: [&'static str; 28] = [
         "version",
         "mat",
         "customMatMm",
@@ -468,6 +478,8 @@ impl CuttingSettings {
         "markLengthMm",
         "markLineMm",
         "bleedMm",
+        "perforateCutMm",
+        "perforateGapMm",
         "colorSetups",
         "groupOptions",
         "weedBox",
@@ -482,6 +494,8 @@ impl CuttingSettings {
     /// The print bleed's distance, mm: the range, and the usual (C12.3).
     pub const BLEED_MM: (f64, f64) = (0.1, 5.0);
     pub const DEFAULT_BLEED_MM: f64 = 1.27;
+    /// A perforation's cut and gap lengths, mm: the range (C14.4).
+    pub const PERFORATE_MM: (f64, f64) = (0.2, 50.0);
 
     /// The settings in `v` (a document's `unknown["cutting"]`, from a file): anything that isn't an
     /// object gives the defaults. Never fails.
@@ -513,6 +527,8 @@ impl CuttingSettings {
             mark_length_mm: num(m, "markLengthMm", crate::marks::LENGTH_MM.0, crate::marks::LENGTH_MM.1, d.mark_length_mm),
             mark_line_mm: num(m, "markLineMm", crate::marks::LINE_MM.0, crate::marks::LINE_MM.1, d.mark_line_mm),
             bleed_mm: num(m, "bleedMm", Self::BLEED_MM.0, Self::BLEED_MM.1, d.bleed_mm),
+            perforate_cut_mm: num(m, "perforateCutMm", Self::PERFORATE_MM.0, Self::PERFORATE_MM.1, d.perforate_cut_mm),
+            perforate_gap_mm: num(m, "perforateGapMm", Self::PERFORATE_MM.0, Self::PERFORATE_MM.1, d.perforate_gap_mm),
             material: m.get("material").and_then(Value::as_str).and_then(crate::material::valid_name),
             color_setups: object(m, "colorSetups")
                 .map(|c| {
@@ -573,6 +589,8 @@ impl CuttingSettings {
         m.insert("markLengthMm".into(), json!(self.mark_length_mm));
         m.insert("markLineMm".into(), json!(self.mark_line_mm));
         m.insert("bleedMm".into(), json!(self.bleed_mm));
+        m.insert("perforateCutMm".into(), json!(self.perforate_cut_mm));
+        m.insert("perforateGapMm".into(), json!(self.perforate_gap_mm));
         if let Some(name) = &self.material {
             m.insert("material".into(), json!(name));
         }
