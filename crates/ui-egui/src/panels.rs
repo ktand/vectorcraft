@@ -190,6 +190,7 @@ pub fn show_icon_panel(app: &mut VectorcraftApp, ui: &mut Ui, id: &str) {
         cutting::mat::ID => cutting::mat::show(app, ui),
         cutting::lines::ID => cutting::lines::show(app, ui),
         cutting::print::ID => cutting::print::show(app, ui),
+        cutting::patterns::ID => cutting::patterns::show(app, ui),
         id if library_panel::parse(id).is_some() => library_panel::show(app, ui, id),
         _ => {
             dim_label(ui, tl!("This panel is on the roadmap (see the parity plan)."));

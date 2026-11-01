@@ -40,7 +40,13 @@ pub(crate) fn workspace_layout() -> craft_ui::docking::Layout<String> {
     use craft_ui::docking::{Group, Node};
     let ui = crate::state::UiState { dock_tab: crate::state::DockTab::Layers, ..Default::default() };
     let mut layout = crate::panel_docking::default_layout(&ui);
-    let ours = [crate::panels::cutting::ID, crate::panels::cutting::lines::ID, crate::panels::cutting::mat::ID, crate::panels::cutting::print::ID];
+    let ours = [
+        crate::panels::cutting::ID,
+        crate::panels::cutting::lines::ID,
+        crate::panels::cutting::patterns::ID,
+        crate::panels::cutting::mat::ID,
+        crate::panels::cutting::print::ID,
+    ];
     if let Some(Node::Split { second, .. }) = layout.root.as_mut()
         && let Node::Dock { columns, .. } = second.as_mut()
     {
@@ -56,10 +62,12 @@ pub(crate) fn workspace_layout() -> craft_ui::docking::Layout<String> {
             if let Some(tabs) = main.groups.first_mut() {
                 tabs.height = Some(LAYERS_HEIGHT);
             }
-            // Two tabs a group, so their names fit the column: what is set for each cut, then
-            // what is set once for the document.
-            for pair in ours.chunks(2) {
-                main.groups.push(Group::new(pair.iter().map(|p| p.to_string()).collect(), 0));
+            // What is set for each cut (Cut Settings, Cut Lines, Patterns), then what is set once
+            // for the document (Cutting Mat, Print & Cut): few enough tabs a group that their
+            // names fit the column.
+            let (per_cut, per_document) = ours.split_at(3);
+            for tabs in [per_cut, per_document] {
+                main.groups.push(Group::new(tabs.iter().map(|p| p.to_string()).collect(), 0));
             }
         }
     }

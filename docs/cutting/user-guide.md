@@ -14,18 +14,19 @@ Window › Workspace › **Cutting**. It turns on Cutting View (the mat drawn be
 panels on the right:
 
 - **Layers** at the top. Cutting by layer is set up here.
-- **Cut Settings** and **Cut Lines**, as two tabs below it: what you change for each cut.
+- **Cut Settings**, **Cut Lines** and **Patterns**, as tabs below it: what you change for each cut.
 - **Cutting Mat** and **Print & Cut**, as two tabs below those: what you set once per document.
 
 If your Cutting workspace looks different (you moved its panels, or saved it with an older version), Window ›
 Workspace › Reset Cutting brings back this layout.
 
-The four panels (each also on the Window menu):
+The five panels (each also on the Window menu):
 
 - **Cut Settings:** how things are cut. At the top, a summary of the job ("2 paths · 392 mm · 5 s") and **Send
   to Cutter…**. Below it: what the selection is cut as and along, the default, groups, the material and tool
   settings, and **Advanced**.
-- **Cut Lines:** what adds cut lines: a contour round the art, stencil bridges, and weeding.
+- **Cut Lines:** what adds cut lines to cut the art out: a contour round it, stencil bridges, and weeding.
+- **Patterns:** designs made from the art: a sketch fill for the pen, a rhinestone template, a puzzle.
 - **Cutting Mat:** the mat and where the artboard sits on it, and nesting.
 - **Print & Cut:** printing with registration marks and cutting round the print.
 
@@ -184,7 +185,7 @@ see what will be cut. Undo takes the stencil away and brings the art back. If th
 
 ### Rhinestones
 
-A rhinestone template is a sheet with a hole for each stone. Select the art, then Cut Lines › **Rhinestones**:
+A rhinestone template is a sheet with a hole for each stone. Select the art, then Patterns › **Rhinestones**:
 
 - **Hole:** each hole's diameter (default 3 mm). Make it a little larger than the stones (SS10 stones are about
   2.8 mm across).
@@ -195,7 +196,7 @@ A rhinestone template is a sheet with a hole for each stone. Select the art, the
 
 ### Puzzles
 
-Cut Lines › **Puzzle** cuts a jigsaw over the selected art (a printed picture, say), or over the whole artboard
+Patterns › **Puzzle** cuts a jigsaw over the selected art (a printed picture, say), or over the whole artboard
 when nothing is selected:
 
 - **Rows** and **Columns:** how many pieces (up to 50 each way).
@@ -208,7 +209,7 @@ when nothing is selected:
 
 ### Sketch fill: shading for the pen
 
-A pen draws lines, not areas. Cut Lines › **Sketch Fill** fills the selected shapes with straight lines for the pen
+A pen draws lines, not areas. Patterns › **Sketch Fill** fills the selected shapes with straight lines for the pen
 to draw:
 
 - **Spacing:** how far apart the lines are (default 2 mm).
