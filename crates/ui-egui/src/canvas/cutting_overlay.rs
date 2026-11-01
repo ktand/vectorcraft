@@ -26,8 +26,8 @@ pub(super) fn under(app: &VectorcraftApp, painter: &egui::Painter, xf: &Xf) {
 }
 
 /// What Cutting View draws on the paper, under the art (the canvas's hook after the paper): the
-/// areas Print & Cut keeps clear, hatched (C14.1: under the art, as the maker's software draws
-/// them, so the marks and any art there show whole).
+/// areas Print & Cut keeps clear, hatched, and the cut border (C14.1: under the art, as the
+/// maker's software draws them, so the marks and any art there show whole).
 pub(super) fn on_paper(app: &VectorcraftApp, painter: &egui::Painter, xf: &Xf) {
     if !app.ui.view.cutting {
         return;
@@ -35,7 +35,14 @@ pub(super) fn on_paper(app: &VectorcraftApp, painter: &egui::Painter, xf: &Xf) {
     let Some(pl) = placed(app) else { return };
     let to_doc = pl.mat_to_doc();
     let screen = |x: f64, y: f64| xf.to_screen(to_doc * Point::new(x, y));
-    no_go(app, painter, &pl, &screen, &Tokens::get(painter.ctx()));
+    let ring = |r: RectMm| {
+        let q = [screen(r.x0, r.y0), screen(r.x1, r.y0), screen(r.x1, r.y1), screen(r.x0, r.y1)];
+        q.iter().chain(q.first()).copied().collect::<Vec<Pos2>>()
+    };
+    let t = Tokens::get(painter.ctx());
+    no_go(app, painter, &pl, &screen, &t);
+    // Under the art too, so the marks drawn along it show over it.
+    cut_border(app, painter, &pl, &ring, &t);
 }
 
 /// What Cutting View draws over the art (the canvas's hook): the job's overlay and the
@@ -189,7 +196,6 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
     if cut != (RectMm { x0: 0.0, y0: 0.0, x1: w, y1: h }) && !crate::cutting::shows_cut_border(p.ctx()) {
         p.extend(Shape::dashed_line(&ring(cut), Stroke::new(1.0, t.accent), 5.0, 3.0));
     }
-    cut_border(app, p, &pl, &ring, &t);
     if crate::cutting::shows_toolpaths(p.ctx())
         && let Some(job) = crate::cutting::job(app, p.ctx())
         && let Ok(made) = &*job
