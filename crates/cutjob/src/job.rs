@@ -124,6 +124,8 @@ pub struct JobGroup {
     pub material: Option<String>,
     /// Index of its first path; its paths run to the next group's start.
     pub start: usize,
+    /// The machine pauses before it (C14.3; never before the first).
+    pub pause: bool,
 }
 
 /// Why a job can't be run.
@@ -316,7 +318,7 @@ impl CutJob {
         json!({
             "version": self.version,
             "trackEnhancing": self.track_enhancing,
-            "groups": self.groups.iter().map(|g| json!({"name": g.name, "start": g.start, "material": g.material})).collect::<Vec<_>>(),
+            "groups": self.groups.iter().map(|g| json!({"name": g.name, "start": g.start, "material": g.material, "pause": g.pause})).collect::<Vec<_>>(),
             "registration": self.registration.map(|r| json!({"originMm": r.origin_mm, "sizeMm": r.size_mm, "lengthMm": r.length_mm, "lineMm": r.line_mm})),
             "mat": {"id": self.mat.id, "sizeMm": self.mat.size_mm, "cutAreaMm": [a.x0, a.y0, a.x1, a.y1]},
             "operations": self.operations.iter().map(|o| json!({

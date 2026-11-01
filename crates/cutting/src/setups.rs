@@ -77,7 +77,7 @@ pub fn setup_of(d: &Document, s: &CuttingSettings, name: &str) -> Option<GroupSe
     match s.grouping {
         Grouping::None => None,
         Grouping::Layer => d.layers.iter().filter(|l| layer_group_name(l) == name).find_map(|l| layer_setup(l, s)),
-        Grouping::Color => s.color_setups.get(name).cloned(),
+        Grouping::Color | Grouping::FillColor => s.color_setups.get(name).cloned(),
     }
 }
 

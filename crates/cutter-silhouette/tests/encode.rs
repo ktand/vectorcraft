@@ -195,8 +195,8 @@ fn groups_pause_between_them() {
         "silhouette.12x12",
     );
     j.groups = vec![
-        vectorcraft_cutjob::JobGroup { name: "Red".into(), start: 0, material: None },
-        vectorcraft_cutjob::JobGroup { name: "Blue".into(), start: 1, material: None },
+        vectorcraft_cutjob::JobGroup { name: "Red".into(), start: 0, material: None, pause: true },
+        vectorcraft_cutjob::JobGroup { name: "Blue".into(), start: 1, material: None, pause: true },
     ];
     let e = Silhouette.encode(&j, &cameo4()).unwrap();
     assert_eq!(e.pauses.len(), 1);
@@ -209,6 +209,24 @@ fn groups_pause_between_them() {
     assert!(before.contains("M20,20\u{3}") && !before.contains("M100,100"), "{before:?}");
 }
 
+/// C14.3: a group set not to pause is cut straight after the one before.
+#[test]
+fn a_group_without_a_pause_follows_straight_on() {
+    let mut j = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }],
+        vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]]), path(0, false, &[[5.0, 5.0], [6.0, 6.0]])],
+        "silhouette.12x12",
+    );
+    j.groups = vec![
+        vectorcraft_cutjob::JobGroup { name: "Red".into(), start: 0, material: None, pause: true },
+        vectorcraft_cutjob::JobGroup { name: "Blue".into(), start: 1, material: None, pause: false },
+    ];
+    let e = Silhouette.encode(&j, &cameo4()).unwrap();
+    assert!(e.pauses.is_empty(), "{:?}", e.pauses);
+    let all = String::from_utf8_lossy(&e.chunks.concat()).to_string();
+    assert!(all.contains("M20,20\u{3}") && all.contains("M100,100\u{3}"), "both groups: {all:?}");
+}
+
 /// C7.4: each group is sent with its own operation's settings: a second group cut with a heavier
 /// setup gets its force after the pause, the first group never sees it.
 #[test]
@@ -219,8 +237,8 @@ fn each_group_gets_its_own_settings() {
         "silhouette.12x12",
     );
     j.groups = vec![
-        vectorcraft_cutjob::JobGroup { name: "Paper".into(), start: 0, material: None },
-        vectorcraft_cutjob::JobGroup { name: "Card".into(), start: 1, material: Some("Cardstock".into()) },
+        vectorcraft_cutjob::JobGroup { name: "Paper".into(), start: 0, material: None, pause: true },
+        vectorcraft_cutjob::JobGroup { name: "Card".into(), start: 1, material: Some("Cardstock".into()), pause: true },
     ];
     let e = Silhouette.encode(&j, &cameo4()).unwrap();
     let at = e.pauses[0].0;

@@ -359,14 +359,16 @@ impl Silhouette {
             warnings.push("Print & Cut is to confirm on the machine: cut a test sheet first".into());
         }
         let mut lowest = 0.0f64;
-        // Group by group (one without grouping), a pause before each after the first; in each,
+        // Group by group (one without grouping), a pause before those after the first that ask
+        // for one; in each,
         // every operation's settings again (the tool may have been changed) and its paths.
-        let starts: Vec<(usize, &str)> =
-            if job.groups.is_empty() { vec![(0, "")] } else { job.groups.iter().map(|g| (g.start, g.name.as_str())).collect() };
-        for (gi, &(start, name)) in starts.iter().enumerate() {
+        let starts: Vec<(usize, &str, bool)> =
+            if job.groups.is_empty() { vec![(0, "", false)] } else { job.groups.iter().map(|g| (g.start, g.name.as_str(), g.pause)).collect() };
+        for (gi, &(start, name, pause)) in starts.iter().enumerate() {
             let end = starts.get(gi + 1).map_or(job.paths.len(), |n| n.0);
             let in_group = job.paths.get(start..end).unwrap_or_default();
-            if gi > 0 {
+            // C14.3: only before the groups that pause.
+            if gi > 0 && pause {
                 c.pause(name);
             }
             for (op_index, op) in job.operations.iter().enumerate() {

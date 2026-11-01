@@ -92,9 +92,11 @@ O, while the sheet still holds.
 
 ### Cutting in groups
 
-**Groups** › By Layer or By Colour cuts the job in groups: each top-level layer, or each stroke colour (else fill
-colour), one after the other. The machine **pauses before each group** after the first. Change the blade or the
-material, then press **Continue** in the Send window.
+**Groups** › By Layer, By Line Colour or By Fill Colour cuts the job in groups: each top-level layer, each stroke
+colour (else fill colour), or each fill colour (else stroke colour), one after the other. The machine **pauses
+before each group** after the first: change the blade or the material, then press **Continue** in the Send window.
+Each group's row has **On** (switch it off and it isn't cut) and **Pause** (switch it off and the group is cut
+straight after the one before, with its own settings).
 
 While cutting in groups, Cut Settings lists each group in cutting order. Give a group its own **Material**, or its
 own **Force** and **Passes**. A group left on "Document's setup" uses the tool settings below. When a group has a

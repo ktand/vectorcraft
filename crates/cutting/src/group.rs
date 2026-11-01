@@ -12,13 +12,15 @@ pub fn group_of(d: &Document, id: NodeId, grouping: Grouping) -> String {
     match grouping {
         Grouping::None => String::new(),
         Grouping::Layer => d.layer_of(id).and_then(|l| d.node(l)).and_then(|n| n.name.clone()).unwrap_or_else(|| "Layer".into()),
-        Grouping::Color => {
+        Grouping::Color | Grouping::FillColor => {
             let Some(n) = d.node(id) else { return String::new() };
             let name = |p: &Paint| match p {
                 Paint::Solid { color, swatch, .. } => Some(swatch.clone().unwrap_or_else(|| color.to_hex())),
                 _ => None,
             };
-            name(&n.appearance.stroke_paint()).or_else(|| name(&n.appearance.fill_paint())).unwrap_or_else(|| "No colour".into())
+            let (stroke, fill) = (name(&n.appearance.stroke_paint()), name(&n.appearance.fill_paint()));
+            let first = if grouping == Grouping::FillColor { fill.or(stroke) } else { stroke.or(fill) };
+            first.unwrap_or_else(|| "No colour".into())
         }
     }
 }
@@ -47,6 +49,9 @@ mod tests {
         assert_eq!(group_of(&d, a, Grouping::Color), "#ff0000", "the stroke's colour");
         assert_eq!(group_of(&d, b, Grouping::Color), "#0000ff", "no stroke: the fill's");
         assert_eq!(group_of(&d, c, Grouping::Color), "No colour");
+        // C14.3: by fill colour, the fill first.
+        assert_eq!(group_of(&d, b, Grouping::FillColor), "#0000ff");
+        assert_eq!(group_of(&d, c, Grouping::FillColor), "No colour");
         assert_eq!(group_of(&d, a, Grouping::None), "");
     }
 }
