@@ -38,6 +38,8 @@ fn the_defaults_round_trip_as_documented() {
             "markLengthMm": 20.0,
             "markLineMm": 0.5,
             "bleedMm": 1.27,
+            "perforateCutMm": 3.0,
+            "perforateGapMm": 1.0,
             "weedBox": false,
             "weedMarginMm": 3.0,
             "weedLines": false,
@@ -74,6 +76,8 @@ fn every_setting_round_trips() {
         mark_length_mm: 7.5,
         mark_line_mm: 0.8,
         bleed_mm: 3.5,
+        perforate_cut_mm: 5.0,
+        perforate_gap_mm: 0.5,
         group_options: [("Gold".to_string(), crate::GroupOptions { off: true, pause: false })].into(),
         color_setups: [(
             "Gold".to_string(),
@@ -98,7 +102,7 @@ fn every_setting_round_trips() {
 fn damaged_values_are_defaults_and_numbers_are_clamped() {
     let s = read(json!({
         "mat": 7, "customMatMm": [1, 99999], "orientation": "sideways", "artboard": -2,
-        "offsetMm": "here", "defaultOp": "perforate", "toleranceMm": 0,
+        "offsetMm": "here", "defaultOp": "etch", "toleranceMm": 0,
         "operations": {"cut": {"force": 3, "speedMmS": "fast", "passes": 40, "overcutMm": -1}, "score": 5},
         "ordering": null
     }));

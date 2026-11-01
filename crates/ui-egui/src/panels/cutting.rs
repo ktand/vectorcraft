@@ -41,8 +41,8 @@ pub(crate) fn mm_field(ui: &mut Ui, id: &'static str, mm: f64, min_mm: f64) -> O
 /// What the document cuts by default and how it groups the cut.
 fn job_settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let s = &info["settings"];
-    let ops = ["Cut", "Cut Outline", "Score", "No Cut"];
-    let op_ids = ["cut", "outline", "score", "none"];
+    let ops = ["Cut", "Cut Outline", "Score", "Perforate", "No Cut"];
+    let op_ids = ["cut", "outline", "score", "perforate", "none"];
     let default = op_ids.iter().position(|o| s["defaultOp"] == *o).unwrap_or(0);
     // The operation of objects that, with their groups and layers, set none.
     widgets::label_row(ui, tl!("Default"), LABEL_W, |ui| {
@@ -160,11 +160,11 @@ fn selection_row(app: &mut VectorcraftApp, ui: &mut Ui) {
     if objects.is_empty() {
         return;
     }
-    let labels = ["Cut", "Cut Outline", "Score", "No Cut", "As Its Group or Layer"];
-    let ids = ["cut", "outline", "score", "none", "inherit"];
+    let labels = ["Cut", "Cut Outline", "Score", "Perforate", "No Cut", "As Its Group or Layer"];
+    let ids = ["cut", "outline", "score", "perforate", "none", "inherit"];
     let all = |f: &dyn Fn(&Value) -> bool| objects.iter().all(f);
     let current = if all(&|o| o["source"] != "own") {
-        Some(4)
+        ids.iter().position(|id| *id == "inherit")
     } else if all(&|o| o["source"] == "own") {
         ids.iter().position(|id| all(&|o| o["op"] == *id))
     } else {
@@ -217,6 +217,18 @@ fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         });
     });
     let s = &info["settings"];
+    // C14.4: Perforate's cuts and gaps, for objects without a dashed stroke of their own.
+    let (lo, hi) = vectorcraft_cutjob::CuttingSettings::PERFORATE_MM;
+    widgets::label_row(ui, tl!("Perforate"), LABEL_W, |ui| {
+        if let Some(v) = mm_field(ui, "perforate-cut", s["perforateCutMm"].as_f64().unwrap_or(3.0), lo) {
+            set(app, json!({ "perforateCutMm": v.clamp(lo, hi) }));
+        }
+        widgets::dim_label(ui, tl!("cut"));
+        if let Some(v) = mm_field(ui, "perforate-gap", s["perforateGapMm"].as_f64().unwrap_or(1.0), lo) {
+            set(app, json!({ "perforateGapMm": v.clamp(lo, hi) }));
+        }
+        widgets::dim_label(ui, tl!("gap"));
+    });
     let track = s["trackEnhancing"].as_bool() == Some(true);
     if widgets::check(ui, tl!("Track Enhancing"), track, true) {
         set(app, json!({ "trackEnhancing": !track }));

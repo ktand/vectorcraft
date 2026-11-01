@@ -68,6 +68,7 @@ Every object is cut in one of these ways:
 | **Cut** | Cuts along every line. |
 | **Cut Outline** | Shapes set to it are joined, and only the outline of the joined shape is cut: overlapping letters come out as one piece. |
 | **Score** | A light line that doesn't cut through, for folds. Scores are cut before cuts. |
+| **Perforate** | Cuts in dashes, so the sheet tears along the line: the object's own dash pattern if its stroke is dashed, else 3 mm cuts with 1 mm gaps (Cut Settings › Advanced › Perforate). |
 | **No Cut** | Not cut at all: printed art, notes, guides. |
 
 - **Default** (Cut Settings) is what everything is cut as unless something says otherwise.

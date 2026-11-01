@@ -146,7 +146,7 @@ mod tests {
     fn a_value_not_read_is_kept_until_set() {
         let mut d = Document::new(10.0, 10.0);
         let mut n = square(&mut d);
-        let newer = ForeignAttribute { ns: NS.into(), prefix: "cut".into(), name: "op".into(), value: "perforate".into() };
+        let newer = ForeignAttribute { ns: NS.into(), prefix: "cut".into(), name: "op".into(), value: "etch".into() };
         n.edit_attrs(|a| a.foreign.push(newer.clone()));
         assert_eq!(own_op(&n), None);
         assert_eq!(n.extras().attrs.as_deref().unwrap().foreign, vec![newer]);

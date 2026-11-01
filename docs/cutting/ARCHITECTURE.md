@@ -131,7 +131,7 @@ shouldn't live there.
 ns     = "urn:vectorcraft:cutting:1"
 prefix = "cut"
 name   = "op"
-value  = "cut" | "score" | "none" | "outline"
+value  = "cut" | "score" | "none" | "outline" | "perforate"
 ```
 
 Exported to SVG it reads `<path cut:op="score" xmlns:cut="urn:vectorcraft:cutting:1" …/>`.

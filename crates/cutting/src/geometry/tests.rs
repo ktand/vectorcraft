@@ -12,7 +12,7 @@ fn square(d: &mut Document, x: f64, y: f64, side: f64) -> Node {
 }
 
 fn item(id: NodeId) -> Item {
-    Item { id, op: OpKind::Cut, outline: false, stroke_edge: false, clips: vec![] }
+    Item { id, op: OpKind::Cut, outline: false, stroke_edge: false, perforate: false, clips: vec![] }
 }
 
 /// `n` added to a fresh 200 × 200 pt document: the document and its id.

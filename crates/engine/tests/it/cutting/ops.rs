@@ -88,10 +88,10 @@ fn bad_settings_are_errors_and_change_nothing() {
         json!({"toleranceMm": "fine"}),
         json!({"offsetMm": [0, 9000]}),
         json!({"orientation": "sideways"}),
-        json!({"defaultOp": "perforate"}),
+        json!({"defaultOp": "etch"}),
         json!({"operations": {"cut": {"passes": 2.5}}}),
         json!({"operations": {"cut": {"force": 2}}}),
-        json!({"operations": {"perforate": {}}}),
+        json!({"operations": {"etch": {}}}),
         json!({"operations": {"cut": {"blade": 1}}}),
         json!({"operations": {"cut": 3}}),
         json!({"operations": 3}),
@@ -170,7 +170,7 @@ fn bad_op_params_are_errors() {
     let mut s = new_doc();
     let a = rect(&mut s, 10.0);
     s.execute("select.none", &json!({})).unwrap();
-    for p in [json!({"ids": [a]}), json!({"ids": [a], "op": "perforate"}), json!({"ids": [999_999], "op": "cut"}), json!({"op": "cut"})] {
+    for p in [json!({"ids": [a]}), json!({"ids": [a], "op": "etch"}), json!({"ids": [999_999], "op": "cut"}), json!({"op": "cut"})] {
         assert!(s.execute("cutting.op.set", &p).is_err(), "{p}");
     }
     assert!(s.execute("cutting.op.get", &json!({"ids": [999_999]})).is_err());
@@ -224,4 +224,25 @@ fn copies_keep_the_op() {
     assert_eq!(pasted.as_array().unwrap().len(), 1);
     assert_ne!(pasted[0]["id"], json!(a));
     assert_eq!((pasted[0]["op"].clone(), pasted[0]["source"].clone()), (json!("score"), json!("own")));
+}
+
+/// C14.4: an object set to Perforate is cut in dashes, open lines: the settings' 3 mm and 1 mm
+/// round a 40 mm square (ten), or its dashed stroke's own pattern (5 mm and 5 mm: four).
+#[test]
+fn a_perforated_square_is_cut_in_dashes() {
+    let mut s = new_doc();
+    let mm = 72.0 / 25.4;
+    let sq = s.execute("shape.rectangle", &json!({"x": 20, "y": 20, "width": 10.0 * mm, "height": 10.0 * mm})).unwrap()["id"].as_u64().unwrap();
+    s.execute("cutting.op.set", &json!({"ids": [sq], "op": "perforate"})).unwrap();
+    assert_eq!(op(&mut s, sq), "perforate");
+    let paths = |s: &mut Session| s.execute("cutting.job", &json!({})).unwrap()["job"]["paths"].as_array().unwrap().clone();
+    let p = paths(&mut s);
+    assert_eq!(p.len(), 10, "40 mm round in 3 + 1 mm: {}", p.len());
+    assert!(p.iter().all(|p| p["closed"] == json!(false)));
+    s.execute("select.set", &json!({"ids": [sq]})).unwrap();
+    s.execute("stroke.set", &json!({"dash": [5.0 * mm, 5.0 * mm]})).unwrap();
+    assert_eq!(paths(&mut s).len(), 4, "its own dashes");
+    assert!(s.execute("cutting.settings.set", &json!({"perforateGapMm": 0})).is_err());
+    s.execute("cutting.op.set", &json!({"ids": [sq], "op": "cut"})).unwrap();
+    assert_eq!(paths(&mut s).len(), 1, "cut whole again");
 }

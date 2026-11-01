@@ -59,7 +59,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Settings",
             [],
             None,
-            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm, tool}}, ordering, clipToMat, trackEnhancing, grouping, printAndCut, markInsetMm, markInsetsMm?, markLengthMm, markLineMm, bleedMm, weedBox, weedMarginMm, weedLines, weedLineSpacingMm, material?, colorSetups?}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
+            "{} the document's cutting settings → {settings: {version, mat, customMatMm, orientation, artboard, offsetMm, defaultOp, toleranceMm, operations: {cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm, tool}}, ordering, clipToMat, trackEnhancing, grouping, printAndCut, markInsetMm, markInsetsMm?, markLengthMm, markLineMm, bleedMm, perforateCutMm, perforateGapMm, weedBox, weedMarginMm, weedLines, weedLineSpacingMm, material?, colorSetups?}, mat: {id, label, sizeMm: [width, height], cutAreaMm: [x0, y0, x1, y1], approximate}, mats: [the built-in mats, as mat], placement: {artboardMm: [x0, y0, x1, y1] where the artboard lies on the mat, fits: whether the cut area holds all of it} or null}",
             has_doc,
             settings_get
         ),
@@ -68,7 +68,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Cutting Settings",
             [],
             None,
-            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none|outline (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5, depth?: 1–10 or null (an automatic blade's depth; null: the machine's own), accel?: 1–3 or null, cornerOvercutMm?: 0–2 (run past sharp corners and back), bladeOffsetMm?: 0–2 or null (how far the blade's tip trails its axis, for the machine to turn it round corners; 0: a pen; null: the usual blade's), tool?: a tool id from cutting.tools.list or null (the usual, the AutoBlade; the tool decides the holder)}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job), trackEnhancing?: bool (the machine grips the material harder), grouping?: none|layer|color|fillColor (cut in groups, by top-level layer, by line colour (stroke, else fill) or by fill colour (fill, else stroke), pausing before each group after the first unless it is set not to (cutting.group.set pause), so the tool or material can be changed), printAndCut?: bool (the artboard is printed with registration marks and the machine cuts from them: portrait only, art between the marks), markInsetMm?: 10–84 (how far in from the artboard's edges the marks go; default 15.88, 5/8 in), markInsetsMm?: [left, top, right, bottom] (10–84 each) or null (each edge's own inset, in place of markInsetMm), markLengthMm?: 5–20 (the L marks' arms; default 20), markLineMm?: 0.3–1 (the width the marks are drawn; default 0.5; the machine is told both), bleedMm?: 0.1–5 (how far cutting.bleed.add spreads the print past the art; default 1.27), weedBox?: bool (a box cut round the design, each group's, after it), weedMarginMm?: 0–50 (how far the box is from the design), weedLines?: bool (lines from the box in to the design, stopping short of it), weedLineSpacingMm?: 0–200 (0: one from the middle of each side, else one every this many mm)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
+            "{mat?: a mat id from cutting.settings.get's mats (or custom), customMatMm?: [width, height] mm (10–3000), orientation?: portrait|landscape, artboard?: artboard index, offsetMm?: [x, y] mm from the cut area's top-left (±3000), defaultOp?: cut|score|none|outline|perforate (objects that, with their groups and layers, set none), toleranceMm?: curve flattening mm (0.001–1), operations?: {cut?, score?: {force?: 0–1, speedMmS?: 1–2000, passes?: 1–10, overcutMm?: 0–5, depth?: 1–10 or null (an automatic blade's depth; null: the machine's own), accel?: 1–3 or null, cornerOvercutMm?: 0–2 (run past sharp corners and back), bladeOffsetMm?: 0–2 or null (how far the blade's tip trails its axis, for the machine to turn it round corners; 0: a pen; null: the usual blade's), tool?: a tool id from cutting.tools.list or null (the usual, the AutoBlade; the tool decides the holder)}}, ordering?: insideFirst|document, clipToMat?: bool (paths off the cut area are cut up to its edge instead of stopping the job), trackEnhancing?: bool (the machine grips the material harder), grouping?: none|layer|color|fillColor (cut in groups, by top-level layer, by line colour (stroke, else fill) or by fill colour (fill, else stroke), pausing before each group after the first unless it is set not to (cutting.group.set pause), so the tool or material can be changed), printAndCut?: bool (the artboard is printed with registration marks and the machine cuts from them: portrait only, art between the marks), markInsetMm?: 10–84 (how far in from the artboard's edges the marks go; default 15.88, 5/8 in), markInsetsMm?: [left, top, right, bottom] (10–84 each) or null (each edge's own inset, in place of markInsetMm), markLengthMm?: 5–20 (the L marks' arms; default 20), markLineMm?: 0.3–1 (the width the marks are drawn; default 0.5; the machine is told both), bleedMm?: 0.1–5 (how far cutting.bleed.add spreads the print past the art; default 1.27), perforateCutMm?, perforateGapMm?: 0.2–50 (default 3 and 1: the cuts and gaps of objects set to perforate without a dashed stroke of their own), weedBox?: bool (a box cut round the design, each group's, after it), weedMarginMm?: 0–50 (how far the box is from the design), weedLines?: bool (lines from the box in to the design, stopping short of it), weedLineSpacingMm?: 0–200 (0: one from the middle of each side, else one every this many mm)} change the given settings as one undo step; a key not listed or a value out of range is an error → as cutting.settings.get",
             has_doc,
             settings_set
         ),
@@ -77,7 +77,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Cutting Operation",
             [],
             None,
-            "{ids?, op: cut|score|none|outline|inherit} set the cutting operation of the selected objects (or ids: objects, groups or layers); outline cuts along the outline of all the shapes set to it, united (the lines where they overlap not cut); inherit removes their own, so they take their nearest group's or layer's, else defaultOp; one undo step → {ids: those that changed}",
+            "{ids?, op: cut|score|none|outline|perforate|inherit} set the cutting operation of the selected objects (or ids: objects, groups or layers); outline cuts along the outline of all the shapes set to it, united (the lines where they overlap not cut); perforate cuts in dashes, the stroke's dash pattern or the settings' perforateCutMm and perforateGapMm; inherit removes their own, so they take their nearest group's or layer's, else defaultOp; one undo step → {ids: those that changed}",
             has_doc,
             op_set
         ),
@@ -95,7 +95,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Operation",
             [],
             None,
-            "{ids?} the cutting operation of each selected object (or ids) → {objects: [{id, op: cut|score|none|outline, own: its own op or null, source: own|inherited|default, from?: id of the group or layer it inherits from, edge: path|stroke (what it is cut along, cutting.edge.set), edgeFrom: id of the object, group or layer that sets it, or null}]}",
+            "{ids?} the cutting operation of each selected object (or ids) → {objects: [{id, op: cut|score|none|outline|perforate, own: its own op or null, source: own|inherited|default, from?: id of the group or layer it inherits from, edge: path|stroke (what it is cut along, cutting.edge.set), edgeFrom: id of the object, group or layer that sets it, or null}]}",
             has_doc,
             op_get
         ),
@@ -320,7 +320,7 @@ fn settings_get(s: &mut Session, _: &Value) -> Result<Value> {
 }
 
 /// The keys `cutting.settings.set` takes at the top, in `operations` and in each tool's.
-const TOP_KEYS: [&str; 22] = [
+const TOP_KEYS: [&str; 24] = [
     "mat",
     "customMatMm",
     "orientation",
@@ -339,6 +339,8 @@ const TOP_KEYS: [&str; 22] = [
     "markLengthMm",
     "markLineMm",
     "bleedMm",
+    "perforateCutMm",
+    "perforateGapMm",
     "weedBox",
     "weedMarginMm",
     "weedLines",
@@ -472,8 +474,10 @@ fn objects(s: &Session, p: &Value, cmd: &str) -> Result<Vec<NodeId>> {
 fn op_set(s: &mut Session, p: &Value) -> Result<Value> {
     let op = match str_param(p, "op") {
         Some("inherit") => None,
-        Some(id) => Some(Op::parse(id).ok_or_else(|| bad(OP_SET, format!("op must be cut, score, none, outline or inherit, not {id:?}")))?),
-        None => return Err(bad(OP_SET, "op is required: cut, score, none, outline or inherit")),
+        Some(id) => {
+            Some(Op::parse(id).ok_or_else(|| bad(OP_SET, format!("op must be cut, score, none, outline, perforate or inherit, not {id:?}")))?)
+        }
+        None => return Err(bad(OP_SET, "op is required: cut, score, none, outline, perforate or inherit")),
     };
     let ids = objects(s, p, OP_SET)?;
     if ids.is_empty() {
