@@ -154,3 +154,21 @@ fn machine_settings_reach_the_job() {
         assert!(s.execute("cutting.settings.set", &bad).is_err(), "{bad}");
     }
 }
+
+/// C14.6: fewest roller moves: two columns of squares, cut row by row down the mat rather than
+/// down one column and back up the other; an unknown order refused.
+#[test]
+fn rollers_cut_down_the_mat_once() {
+    let mut s = new_doc();
+    let mut rows = vec![];
+    for k in 0..4 {
+        let y = 10.0 + k as f64 * 45.0;
+        rows.push([square(&mut s, 10.0, y, 10.0), square(&mut s, 150.0, y, 10.0)]);
+    }
+    assert!(s.execute("cutting.settings.set", &json!({"ordering": "sideways"})).is_err());
+    s.execute("cutting.settings.set", &json!({"ordering": "rollers"})).unwrap();
+    let order = sources(&job(&mut s));
+    let row_of = |id: u64| rows.iter().position(|r| r.contains(&id)).unwrap();
+    let seq: Vec<usize> = order.iter().map(|id| row_of(*id)).collect();
+    assert!(seq.windows(2).all(|w| w[0] <= w[1]), "row by row: {seq:?}");
+}

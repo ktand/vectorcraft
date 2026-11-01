@@ -156,3 +156,40 @@ fn many_scattered_paths_are_shortened_within_the_budget() {
     assert_eq!(out.len(), v.len());
     assert!(after < before, "shortened: {after} < {before}");
 }
+
+/// C14.6: fewest roller moves: squares down the mat cut band by band from the top (the origin);
+/// a frame reaching down the mat still after what is inside it.
+#[test]
+fn rollers_take_the_mat_one_way() {
+    // A zigzag the nearest-path search follows back up the mat: two columns, the right one from
+    // the bottom.
+    let mut v = vec![];
+    for k in 0..6 {
+        v.push(square(k, 0.0, k as f64 * 40.0, 10.0));
+        v.push(square(10 + k, 200.0, (5 - k) as f64 * 40.0, 10.0));
+    }
+    let frame = square(99, -5.0, 75.0, 30.0);
+    let inner = square(98, 0.0, 80.0, 10.0);
+    v.push(frame);
+    v.push(inner);
+    let out = order(v.clone(), Ordering::Rollers, [0.0, 0.0]);
+    let fars: Vec<f64> = out.iter().map(|p| bounds(p).y1).collect();
+    let bands: Vec<i64> = fars.iter().map(|y| (y / BAND_MM).floor() as i64).collect();
+    assert!(bands.windows(2).all(|w| w[0] <= w[1]), "band by band: {bands:?}");
+    let n = nodes(&out);
+    let pos = |id| n.iter().position(|x| *x == id).unwrap();
+    assert!(pos(98) < pos(99) && pos(2) < pos(99), "inside the frame first: {n:?}");
+    assert_eq!(out.len(), v.len());
+    // Travel along the feed: one way, about the mat's depth, against back and forth otherwise.
+    let feed = |v: &[Polyline]| {
+        let mut at = 0.0;
+        let mut sum = 0.0;
+        for p in v {
+            sum += (p.points[0][1] - at).abs();
+            at = end_of(p).unwrap()[1];
+        }
+        sum
+    };
+    let travel_order = order(v, Ordering::InsideFirst, [0.0, 0.0]);
+    assert!(feed(&out) < feed(&travel_order), "{} vs {}", feed(&out), feed(&travel_order));
+}
