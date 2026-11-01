@@ -91,6 +91,9 @@ pub enum Ordering {
     /// otherwise.
     #[default]
     InsideFirst,
+    /// Fewest roller moves (C14.6): the mat fed in bands, each cut before the next as with
+    /// [`Ordering::InsideFirst`], so the material goes one way; inner paths still first.
+    Rollers,
     /// The document's paint order, bottom to top.
     Document,
 }
@@ -99,11 +102,14 @@ impl Ordering {
     pub fn id(self) -> &'static str {
         match self {
             Ordering::InsideFirst => "insideFirst",
+            Ordering::Rollers => "rollers",
             Ordering::Document => "document",
         }
     }
 
-    const CHOICES: [(&'static str, Ordering); 2] = [("insideFirst", Ordering::InsideFirst), ("document", Ordering::Document)];
+    pub const ALL: [Ordering; 3] = [Ordering::InsideFirst, Ordering::Rollers, Ordering::Document];
+    const CHOICES: [(&'static str, Ordering); 3] =
+        [("insideFirst", Ordering::InsideFirst), ("rollers", Ordering::Rollers), ("document", Ordering::Document)];
 }
 
 /// `m[key]` as a whole step in `range`, clamped; `null` is none; missing or damaged is `default`.

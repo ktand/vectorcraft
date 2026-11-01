@@ -9,7 +9,10 @@
 //! closed path started where it suits the paths either side, inner paths still first, within a
 //! work budget so the same document always gives the same job. Past [`MAX_OPTIMIZED`] paths the
 //! search would take too long: inner paths still go first, in the document's order.
-//! [`Ordering::Document`] keeps the document's paint order.
+//! [`Ordering::Rollers`] (C14.6) cuts in bands [`BAND_MM`] deep along the feed, each ordered as
+//! above before the next, so the rollers take the material one way rather than back and forth; a
+//! path's band is that of its far edge, so a path inside another is never in a later band than it
+//! and inner paths still go first. [`Ordering::Document`] keeps the document's paint order.
 
 use vectorcraft_cutjob::{Ordering, RectMm};
 
@@ -17,6 +20,9 @@ use crate::prepare::Polyline;
 
 /// Most paths of one operation ordered by the nearest-path search (it compares every pair).
 pub const MAX_OPTIMIZED: usize = 4_000;
+
+/// How deep each band of [`Ordering::Rollers`] is, mm along the feed.
+pub const BAND_MM: f64 = 30.0;
 
 /// `paths` in the order they are cut, starting from `origin` (mm, where the blade waits).
 pub fn order(mut paths: Vec<Polyline>, ordering: Ordering, origin: [f64; 2]) -> Vec<Polyline> {
@@ -33,13 +39,31 @@ pub fn order(mut paths: Vec<Polyline>, ordering: Ordering, origin: [f64; 2]) -> 
         while let Some(p) = rest.next_if(|p| p.op == group[0].op) {
             group.push(p);
         }
-        let ordered = order_group(group, at, MAX_IMPROVE_WORK);
-        if let Some(end) = ordered.last().and_then(end_of) {
-            at = end;
+        let bands = if ordering == Ordering::Rollers { in_bands(group) } else { vec![group] };
+        // The same work in all, shared out, so many bands take no longer than one.
+        let work = MAX_IMPROVE_WORK / bands.len().max(1);
+        for band in bands {
+            let ordered = order_group(band, at, work);
+            if let Some(end) = ordered.last().and_then(end_of) {
+                at = end;
+            }
+            out.extend(ordered);
         }
-        out.extend(ordered);
     }
     out
+}
+
+/// `paths` in bands [`BAND_MM`] deep by their far edge along the feed, nearest the top first,
+/// each in the order given.
+fn in_bands(paths: Vec<Polyline>) -> Vec<Vec<Polyline>> {
+    let mut bands: std::collections::BTreeMap<i64, Vec<Polyline>> = std::collections::BTreeMap::new();
+    for p in paths {
+        let far = bounds(&p).y1;
+        // On the mat, so a few thousand bands at most; anything not finite goes last.
+        let band = if far.is_finite() { (far / BAND_MM).floor().clamp(-1e9, 1e9) as i64 } else { i64::MAX };
+        bands.entry(band).or_default().push(p);
+    }
+    bands.into_values().collect()
 }
 
 fn dist(a: [f64; 2], b: [f64; 2]) -> f64 {

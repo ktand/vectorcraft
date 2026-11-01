@@ -120,7 +120,19 @@ Under **Tool Settings**, a table with a **Cut** column and a **Score** column. H
 
 **Advanced** (closed at first) holds what most cuts leave alone: **Accel.** (gentler or faster moves), **Corners**
 (the blade runs a little past each sharp corner), **Blade offset** (how far the blade's tip trails its axis; the
-machine turns the blade round corners with it; a pen shows "—"), and **Track Enhancing**.
+machine turns the blade round corners with it; a pen shows "—"), **Perforate** (the cut and gap lengths for
+objects set to Perforate), **Cut Order** and **Track Enhancing**.
+
+**Cut Order** decides the order the lines are cut in. Scoring always comes before cutting, and with the first two
+choices a shape inside another (the counter of an O) is cut before it, so the piece around it stays held:
+
+- **Shortest Travel** (at first): the blade's moves between lines kept short.
+- **Fewest Roller Moves:** the mat is cut in bands 30 mm deep from the top, each finished before the next, so
+  the rollers take the material one way instead of back and forth. Good for long designs and for thin material
+  that the rollers might shift or crease.
+- **As in the Document:** the order the objects are stacked in, bottom first.
+
+After the last line the head moves out of the way, below the work.
 
 ### Tools and holders
 

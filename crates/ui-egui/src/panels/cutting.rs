@@ -229,6 +229,18 @@ fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         }
         widgets::dim_label(ui, tl!("gap"));
     });
+    // C14.6: the order paths are cut in (each inside another first, unless as in the document).
+    let orders = vectorcraft_cutjob::Ordering::ALL;
+    let labels = ["Shortest Travel", "Fewest Roller Moves", "As in the Document"];
+    let now = s["ordering"].as_str().unwrap_or("insideFirst");
+    let shown = orders.iter().position(|o| o.id() == now).unwrap_or(0);
+    widgets::label_row(ui, tl!("Cut Order"), LABEL_W, |ui| {
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "ordering"), labels.get(shown).copied().unwrap_or_default(), &labels, 160.0)
+            && let Some(o) = orders.get(i)
+        {
+            set(app, json!({ "ordering": o.id() }));
+        }
+    });
     let track = s["trackEnhancing"].as_bool() == Some(true);
     if widgets::check(ui, tl!("Track Enhancing"), track, true) {
         set(app, json!({ "trackEnhancing": !track }));
@@ -635,6 +647,10 @@ mod tests {
         let texts = panel_texts(&mut app, &ctx);
         assert_eq!(texts.iter().filter(|t| *t == "Blade offset").count(), 1, "cut and score in one row: {texts:?}");
         assert!(texts.iter().any(|t| t == "Track Enhancing"), "{texts:?}");
+        // C14.6: the cut order, shortest travel at first.
+        assert!(texts.iter().any(|t| t == "Cut Order") && texts.iter().any(|t| t == "Shortest Travel"), "{texts:?}");
+        app.run("cutting.settings.set", json!({"ordering": "rollers"})).unwrap();
+        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Fewest Roller Moves"));
     }
 
     /// C9.1: cut and score side by side, one row each setting, no range squeezed into a field; the
