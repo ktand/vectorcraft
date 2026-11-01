@@ -31,11 +31,15 @@ pub fn specs() -> Vec<CommandSpec> {
     )]
 }
 
+/// `p[key]` as a whole number: an integer, or a number with nothing after the point (`4.0`, as a
+/// client holding numbers as floats sends it).
 fn whole(p: &Value, key: &str, default: u32) -> Result<u32> {
-    match p.get(key) {
-        None => Ok(default),
-        Some(v) => v.as_u64().and_then(|n| u32::try_from(n).ok()).ok_or_else(|| bad(CMD, format!("{key} must be a whole number"))),
-    }
+    let Some(v) = p.get(key) else { return Ok(default) };
+    let n = v.as_u64().or_else(|| {
+        // Finite, whole and in u32's range: the conversion is exact.
+        v.as_f64().filter(|f| f.is_finite() && f.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(f)).map(|f| f as u64)
+    });
+    n.and_then(|n| u32::try_from(n).ok()).ok_or_else(|| bad(CMD, format!("{key} must be a whole number")))
 }
 
 /// `p[key]` as a share, from 0–100 %.
