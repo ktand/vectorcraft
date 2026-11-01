@@ -1,6 +1,7 @@
 # Silhouette cutters: protocol notes
 
-> **Status:** facts gathered for the encoder (C4.3), not yet checked on a machine · **Written:** 2026-10-28 ·
+> **Status:** facts gathered for the encoder (C4.3); framing, units, axes, the origin, status and the tools query
+> checked on the owner's Cameo 4 (2026-11-01, [HW]) · **Written:** 2026-10-28 ·
 > **Scope:** Cameo 4 first; other models noted where the source gives them
 
 These are facts about how a computer talks to a Silhouette cutter: what it sends, what it gets back, and in
@@ -22,6 +23,9 @@ not from the sources.
   [dual tool carriage](https://www.silhouetteschoolblog.com/2019/06/silhouette-cameo-4-dual-tool-carriage.html),
   [adapters](https://www.silhouetteschoolblog.com/2019/09/silhouette-cameo-4-adapters-explained.html),
   [Studio V5 Send panel, Tool 2](https://www.silhouetteschoolblog.com/2026/03/silhouette-studio-v5-send-panel-tool-2.html).
+- **[HW]** Checked on the owner's Cameo 4 (USB `0x0B4D:0x1137`) on 2026-11-01, steps 1–3 of
+  [hardware-validation.md](hardware-validation.md): 10 mm squares scored at 20 and 280 mm across, 20 mm down,
+  measured against the 12 × 12 in mat's grid.
 
 Each fact is marked **to confirm** until it has been checked on the owner's Cameo 4 (C4.6). Facts the encoder
 relies on most are listed again in [Checks on the machine](#checks-on-the-machine).
@@ -50,17 +54,18 @@ relies on most are listed again in [Checks on the machine](#checks-on-the-machin
 
 | Fact | Source |
 |---|---|
-| Each command is ASCII text ending in the ETX byte (`0x03`). | [IS], **to confirm** |
-| Coordinates are whole numbers of the machine's unit, 20 per millimetre (0.05 mm; 508 per inch). | [IS], **to confirm** |
-| The origin is the top left of the cut area: one axis grows to the right, the other toward the user (as our mat coordinates do). | [IS], **to confirm** |
-| A coordinate pair is written vertical value first, then a comma, then the horizontal value. | [IS], **to confirm** — easy to get backwards; the first cut test shows it |
+| Each command is ASCII text ending in the ETX byte (`0x03`). | [IS], confirmed [HW] |
+| Coordinates are whole numbers of the machine's unit, 20 per millimetre (0.05 mm; 508 per inch). | [IS], confirmed [HW]: a 10 mm square measured 10 × 10 mm |
+| The origin is at the top left: one axis grows to the right, the other toward the user (as our mat coordinates do). | [IS], confirmed [HW] |
+| On the owner's Cameo 4 with a Nicapa 12 × 12 in mat (not Silhouette's), the origin is **2 mm left of the grid's top-left corner**, level with it: squares sent for 20 and 280 mm across landed 18 and 278 mm from the grid's left line, both 20 mm down. A shift, not a scale. The mat lines up by its plastic edge, so the shift may be the mat's: that mat's grid is 10.8 mm from its left edge, 9.5 mm from its right, 19.4 mm from its top and 20.5 mm from its bottom (overall 324.5 × 344.5 mm, grid 304.8 mm square). A genuine Silhouette mat hasn't been measured. So the encoder takes a user-set origin adjustment (C4.6) rather than a fixed shift per model. | [HW] |
+| A coordinate pair is written vertical value first, then a comma, then the horizontal value. | [IS], confirmed [HW] |
 
 ## Status
 
 | Fact | Source |
 |---|---|
-| Status is asked for with ESC followed by ENQ (`0x1B 0x05`). The reply is one character and ETX: `0` ready, `1` moving, `2` no media loaded. | [IS], **to confirm** |
-| ESC followed by NAK (`0x1B 0x15`) asks which tools are in the holders: a comma-separated code per holder (0 empty, 1 ratchet blade, 2 AutoBlade, 3 deep-cut blade, 4 kraft blade, 5 rotary blade, 7 pen, 255 error). | [IS], **to confirm** |
+| Status is asked for with ESC followed by ENQ (`0x1B 0x05`). The reply is one character and ETX: `0` ready, `1` moving, `2` no media loaded. | [IS]; ready with the mat loaded confirmed [HW] (the send's ready check passed) |
+| ESC followed by NAK (`0x1B 0x15`) asks which tools are in the holders: a comma-separated code per holder (0 empty, 1 ratchet blade, 2 AutoBlade, 3 deep-cut blade, 4 kraft blade, 5 rotary blade, 7 pen, 255 error). | [IS]; 2 (AutoBlade, holder 1) and 0 (holder 2 empty) confirmed [HW] |
 | The firmware version is asked for with the `FG` query. | [IS], **to confirm** |
 
 ## A job
@@ -144,9 +149,11 @@ How `vectorcraft-cutjob`'s machine-neutral settings become these commands (the e
 
 To do when the Cameo 4 is attached (C4.2 and C4.6), each on a scrap sheet:
 
-1. The status query answers through `usbprint.sys` (opening the device interface, no driver change).
-2. A 10 mm square drawn with a pen in holder 2, if one is at hand, or cut at the lightest force: which way each
-   axis goes, and whether the pair is vertical first.
-3. Its size, measured: 10.0 mm at 20 units per mm.
+1. ~~The status query answers through `usbprint.sys` (opening the device interface, no driver change).~~ Done
+   2026-11-01.
+2. ~~A 10 mm square drawn with a pen in holder 2, if one is at hand, or cut at the lightest force: which way each
+   axis goes, and whether the pair is vertical first.~~ Done 2026-11-01: right as written.
+3. ~~Its size, measured: 10.0 mm at 20 units per mm.~~ Done 2026-11-01: exact; the origin 2 mm left of the grid
+   on a Nicapa mat, set as an origin adjustment.
 4. A 100 mm line at speed settings 1, 10 and 30: the time each takes, for the speed mapping.
 5. The end of the job leaves the head where expected and the machine ready for the next.

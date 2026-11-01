@@ -23,7 +23,7 @@ pub mod send;
 pub mod simulated;
 pub mod tools;
 
-pub use device::{Check, DeviceInfo, DeviceProvider, DeviceStatus, Driver, Encoded, Transport, TransportError};
+pub use device::{Check, DeviceInfo, DeviceProvider, DeviceStatus, Driver, Encoded, ORIGIN_ADJUST_MM, Transport, TransportError};
 pub use memory::{MemoryTransport, Recorded};
 
 use vectorcraft_cutjob::{CutJob, JobError, OpKind, Simulation};

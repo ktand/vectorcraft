@@ -15,7 +15,7 @@
 use vectorcraft_cutjob::{CutJob, ToolSettings};
 /// What a holder has in it (C10.3), for those that read [`tool_warnings`]' holders.
 pub use vectorcraft_cutter::tools::Fitted;
-use vectorcraft_cutter::{Check, DeviceInfo, DeviceStatus, Driver, Encoded};
+use vectorcraft_cutter::{Check, DeviceInfo, DeviceStatus, Driver, Encoded, ORIGIN_ADJUST_MM};
 
 /// Graphtec's USB vendor id, which Silhouette's machines use.
 pub const VENDOR_ID: u16 = 0x0B4D;
@@ -209,8 +209,9 @@ struct Commands {
     pauses: Vec<(usize, String)>,
     /// After the command before each index the machine must answer (C6.2).
     checks: Vec<(usize, Check)>,
-    /// Positions are sent from here, mat mm: the mat's origin, or the top-left registration
-    /// mark once the machine has found the marks.
+    /// Positions are sent from here, mat mm: the machine's origin on the mat (the grid's corner
+    /// less the origin adjustment), or the top-left registration mark once the machine has found
+    /// the marks.
     origin: [f64; 2],
 }
 
@@ -313,15 +314,24 @@ fn overcut(points: &[[f64; 2]], mm: f64) -> Vec<[f64; 2]> {
 pub struct Silhouette;
 
 impl Silhouette {
-    /// `job` as commands for a machine of `width_mm` cut width.
-    pub fn encode_for(&self, job: &CutJob, width_mm: f64) -> Result<Encoded, String> {
+    /// `job` as commands for a machine of `width_mm` cut width, every position moved `adjust_mm`
+    /// (across, down) on the mat: the user's origin adjustment (C4.6).
+    pub fn encode_for(&self, job: &CutJob, width_mm: f64, adjust_mm: [f64; 2]) -> Result<Encoded, String> {
         job.validate().map_err(|e| e.to_string())?;
         let area = job.mat.cut_area_mm;
         if area.x1 > width_mm + 1e-6 {
             return Err(format!("the job is {:.1} mm wide; this cutter cuts {width_mm:.1} mm", area.x1));
         }
+        if !adjust_mm.iter().all(|a| a.is_finite() && a.abs() <= ORIGIN_ADJUST_MM) {
+            return Err(format!("the origin adjustment is at most {ORIGIN_ADJUST_MM} mm each way"));
+        }
+        // Moved left or up past the machine's origin, a position can't be sent.
+        if job.registration.is_none() && job.paths.iter().flat_map(|p| &p.points).any(|q| q[0] + adjust_mm[0] < 0.0 || q[1] + adjust_mm[1] < 0.0) {
+            return Err("the origin adjustment moves the cut past the mat's top or left edge: move the art in, or adjust less".into());
+        }
         let mut warnings = vec![];
-        let mut c = Commands::default();
+        // Positions are sent from the machine's origin, which the adjustment puts at −adjust.
+        let mut c = Commands { origin: [-adjust_mm[0], -adjust_mm[1]], ..Commands::default() };
         c.raw(&[ESC, EOT]);
         match mat_code(&job.mat.id) {
             Some(code) => c.cmd(&format!("TG{code}")),
@@ -346,7 +356,8 @@ impl Silhouette {
             for cmd in ["TB99".to_string(), "TB52,2".into(), format!("TB51,{length}"), format!("TB53,{line}"), "TB55,1".into()] {
                 c.cmd(&cmd);
             }
-            let [x, y] = r.origin_mm;
+            // Where to look is from the machine's origin; the positions after, from the mark.
+            let [x, y] = [r.origin_mm[0] - c.origin[0], r.origin_mm[1] - c.origin[1]];
             let (top, left) = ((y - SEARCH_LEAD_MM).max(0.0), (x - SEARCH_LEAD_MM).max(0.0));
             c.cmd(&format!("TB123,{},{},{},{}", units(r.size_mm[1]), units(r.size_mm[0]), units(top), units(left)));
             c.check(Check {
@@ -358,7 +369,6 @@ impl Silhouette {
             c.origin = r.origin_mm;
             warnings.push("Print & Cut is to confirm on the machine: cut a test sheet first".into());
         }
-        let mut lowest = 0.0f64;
         // Group by group (one without grouping), a pause before those after the first that ask
         // for one; in each,
         // every operation's settings again (the tool may have been changed) and its paths.
@@ -424,15 +434,15 @@ impl Silhouette {
                             }
                         }
                     }
-                    lowest = p.points.iter().fold(lowest, |m, q| m.max(q[1]));
                 }
             }
         }
         if !job.operations.is_empty() {
             warnings.push(format!("speeds are approximate until measured on the machine: one step is taken as {MM_S_PER_SPEED_STEP} mm/s"));
         }
-        // The head out of the way, below the work, then the end of the job.
-        c.to(false, [c.origin[0], lowest.max(area.y0).max(c.origin[1])]);
+        // Home: the head back to the origin (the top-left mark with Print & Cut), the mat left
+        // loaded; then the end of the job.
+        c.to(false, c.origin);
         c.cmd("SO0");
         let (chunks, pauses, checks) = c.chunks();
         Ok(Encoded { chunks, warnings, pauses, checks })
@@ -452,7 +462,7 @@ impl Driver for Silhouette {
         model(device).map_or_else(|| format!("Silhouette {:04x}", device.product_id), |m| m.1.to_string())
     }
 
-    fn encode(&self, job: &CutJob, device: &DeviceInfo) -> Result<Encoded, String> {
+    fn encode_adjusted(&self, job: &CutJob, device: &DeviceInfo, adjust_mm: [f64; 2]) -> Result<Encoded, String> {
         let width = model(device).map_or(304.8, |m| m.2);
         // Holder 2's specialty tools are the Cameo 4 family's (protocol notes › Tools and holders).
         if device.product_id == CAMEO_3
@@ -460,7 +470,7 @@ impl Driver for Silhouette {
         {
             return Err(format!("the {} fits the Cameo 4 and later only: choose a holder 1 tool for the Cameo 3", t.label));
         }
-        self.encode_for(job, width)
+        self.encode_for(job, width, adjust_mm)
     }
 
     fn status_query(&self) -> &[u8] {

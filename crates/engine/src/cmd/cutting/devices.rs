@@ -191,7 +191,8 @@ pub(super) fn start(s: &Session, job: &vectorcraft_cutjob::CutJob, p: &Value, cm
     if job.paths.is_empty() {
         return Err(bad(cmd, "the job has nothing to cut"));
     }
-    let encoded = driver.encode(job, &device).map_err(|e| bad(cmd, e))?;
+    // C4.6: moved by the user's origin adjustment for the machine and mat.
+    let encoded = driver.encode_adjusted(job, &device, super::machine::adjust_mm()).map_err(|e| bad(cmd, e))?;
     let provider = registry::provider().ok_or_else(|| bad(cmd, "no cutter is connected"))?;
     let transport = provider.open(&device.id).map_err(|e| bad(cmd, e.to_string()))?;
     let chunks = encoded.chunks.len();

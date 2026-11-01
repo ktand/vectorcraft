@@ -52,7 +52,42 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     send_again(&mut s, &entries);
     tools_fitted(&mut s);
     damaged_history(&mut s, &dir);
+    origin_adjustment(&mut s, &dir);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// C4.6: the origin adjustment, kept in its file next to the preferences, moves every send's
+/// positions; out of range refused, the file read back; back to none at the end, since every send
+/// in the process uses it.
+fn origin_adjustment(s: &mut Session, dir: &Path) {
+    let file = dir.join("Machine.json");
+    vectorcraft_engine::cmd::cutting::machine::attach(file.clone());
+    assert_eq!(s.execute("cutting.machine.get", &json!({})).unwrap()["originAdjustMm"], json!([0.0, 0.0]));
+    for bad in [json!({}), json!({"originAdjustMm": [11, 0]}), json!({"originAdjustMm": [1]}), json!({"originAdjustMm": "2,0"})] {
+        assert!(s.execute("cutting.machine.set", &bad).is_err(), "{bad}");
+    }
+    let r = s.execute("cutting.machine.set", &json!({"originAdjustMm": [2, 0]})).unwrap();
+    assert_eq!(r["originAdjustMm"], json!([2.0, 0.0]));
+    let kept: Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    assert_eq!(kept["originAdjustMm"], json!([2.0, 0.0]));
+    // A 10 mm square 20 mm in each way (in points), sent: 22 mm across (440 units), 20 down.
+    let mm = 72.0 / 25.4;
+    s.execute("file.new", &json!({"width": 300, "height": 300})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 20.0 * mm, "y": 20.0 * mm, "width": 10.0 * mm, "height": 10.0 * mm})).unwrap();
+    let mut sim = vectorcraft_cutter_silhouette::simulated_cameo4();
+    sim.behaviour.busy_per_write = std::time::Duration::ZERO;
+    sim.behaviour.busy_per_byte = std::time::Duration::ZERO;
+    let sent = sim.sent.clone();
+    registry::install(Some(Arc::new(sim)));
+    s.execute("cutting.send", &json!({})).unwrap();
+    assert_eq!(finished(s)["outcome"], json!("done"));
+    let text = String::from_utf8_lossy(&sent.bytes()).to_string();
+    assert!(text.contains("M400,440\u{3}") && text.ends_with("M0,0\u{3}SO0\u{3}"), "{text:?}");
+    // Read back from the file, as the next start of the app would.
+    vectorcraft_engine::cmd::cutting::machine::attach(file.clone());
+    assert_eq!(s.execute("cutting.machine.get", &json!({})).unwrap()["originAdjustMm"], json!([2.0, 0.0]));
+    s.execute("cutting.machine.set", &json!({"originAdjustMm": [0, 0]})).unwrap();
+    registry::install(None);
 }
 
 /// No machine, no art, no mat: each said plainly; a send to the end.
