@@ -32,6 +32,14 @@ impl Placement {
         self.doc_to_mat.inverse()
     }
 
+    /// The same, flipped left to right across the artboard's middle on the mat (C14.7).
+    pub fn mirrored(&self) -> Placement {
+        let a = self.artboard_mm;
+        // x' = x0 + x1 − x.
+        let flip = Affine::new([-1.0, 0.0, 0.0, 1.0, a.x0 + a.x1, 0.0]);
+        Placement { doc_to_mat: flip * self.doc_to_mat, ..self.clone() }
+    }
+
     /// The whole artboard lies inside the cut area.
     pub fn fits(&self) -> bool {
         let (a, c) = (self.artboard_mm, self.mat.cut_area_mm);
@@ -152,5 +160,18 @@ mod tests {
         assert_eq!(p.artboard_mm, RectMm { x0: 0.0, y0: 0.0, x1: 200.0 * MM_PER_PT, y1: 100.0 * MM_PER_PT });
         let s = CuttingSettings { artboard: 5, ..CuttingSettings::default() };
         assert_eq!(place(&s, &d), None);
+    }
+
+    /// C14.7: mirrored, the artboard's left edge goes to its right on the mat, the rows the same.
+    #[test]
+    fn a_mirrored_placement_flips_left_to_right() {
+        let s = CuttingSettings::default();
+        let p = place_rect(&s, s.mat_geometry(), artboard());
+        let m = p.mirrored();
+        let a = p.artboard_mm;
+        let corner = artboard().origin();
+        let (q, r) = (p.doc_to_mat * corner, m.doc_to_mat * corner);
+        assert!((q.x - a.x0).abs() < 1e-9 && (r.x - a.x1).abs() < 1e-9 && (q.y - r.y).abs() < 1e-9, "{q:?} {r:?}");
+        assert_eq!(m.artboard_mm, a, "the artboard where it was");
     }
 }

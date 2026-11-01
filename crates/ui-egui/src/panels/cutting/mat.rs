@@ -1,5 +1,6 @@
 //! Fork: the Cutting Mat panel (C7.2): what is set once for a document, the mat, where the
-//! artboard lies on it and whether it goes off it, and nesting (Print & Cut is its own panel since
+//! artboard lies on it and whether it goes off it, a mirrored cut and tiles (C14.7), and nesting
+//! (Print & Cut is its own panel since
 //! C12.2, [`super::print`]); only what asks for something is said (C9.1), and how the canvas shows
 //! the mat is in the View menu. Cut Settings (the parent module) holds what is set per object and per cut.
 
@@ -75,9 +76,55 @@ fn mat_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     if widgets::check(ui, tl!("Clip to Mat"), clip, true) {
         set(app, json!({ "clipToMat": !clip }));
     }
+    // C14.7: for material cut from the back, such as heat transfer vinyl.
+    let mirror = s["mirror"].as_bool() == Some(true);
+    if widgets::check(ui, tl!("Cut Mirrored"), mirror, true) {
+        set(app, json!({ "mirror": !mirror }));
+    }
     if info["placement"]["fits"].as_bool() == Some(false) {
         ui.label(egui::RichText::new(tl!("The artboard goes off the mat.")).color(t.bleed));
     }
+}
+
+/// What the Tiles section keeps between frames: the overlap asked for and what the last Tile said.
+#[derive(Clone, Debug)]
+struct TileChoice {
+    overlap_mm: f64,
+    note: Option<(bool, String)>,
+}
+
+impl Default for TileChoice {
+    fn default() -> Self {
+        TileChoice { overlap_mm: vectorcraft_cutting::tile::DEFAULT_OVERLAP_MM, note: None }
+    }
+}
+
+/// Tiles (C14.7): a design larger than the mat as artboards the mat's size, overlapping, each cut
+/// on its own sheet (`cutting.tile`, one undo step).
+fn tile_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut c: TileChoice = crate::panels::pstate(&ctx, "cutting-tile");
+    let (lo, hi) = vectorcraft_cutting::tile::OVERLAP_MM;
+    widgets::label_row(ui, tl!("Overlap"), LABEL_W, |ui| {
+        if let Some(v) = mm_field(ui, "tile-overlap", c.overlap_mm, lo) {
+            c.overlap_mm = v.clamp(lo, hi);
+        }
+    });
+    if ui
+        .button(tl!("Tile onto Mats"))
+        .on_hover_text(tl!("Artboards the size of the mat over the selection, or over the artboard, each cut on its own sheet: choose one as the Artboard above to cut it."))
+        .clicked()
+    {
+        c.note = Some(match app.run("cutting.tile", json!({ "overlapMm": c.overlap_mm })) {
+            Ok(r) => (false, format!("{} {} ({} × {})", r["artboards"].as_array().map_or(0, Vec::len), tl!("tiles"), r["cols"], r["rows"])),
+            Err(e) => (true, e),
+        });
+    }
+    if let Some((bad, note)) = &c.note {
+        ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
+    }
+    crate::panels::set_pstate(&ctx, "cutting-tile", c);
 }
 
 /// What the Nesting section keeps between frames: the gap and turns asked for, and what the last
@@ -188,6 +235,9 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     };
     mat_rows(app, ui, &info);
     widgets::divider(ui);
+    widgets::section_header(ui, tl!("Tiles"));
+    tile_rows(app, ui);
+    widgets::divider(ui);
     widgets::section_header(ui, tl!("Nesting"));
     nest_rows(app, ui);
 }
@@ -218,7 +268,7 @@ mod tests {
         assert!(texts(&mut app, &ctx).iter().any(|t| t == "Open a document to cut it."));
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
         let t = texts(&mut app, &ctx);
-        for label in ["Mat", "Orientation", "Offset", "Clip to Mat"] {
+        for label in ["Mat", "Orientation", "Offset", "Clip to Mat", "Cut Mirrored", "Tiles", "Overlap", "Tile onto Mats"] {
             assert!(t.iter().any(|x| x == label), "{label}: {t:?}");
         }
         for gone in ["Force", "Send to Cutter…", "Cutting View", "Show Toolpaths", "The artboard fits the mat."] {

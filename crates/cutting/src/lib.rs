@@ -45,6 +45,7 @@ pub mod select;
 pub mod setups;
 pub mod stones;
 pub mod test_cut;
+pub mod tile;
 pub mod weed;
 pub mod weld;
 
@@ -134,6 +135,9 @@ fn perforated(d: &Document, s: &CuttingSettings, items: &[select::Item], polylin
 /// The cut job `d` makes with its cutting settings: what [`select`] picks, cut along its
 /// [`geometry`], laid on the mat by [`prepare`] and put in [`order`], validated. The same document
 /// and settings always make the same job.
+/// Why a Print & Cut job set to mirror isn't (C14.7).
+pub const MIRROR_PRINT_WARNING: &str = "Print & Cut isn't cut mirrored: print the art mirrored instead";
+
 pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     let s = settings(d);
     let placement = placement::place(&s, d).ok_or(BuildError::NoArtboard(s.artboard))?;
@@ -141,7 +145,13 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     let (outlines, mut warnings) = geometry::outlines(d, &items);
     let (outlines, welding) = weld::weld(outlines);
     warnings.extend(welding);
-    let (polylines, more) = prepare::prepare(&outlines, &placement, s.tolerance_mm, s.clip_to_mat).map_err(BuildError::Prepare)?;
+    // Mirrored (C14.7): laid on the mat flipped across the artboard's middle, before it is fitted
+    // to the cut area; Print & Cut reads the marks as printed, so it never is.
+    let cut_on = if s.mirror && !s.print_and_cut { placement.mirrored() } else { placement.clone() };
+    if s.mirror && s.print_and_cut {
+        warnings.push(vectorcraft_cutjob::JobWarning { source: None, message: MIRROR_PRINT_WARNING.into() });
+    }
+    let (polylines, more) = prepare::prepare(&outlines, &cut_on, s.tolerance_mm, s.clip_to_mat).map_err(BuildError::Prepare)?;
     warnings.extend(more);
     let polylines = perforated(d, &s, &items, polylines);
     if d.units == vectorcraft_doc::Unit::Pixels && !polylines.is_empty() {
