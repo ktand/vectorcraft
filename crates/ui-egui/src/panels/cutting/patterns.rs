@@ -222,7 +222,10 @@ fn puzzle_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let one = puzzle_selected(app);
     let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
     let run = |app: &mut VectorcraftApp, c: &mut PuzzleChoice| {
-        let p = json!({ "rows": c.rows, "cols": c.cols, "curvature": c.curvature, "curve": c.curve, "ripple": c.ripple, "wobble": c.wobble, "seed": c.seed });
+        // The fields hold whole numbers as f64; the command takes integers.
+        let (rows, cols) = (c.rows.round() as u32, c.cols.round() as u32);
+        let p =
+            json!({ "rows": rows, "cols": cols, "curvature": c.curvature, "curve": c.curve, "ripple": c.ripple, "wobble": c.wobble, "seed": c.seed });
         c.note = Some(match app.run("cutting.puzzle", p) {
             Ok(r) => (false, format!("{} {}", r["pieces"], tl!("pieces"))),
             Err(e) => (true, e),

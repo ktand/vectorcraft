@@ -38,3 +38,15 @@ fn a_puzzle_is_cut_over_the_art() {
     let r = s.execute("cutting.puzzle", &json!({"rows": 2, "cols": 2, "curvature": false})).unwrap();
     assert_eq!(r["pieces"], json!(4));
 }
+
+/// Whole numbers sent as floats (`4.0`, as the panel holds them) are taken; a fraction isn't.
+#[test]
+fn whole_numbers_may_come_as_floats() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 600, "height": 500})).unwrap();
+    let r = s.execute("cutting.puzzle", &json!({"rows": 4.0, "cols": 5.0, "seed": 7.0})).unwrap();
+    assert_eq!(r["pieces"], json!(20));
+    for bad in [json!({"rows": 4.5}), json!({"seed": -1.0}), json!({"seed": 1e20})] {
+        assert!(s.execute("cutting.puzzle", &bad).is_err(), "{bad}");
+    }
+}
