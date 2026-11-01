@@ -21,7 +21,7 @@ const PREVIEW_MIN: egui::Vec2 = egui::vec2(240.0, 300.0);
 /// The share of the app window's height the window opens at.
 const OPEN_HEIGHT: f32 = 0.75;
 /// The column beside the preview, px.
-const SIDE_W: f32 = 250.0;
+const SIDE_W: f32 = 290.0;
 /// Between the preview and the column, px.
 const GAP: f32 = 12.0;
 
@@ -197,6 +197,9 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
                         widgets::divider(ui);
                         sheet_rows(app, ui, &status);
                         cutter_rows(app, ui, &status);
+                        widgets::divider(ui);
+                        // C14.8: tuned here, the test cut under them.
+                        crate::panels::cutting::tool_settings(app, ui);
                         widgets::divider(ui);
                         test_rows(app, ui, &status);
                         widgets::divider(ui);
@@ -572,11 +575,16 @@ mod tests {
     use super::*;
 
     /// Two frames of the window on its own (a window sizes itself on its first); the texts drawn.
+    /// The window's texts on a screen tall enough for its whole column (C14.8: the tool settings
+    /// made it taller than most screens, where it scrolls).
     fn window_texts(app: &mut VectorcraftApp, ctx: &egui::Context) -> Vec<String> {
+        window_texts_on(app, ctx, egui::vec2(1200.0, 1600.0))
+    }
+
+    fn window_texts_on(app: &mut VectorcraftApp, ctx: &egui::Context, screen: egui::Vec2) -> Vec<String> {
         let mut texts = vec![];
         for _ in 0..2 {
-            let raw =
-                egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 900.0))), ..Default::default() };
+            let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, screen)), ..Default::default() };
             let mut out = ctx.run_ui(raw, |ui| show(app, ui.ctx()));
             out.textures_delta.clear();
             texts = out
@@ -601,7 +609,7 @@ mod tests {
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
         app.adopt_context(&ctx);
         app.run(COMMAND, json!({})).unwrap();
-        window_texts(&mut app, &ctx);
+        window_texts_on(&mut app, &ctx, egui::vec2(1200.0, 900.0));
         let r = ctx.memory(|m| m.area_rect(egui::Id::unique("cutting-send-window"))).unwrap();
         assert!(r.height() >= 900.0 * OPEN_HEIGHT - 50.0 && r.width() > 2.0 * SIDE_W + GAP, "the title bar aside: {r:?}");
         assert!(r.bottom() <= 900.0 && r.top() >= 0.0, "on screen: {r:?}");
@@ -665,6 +673,9 @@ mod tests {
         set_open(&ctx, true);
         let texts = window_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t == "Test Cut") && texts.iter().any(|t| t == "Top Left"), "{texts:?}");
+        // C14.8: the tool settings, tuned here, just above the test cut.
+        let at = |label: &str| texts.iter().position(|t| t == label).unwrap();
+        assert!(at("Send") < at("Tool Settings") && at("Force") < at("Test at") && at("Material") < at("Force"), "{texts:?}");
         assert!(texts.iter().any(|t| t.contains("lands on the design")), "{texts:?}");
         crate::panels::set_pstate(&ctx, "cutting-test", TestChoice { corner: 3, ..Default::default() });
         let texts = window_texts(&mut app, &ctx);

@@ -189,8 +189,8 @@ fn selection_row(app: &mut VectorcraftApp, ui: &mut Ui) {
 
 /// The settings most cuts leave alone, behind a fold that starts closed: each operation's
 /// acceleration, corner overcut and blade offset, and the job's track enhancing.
-fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
-    if !fold(ui, "cutting-advanced", tl!("Advanced")) {
+fn machine_advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
+    if !fold(ui, "cutting-tool-advanced", tl!("Advanced")) {
         return;
     }
     let ops = &info["settings"]["operations"];
@@ -216,6 +216,18 @@ fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             }
         });
     });
+    let track = info["settings"]["trackEnhancing"].as_bool() == Some(true);
+    if widgets::check(ui, tl!("Track Enhancing"), track, true) {
+        set(app, json!({ "trackEnhancing": !track }));
+    }
+}
+
+/// The design's own settings most cuts leave alone (C7.2), closed at first: Perforate's cuts and
+/// gaps and the cut order.
+fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
+    if !fold(ui, "cutting-advanced", tl!("Advanced")) {
+        return;
+    }
     let s = &info["settings"];
     // C14.4: Perforate's cuts and gaps, for objects without a dashed stroke of their own.
     let (lo, hi) = vectorcraft_cutjob::CuttingSettings::PERFORATE_MM;
@@ -241,10 +253,6 @@ fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             set(app, json!({ "ordering": o.id() }));
         }
     });
-    let track = s["trackEnhancing"].as_bool() == Some(true);
-    if widgets::check(ui, tl!("Track Enhancing"), track, true) {
-        set(app, json!({ "trackEnhancing": !track }));
-    }
 }
 
 /// The tool table's heading row: the two operations over their columns.
@@ -511,9 +519,18 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         group_rows(app, ui, &info);
         widgets::divider(ui);
     }
+    advanced_rows(app, ui, &info);
+    // C14.8: tuned at the machine, beside the test cut.
+    widgets::dim_label(ui, tl!("The material, tool, force and speed are set in Send to Cutter…, beside the test cut."));
+}
+
+/// The material and the tool settings, and the machine's Advanced ones (C14.8: in the Send
+/// window, beside the test cut that tunes them; C5.1, C5.2, C9.1, C10.2).
+pub(crate) fn tool_settings(app: &mut VectorcraftApp, ui: &mut Ui) {
+    let Ok(info) = app.session.execute("cutting.settings.get", &json!({})) else { return };
     widgets::section_header(ui, tl!("Tool Settings"));
     tool_rows(app, ui, &info);
-    advanced_rows(app, ui, &info);
+    machine_advanced_rows(app, ui, &info);
 }
 
 #[cfg(test)]
@@ -540,6 +557,20 @@ mod tests {
     fn panel_texts(app: &mut VectorcraftApp, ctx: &egui::Context) -> Vec<String> {
         let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 2400.0))), ..Default::default() };
         let mut out = ctx.run_ui(raw, |ui| show(app, ui));
+        out.textures_delta.clear();
+        out.shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// What [`tool_settings`] draws (C14.8: the Send window's), as the panel's texts are read.
+    fn tool_texts(app: &mut VectorcraftApp, ctx: &egui::Context) -> Vec<String> {
+        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 2400.0))), ..Default::default() };
+        let mut out = ctx.run_ui(raw, |ui| tool_settings(app, ui));
         out.textures_delta.clear();
         out.shapes
             .iter()
@@ -638,15 +669,20 @@ mod tests {
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
         let texts = panel_texts(&mut app, &ctx);
-        assert!(texts.iter().any(|t| t == "Advanced") && texts.iter().any(|t| t == "Force"), "{texts:?}");
-        assert!(
-            !texts.iter().any(|t| t == "Blade offset" || t == "Track Enhancing" || t == "Mat"),
-            "folded, and the mat is the other panel's: {texts:?}"
-        );
+        assert!(texts.iter().any(|t| t == "Advanced"), "{texts:?}");
+        assert!(!texts.iter().any(|t| t == "Cut Order" || t == "Mat"), "folded, and the mat is the other panel's: {texts:?}");
+        // C14.8: the tool table and the machine's Advanced are the Send window's, folded there too.
+        assert!(!texts.iter().any(|t| t == "Force" || t == "Blade offset"), "{texts:?}");
+        assert!(texts.iter().any(|t| t.contains("set in Send to Cutter")), "{texts:?}");
+        let tools = tool_texts(&mut app, &ctx);
+        assert!(tools.iter().any(|t| t == "Advanced") && tools.iter().any(|t| t == "Force"), "{tools:?}");
+        assert!(!tools.iter().any(|t| t == "Blade offset" || t == "Track Enhancing" || t == "Cut Order"), "{tools:?}");
+        super::super::set_pstate(&ctx, "cutting-tool-advanced", true);
+        let tools = tool_texts(&mut app, &ctx);
+        assert_eq!(tools.iter().filter(|t| *t == "Blade offset").count(), 1, "cut and score in one row: {tools:?}");
+        assert!(tools.iter().any(|t| t == "Track Enhancing"), "{tools:?}");
         super::super::set_pstate(&ctx, "cutting-advanced", true);
         let texts = panel_texts(&mut app, &ctx);
-        assert_eq!(texts.iter().filter(|t| *t == "Blade offset").count(), 1, "cut and score in one row: {texts:?}");
-        assert!(texts.iter().any(|t| t == "Track Enhancing"), "{texts:?}");
         // C14.6: the cut order, shortest travel at first.
         assert!(texts.iter().any(|t| t == "Cut Order") && texts.iter().any(|t| t == "Shortest Travel"), "{texts:?}");
         app.run("cutting.settings.set", json!({"ordering": "rollers"})).unwrap();
@@ -661,13 +697,14 @@ mod tests {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
+        let tools = tool_texts(&mut app, &ctx);
         for label in ["Force", "Speed", "Passes", "Overcut", "Blade depth"] {
-            assert_eq!(texts.iter().filter(|t| *t == label).count(), 1, "{label}: {texts:?}");
+            assert_eq!(tools.iter().filter(|t| *t == label).count(), 1, "{label}: {tools:?}");
         }
-        assert!(!texts.iter().any(|t| t.contains("(1–") || t.contains("machine's)")), "{texts:?}");
+        assert!(!tools.iter().any(|t| t.contains("(1–") || t.contains("machine's)")), "{tools:?}");
+        assert!(tools.iter().any(|t| t == "Save as Material…") && !tools.iter().any(|t| t == "Material name"), "{tools:?}");
+        let texts = panel_texts(&mut app, &ctx);
         assert!(!texts.iter().any(|t| t == "Selected"), "nothing selected: {texts:?}");
-        assert!(texts.iter().any(|t| t == "Save as Material…") && !texts.iter().any(|t| t == "Material name"), "{texts:?}");
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
         let texts = panel_texts(&mut app, &ctx);
         let at = |label: &str| texts.iter().position(|t| t == label).unwrap();
@@ -678,8 +715,8 @@ mod tests {
         let i = texts.iter().position(|t| t == "Selected").unwrap();
         assert_eq!(texts.get(i + 1).map(String::as_str), Some("Score"), "{texts:?}");
         super::super::set_pstate(&ctx, "cutting-material-saving", Some(String::new()));
-        let texts = panel_texts(&mut app, &ctx);
-        assert!(texts.iter().any(|t| t == "Material name") && texts.iter().any(|t| t == "Cancel"), "{texts:?}");
+        let tools = tool_texts(&mut app, &ctx);
+        assert!(tools.iter().any(|t| t == "Material name") && tools.iter().any(|t| t == "Cancel"), "{tools:?}");
     }
 
     /// C9.4: a material of the user's changed by hand offers Update "name", which keeps the change
@@ -692,13 +729,13 @@ mod tests {
         let update = |texts: &[String]| texts.iter().any(|t| t.starts_with("Update \u{201C}"));
         app.run("cutting.material.apply", json!({"name": "Cardstock"})).unwrap();
         app.run("cutting.settings.set", json!({"operations": {"cut": {"passes": 3}}})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
+        let texts = tool_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t == "Changed since the material was chosen.") && !update(&texts), "built-in: {texts:?}");
         let name = "C9.4 panel test material";
         app.run("cutting.material.save", json!({"name": name})).unwrap();
-        assert!(!update(&panel_texts(&mut app, &ctx)), "just saved: nothing changed");
+        assert!(!update(&tool_texts(&mut app, &ctx)), "just saved: nothing changed");
         app.run("cutting.settings.set", json!({"operations": {"cut": {"passes": 5}}})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
+        let texts = tool_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| *t == format!("Update \u{201C}{name}\u{201D}")), "{texts:?}");
         // What the button runs: the material keeps the change, the document is on it again.
         app.run("cutting.material.save", json!({"name": name})).unwrap();
@@ -715,11 +752,11 @@ mod tests {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
+        let texts = tool_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t == "Tool") && texts.iter().filter(|t| *t == "AutoBlade").count() == 2, "{texts:?}");
         assert!(!texts.iter().any(|t| t.starts_with("Cut: holder")), "{texts:?}");
         app.run("cutting.settings.set", json!({"operations": {"score": {"tool": "rotary"}}})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
+        let texts = tool_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t == "Rotary blade") && texts.iter().any(|t| t == "Cut: holder 1 · Score: holder 2"), "{texts:?}");
         assert!(texts.iter().any(|t| t == "—"), "no depth for the rotary blade: {texts:?}");
     }
