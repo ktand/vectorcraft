@@ -186,6 +186,12 @@ pub const UI_COMMANDS: &[(&str, &str, &str, &str)] = &[
         "{} toggle: in Cutting View, draw the cut job's toolpaths in cutting order, with the playback bar",
     ),
     (
+        "view.cutting.cutBorder",
+        "Show Cut Border",
+        "",
+        "{} toggle: in Cutting View, draw what can be cut as a thin red line: between the registration marks for Print & Cut, else the mat's cut area",
+    ),
+    (
         "cutting.sendWindow",
         "Send to Cutter…",
         // Not Cmd+Alt+Shift+C: upstream's Line Composer has it.

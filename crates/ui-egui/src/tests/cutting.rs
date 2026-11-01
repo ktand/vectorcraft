@@ -156,3 +156,43 @@ fn the_playback_bar_shows_over_the_canvas_in_cutting_view() {
     crate::cutting::set_shows_toolpaths(&ctx, false);
     assert!(!twice(&mut app).iter().any(|t| t == "Play"), "hidden with the toolpaths");
 }
+
+/// One headless canvas frame: the closed red lines painted (the cut border), as their screen
+/// bounds.
+fn red_rings(app: &mut VectorcraftApp, ctx: &egui::Context) -> Vec<egui::Rect> {
+    let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0))), ..Default::default() };
+    let red = crate::theme::Tokens::get(ctx).bleed;
+    let mut out = ctx.run_ui(raw, |ui| crate::canvas::show(app, ui));
+    out.textures_delta.clear();
+    out.shapes
+        .iter()
+        .filter_map(|c| match &c.shape {
+            egui::Shape::Path(p) if p.points.len() == 5 && p.stroke.color == egui::epaint::ColorMode::Solid(red) => {
+                Some(egui::Rect::from_points(&p.points))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// C14.1: View › Show Cut Border draws what can be cut in red, on by default: the mat's cut area,
+/// or between the marks for Print & Cut (inside the artboard); off, it goes.
+#[test]
+fn the_cut_border_shows_what_can_be_cut() {
+    let mut app = VectorcraftApp::new(Session::new(), Default::default());
+    app.run("file.new", json!({"width": 612, "height": 792})).unwrap();
+    let ctx = egui::Context::default();
+    app.ui_ctx = Some(ctx.clone());
+    app.run("view.cutting", json!({})).unwrap();
+    app.run("view.setZoom", json!({"zoom": 50})).unwrap();
+    assert_eq!(crate::menus::checked(&app, crate::cutting::CUT_BORDER_COMMAND, &json!({})), Some(true));
+    let mat = red_rings(&mut app, &ctx);
+    assert_eq!(mat.len(), 1, "{mat:?}");
+    app.run("cutting.settings.set", json!({"printAndCut": true})).unwrap();
+    let marks = red_rings(&mut app, &ctx);
+    assert_eq!(marks.len(), 1);
+    assert!(marks[0].width() < mat[0].width() && marks[0].height() < mat[0].height(), "between the marks: {marks:?} in {mat:?}");
+    app.run(crate::cutting::CUT_BORDER_COMMAND, json!({})).unwrap();
+    assert!(red_rings(&mut app, &ctx).is_empty(), "switched off");
+    assert_eq!(crate::menus::checked(&app, crate::cutting::CUT_BORDER_COMMAND, &json!({})), Some(false));
+}

@@ -510,6 +510,7 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
                 c("Trim View", "view.trimView"),
                 c("Cutting View", "view.cutting"),
                 c("Show Toolpaths", crate::cutting::TOOLPATHS_COMMAND),
+                c("Show Cut Border", crate::cutting::CUT_BORDER_COMMAND),
                 c("Presentation Mode", "view.presentation"),
                 sub(
                     "Screen Mode",

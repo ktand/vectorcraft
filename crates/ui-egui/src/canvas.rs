@@ -693,6 +693,8 @@ fn paint_paper(app: &VectorcraftApp, ui: &Ui, painter: &egui::Painter, xf: &Xf, 
             painter.add(Shape::convex_polygon(xf.quad(ab.rect), Color32::WHITE, Stroke::NONE));
         }
     }
+    // Fork: on the paper, under the art (Print & Cut's areas kept clear).
+    cutting_overlay::on_paper(app, painter, xf);
 }
 
 /// The last rendered frame, placed through the current view while a new one is on its way.
