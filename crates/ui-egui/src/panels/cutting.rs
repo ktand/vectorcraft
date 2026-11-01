@@ -50,8 +50,8 @@ fn job_settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             set(app, json!({ "defaultOp": op_ids.get(i).copied().unwrap_or("cut") }));
         }
     });
-    let groupings = ["None", "By Layer", "By Colour"];
-    let grouping_ids = ["none", "layer", "color"];
+    let groupings = ["None", "By Layer", "By Line Colour", "By Fill Colour"];
+    let grouping_ids = ["none", "layer", "color", "fillColor"];
     let grouping = grouping_ids.iter().position(|g| s["grouping"] == *g).unwrap_or(0);
     // Cut in groups, with a pause before each after the first to change the tool or material.
     widgets::label_row(ui, tl!("Groups"), LABEL_W, |ui| {
@@ -104,9 +104,19 @@ fn group_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         for (i, g) in groups.iter().enumerate() {
             let Some(name) = g["name"].as_str() else { continue };
             let setup = &g["setup"];
-            ui.label(egui::RichText::new(format!("{}. {name}", i + 1)).strong());
-            if setup["changed"] == true {
-                widgets::dim_label(ui, tl!("changed"));
+            let changed = if setup["changed"] == true { format!(" ({})", tl!("changed")) } else { String::new() };
+            ui.label(egui::RichText::new(format!("{}. {name}{changed}", i + 1)).strong());
+            // C14.3: whether the group is cut, and (after the first) whether the machine pauses
+            // before it.
+            let on = g["on"].as_bool() != Some(false);
+            if widgets::check(ui, tl!("On"), on, true) {
+                error = app.run("cutting.group.set", json!({ "group": name, "on": !on })).err();
+            }
+            if i > 0 {
+                let pause = g["pause"].as_bool() != Some(false);
+                if widgets::check(ui, tl!("Pause"), pause, on) {
+                    error = app.run("cutting.group.set", json!({ "group": name, "pause": !pause })).err();
+                }
             }
             ui.end_row();
             let shown = if setup.is_null() {
@@ -135,7 +145,12 @@ fn group_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     if let Some(e) = error {
         ui.label(egui::RichText::new(e).color(t.bleed));
     }
-    widgets::dim_label(ui, tl!("Force and passes of the cut; groups on the document's setup use the tool settings below."));
+    widgets::dim_label(
+        ui,
+        tl!(
+            "Force and passes of the cut; groups on the document's setup use the tool settings below. Pause: the machine stops before the group so the tool or material can be changed."
+        ),
+    );
 }
 
 /// Cut, Score, No Cut or the group's or layer's, for the selected objects, and what they are cut
@@ -543,7 +558,26 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert!(texts.iter().any(|t| t == "Groups") && texts.iter().any(|t| t == "By Colour"), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "Groups") && texts.iter().any(|t| t == "By Line Colour"), "{texts:?}");
+    }
+
+    /// C14.3: each group's row has On, and after the first Pause; switched off, its Pause is
+    /// greyed and the job leaves it out.
+    #[test]
+    fn the_groups_table_switches_groups() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        app.run("layer.new", json!({"name": "Gold"})).unwrap();
+        app.run("shape.rectangle", json!({"x": 100, "y": 100, "width": 50, "height": 50})).unwrap();
+        app.run("cutting.settings.set", json!({"grouping": "layer"})).unwrap();
+        let texts = panel_texts(&mut app, &ctx);
+        assert_eq!(texts.iter().filter(|t| *t == "On").count(), 2, "{texts:?}");
+        assert_eq!(texts.iter().filter(|t| *t == "Pause").count(), 1, "not before the first: {texts:?}");
+        let first = app.session.execute("cutting.groups", &json!({})).unwrap()["groups"][0]["name"].clone();
+        app.run("cutting.group.set", json!({"group": first, "on": false})).unwrap();
+        assert_eq!(app.session.execute("cutting.job", &json!({})).unwrap()["job"]["paths"].as_array().unwrap().len(), 1);
     }
 
     /// C7.5: cut by layer, a row for each layer in cutting order; a material chosen on a row is
@@ -565,9 +599,9 @@ mod tests {
         let card = choices.iter().position(|c| c == "Cardstock").unwrap();
         choose_group_material(&mut app, "Gold", &choices, card).unwrap();
         let texts = panel_texts(&mut app, &ctx);
-        assert!(texts.iter().any(|t| t == "Cardstock") && !texts.iter().any(|t| t == "changed"), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "Cardstock") && !texts.iter().any(|t| t.ends_with("(changed)")), "{texts:?}");
         app.run("cutting.group.set", json!({"group": "Gold", "operations": {"cut": {"passes": 4}}})).unwrap();
-        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "changed"));
+        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t.ends_with("(changed)")));
         choose_group_material(&mut app, "Gold", &choices, 0).unwrap();
         let groups = app.session.execute("cutting.groups", &json!({})).unwrap();
         assert!(groups["groups"][1]["setup"].is_null(), "back to the document's");

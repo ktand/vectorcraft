@@ -74,6 +74,7 @@ fn every_setting_round_trips() {
         mark_length_mm: 7.5,
         mark_line_mm: 0.8,
         bleed_mm: 3.5,
+        group_options: [("Gold".to_string(), crate::GroupOptions { off: true, pause: false })].into(),
         color_setups: [(
             "Gold".to_string(),
             crate::GroupSetup {

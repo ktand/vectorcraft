@@ -148,13 +148,15 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     let mut groups = vec![];
     let mut at = [area.x0, area.y0];
     for (g, bucket) in buckets.into_iter().enumerate() {
-        if bucket.is_empty() {
+        // A group switched off isn't cut (C14.3).
+        let options = names.get(g).map(|n| s.group_options(n)).unwrap_or_default();
+        if bucket.is_empty() || (s.grouping != vectorcraft_cutjob::Grouping::None && options.off) {
             continue;
         }
         let setup = setups.get(g).and_then(Option::as_ref);
         if s.grouping != vectorcraft_cutjob::Grouping::None {
             let (name, material) = (names.get(g).cloned().unwrap_or_default(), setup.and_then(|x| x.material.clone()));
-            groups.push(vectorcraft_cutjob::JobGroup { name, start: ordered.len(), material });
+            groups.push(vectorcraft_cutjob::JobGroup { name, start: ordered.len(), material, pause: options.pause });
         }
         let mut these = order::order(bucket, s.ordering, at);
         // Weeding after the group's own paths, within what may be cut (C8.2, C8.3).

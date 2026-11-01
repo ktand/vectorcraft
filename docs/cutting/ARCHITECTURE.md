@@ -189,6 +189,10 @@ cut with the document's setup (`operations`), as before, so older documents cut 
 - **The job:** each group's paths name operations that carry that group's settings. The Silhouette encoder
   already sends the settings again at each group's start, so it needs no change. `JobGroup::material` names
   the material to load, which the Send window's pause shows.
+- **Switches (C14.3):** whether a group is cut and whether the machine pauses before it are kept in the
+  document's settings, in `groupOptions`, by the group's name (`{"Gold": {"off": false, "pause": false}}`), for
+  groups by layer and by colour alike; a group not listed is cut and paused before. By fill colour (`fillColor`)
+  groups by an object's fill, else its stroke, and keeps its setups in `colorSetups` as by line colour does.
 - **Commands:** `cutting.groups` lists the groups in cutting order with their setups; `cutting.group.set`
   sets one from a material or by hand, or clears it, one undo step each.
 

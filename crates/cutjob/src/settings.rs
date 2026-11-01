@@ -119,8 +119,25 @@ pub enum Grouping {
     None,
     /// A group for each top-level layer, bottom first.
     Layer,
-    /// A group for each colour (an object's stroke, else its fill), in the order they come.
+    /// A group for each line colour (an object's stroke, else its fill), in the order they come.
     Color,
+    /// A group for each fill colour (an object's fill, else its stroke), in the order they come
+    /// (C14.3).
+    FillColor,
+}
+
+/// One group's switches (C14.3), kept by the group's name: whether it is cut, and whether the
+/// machine pauses before it (the first group's pause is never made).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GroupOptions {
+    pub off: bool,
+    pub pause: bool,
+}
+
+impl Default for GroupOptions {
+    fn default() -> Self {
+        GroupOptions { off: false, pause: true }
+    }
 }
 
 impl Grouping {
@@ -129,10 +146,17 @@ impl Grouping {
             Grouping::None => "none",
             Grouping::Layer => "layer",
             Grouping::Color => "color",
+            Grouping::FillColor => "fillColor",
         }
     }
 
-    const CHOICES: [(&'static str, Grouping); 3] = [("none", Grouping::None), ("layer", Grouping::Layer), ("color", Grouping::Color)];
+    /// Whether the groups are colours (their setups kept in the settings' `colorSetups`).
+    pub fn by_colour(self) -> bool {
+        matches!(self, Grouping::Color | Grouping::FillColor)
+    }
+
+    const CHOICES: [(&'static str, Grouping); 4] =
+        [("none", Grouping::None), ("layer", Grouping::Layer), ("color", Grouping::Color), ("fillColor", Grouping::FillColor)];
 }
 
 /// How one operation drives the tool, machine-neutral: a driver maps these to its own steps.
@@ -370,6 +394,8 @@ pub struct CuttingSettings {
     /// or `#rrggbb`); colours without one are cut with [`Self::operations`]. A layer's own setup is
     /// on the layer (`vectorcraft_cutting::setups`).
     pub color_setups: std::collections::BTreeMap<String, crate::GroupSetup>,
+    /// Each group's switches by its name (C14.3); a group not listed is on and paused before.
+    pub group_options: std::collections::BTreeMap<String, GroupOptions>,
     /// Weeding (C8.2): a box cut round the design (each group's) this far from it, mm.
     pub weed_box: bool,
     pub weed_margin_mm: f64,
@@ -405,6 +431,7 @@ impl Default for CuttingSettings {
             mark_line_mm: crate::marks::DEFAULT_LINE_MM,
             bleed_mm: Self::DEFAULT_BLEED_MM,
             color_setups: Default::default(),
+            group_options: Default::default(),
             weed_box: false,
             weed_margin_mm: 3.0,
             weed_lines: false,
@@ -420,7 +447,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 25] = [
+    const KEYS: [&'static str; 26] = [
         "version",
         "mat",
         "customMatMm",
@@ -442,6 +469,7 @@ impl CuttingSettings {
         "markLineMm",
         "bleedMm",
         "colorSetups",
+        "groupOptions",
         "weedBox",
         "weedMarginMm",
         "weedLines",
@@ -496,6 +524,20 @@ impl CuttingSettings {
                         .collect()
                 })
                 .unwrap_or_default(),
+            group_options: object(m, "groupOptions")
+                .map(|g| {
+                    g.iter()
+                        .filter(|(k, _)| !k.is_empty() && k.chars().count() <= MAX_GROUP_NAME)
+                        .filter_map(|(k, v)| {
+                            let o = v.as_object()?;
+                            let d = GroupOptions::default();
+                            Some((k.clone(), GroupOptions { off: flag(o, "off", d.off), pause: flag(o, "pause", d.pause) }))
+                        })
+                        .filter(|(_, o)| *o != GroupOptions::default())
+                        .take(MAX_GROUP_SETUPS)
+                        .collect()
+                })
+                .unwrap_or_default(),
             weed_box: flag(m, "weedBox", d.weed_box),
             weed_margin_mm: num(m, "weedMarginMm", Self::WEED_MARGIN_MM.0, Self::WEED_MARGIN_MM.1, d.weed_margin_mm),
             weed_lines: flag(m, "weedLines", d.weed_lines),
@@ -538,11 +580,20 @@ impl CuttingSettings {
         m.insert("weedMarginMm".into(), json!(self.weed_margin_mm));
         m.insert("weedLines".into(), json!(self.weed_lines));
         m.insert("weedLineSpacingMm".into(), json!(self.weed_line_spacing_mm));
+        if !self.group_options.is_empty() {
+            let g: Map<String, Value> = self.group_options.iter().map(|(k, o)| (k.clone(), json!({"off": o.off, "pause": o.pause}))).collect();
+            m.insert("groupOptions".into(), Value::Object(g));
+        }
         if !self.color_setups.is_empty() {
             let c: Map<String, Value> = self.color_setups.iter().map(|(k, v)| (k.clone(), v.to_value())).collect();
             m.insert("colorSetups".into(), Value::Object(c));
         }
         Value::Object(m)
+    }
+
+    /// Group `name`'s switches (the usual ones when it has none of its own).
+    pub fn group_options(&self, name: &str) -> GroupOptions {
+        self.group_options.get(name).copied().unwrap_or_default()
     }
 
     /// How the registration marks are drawn: each edge's own inset if set, else the one inset.

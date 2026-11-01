@@ -22,7 +22,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Groups",
             [],
             None,
-            "{} the groups a job cut by layer or by colour is cut in, in cutting order → {grouping, groups: [{name, setup: null (the document's) | {material: name or null, changed: whether set by hand since the material, cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}}]}",
+            "{} the groups a job cut by layer or by colour is cut in, in cutting order → {grouping, groups: [{name, on: whether it is cut, pause: whether the machine pauses before it (not before the first), setup: null (the document's) | {material: name or null, changed: whether set by hand since the material, cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}}]}",
             has_doc,
             list
         ),
@@ -31,7 +31,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Group Cut Setup",
             [],
             None,
-            "{group, material?: name, operations?: {cut?: {…tool keys}, score?: {…}}, clear?: true} one group's own setup, one undo step: material copies that material's whole setup in; operations sets numbers over the group's setup (or the document's, for a group without one); clear: cut with the document's again. Cut by layer it is kept on the layers of that name, by colour in the settings → as cutting.groups",
+            "{group, material?: name, operations?: {cut?: {…tool keys}, score?: {…}}, clear?: true, on?: bool, pause?: bool} one group's own setup, one undo step (on and pause, set on their own: whether the group is cut, and whether the machine pauses before it): material copies that material's whole setup in; operations sets numbers over the group's setup (or the document's, for a group without one); clear: cut with the document's again. Cut by layer it is kept on the layers of that name, by colour in the settings → as cutting.groups",
             has_doc,
             set
         ),
@@ -51,7 +51,8 @@ fn listing(s: &Session) -> Result<Value> {
         .map(|name| {
             let setup = setups::setup_of(d, &settings, &name)
                 .map(|g| json!({"material": g.material, "changed": changed(&g), "cut": g.cut.to_value(), "score": g.score.to_value()}));
-            json!({"name": name, "setup": setup})
+            let o = settings.group_options(&name);
+            json!({"name": name, "setup": setup, "on": !o.off, "pause": o.pause})
         })
         .collect();
     Ok(json!({"grouping": settings.grouping.id(), "groups": groups}))
@@ -85,7 +86,7 @@ fn check_taken(given: &Map<String, Value>, got: &Value, at: &str) -> Result<()> 
 
 fn set(s: &mut Session, p: &Value) -> Result<Value> {
     let params = p.as_object().ok_or_else(|| bad(SET, "params must be an object"))?;
-    known_keys(params, &["group", "material", "operations", "clear"], "")?;
+    known_keys(params, &["group", "material", "operations", "clear", "on", "pause"], "")?;
     let name = str_param(p, "group").ok_or_else(|| bad(SET, "group is required: one of cutting.groups' names"))?.to_string();
     let d = &s.doc()?.doc;
     let mut settings = vectorcraft_cutting::settings(d);
@@ -93,9 +94,40 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad(SET, "the job isn't cut in groups: set grouping to layer or color first"));
     }
     let names = setups::group_names(d, &settings);
-    let kept = settings.grouping == Grouping::Color && settings.color_setups.contains_key(&name);
+    let kept = settings.grouping.by_colour() && (settings.color_setups.contains_key(&name) || settings.group_options.contains_key(&name));
     if !names.contains(&name) && !kept {
         return Err(bad(SET, format!("no group {name:?}: the groups are {}", names.join(", "))));
+    }
+    // C14.3: whether the group is cut and paused before, set on their own.
+    if p.get("on").is_some() || p.get("pause").is_some() {
+        if params.keys().any(|k| !matches!(k.as_str(), "group" | "on" | "pause")) {
+            return Err(bad(SET, "on and pause are set on their own"));
+        }
+        let flag = |key: &str| match p.get(key) {
+            None => Ok(None),
+            Some(v) => v.as_bool().map(Some).ok_or_else(|| bad(SET, format!("{key} must be true or false"))),
+        };
+        let (on, pause) = (flag("on")?, flag("pause")?);
+        let mut o = settings.group_options(&name);
+        if let Some(on) = on {
+            o.off = !on;
+        }
+        if let Some(pause) = pause {
+            o.pause = pause;
+        }
+        if o == vectorcraft_cutjob::GroupOptions::default() {
+            settings.group_options.remove(&name);
+        } else {
+            if !settings.group_options.contains_key(&name) && settings.group_options.len() >= MAX_GROUP_SETUPS {
+                return Err(bad(SET, format!("a document keeps at most {MAX_GROUP_SETUPS} groups' switches")));
+            }
+            settings.group_options.insert(name, o);
+        }
+        s.edit("Group Switches", |d, _| {
+            vectorcraft_cutting::set_settings(d, &settings);
+            Ok(())
+        })?;
+        return listing(s);
     }
     let clear = p.get("clear").and_then(Value::as_bool) == Some(true);
     let material = str_param(p, "material");
@@ -157,7 +189,7 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
                 })?;
             }
         }
-        Grouping::Color => {
+        Grouping::Color | Grouping::FillColor => {
             let before = settings.color_setups.clone();
             match new {
                 Some(g) => {

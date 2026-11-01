@@ -90,3 +90,42 @@ fn a_colour_keeps_its_setup_in_the_settings() {
     s.execute("cutting.group.set", &json!({"group": name, "clear": true})).unwrap();
     assert!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"].get("colorSetups").is_none());
 }
+
+/// C14.3: a group switched off isn't cut; one set not to pause follows straight on; both are
+/// listed and undone in one step each; by fill colour, a red-filled square with a black outline is
+/// in the red group.
+#[test]
+fn groups_can_be_switched_off_and_not_paused() {
+    let mut s = two_layers();
+    let names: Vec<String> = groups(&mut s)["groups"].as_array().unwrap().iter().map(|g| g["name"].as_str().unwrap().to_string()).collect();
+    assert_eq!(names.len(), 2, "{names:?}");
+    let all = job(&mut s)["paths"].as_array().unwrap().len();
+    assert!(s.execute("cutting.group.set", &json!({"group": names[0], "on": false, "material": "Vinyl"})).is_err(), "on and pause alone");
+    assert!(s.execute("cutting.group.set", &json!({"group": names[0], "on": "no"})).is_err());
+    let listed = s.execute("cutting.group.set", &json!({"group": names[0], "on": false})).unwrap();
+    assert_eq!(listed["groups"][0]["on"], json!(false));
+    let j = job(&mut s);
+    assert!(j["paths"].as_array().unwrap().len() < all, "the first group's paths left out");
+    assert_eq!(j["groups"].as_array().unwrap().len(), 1);
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(job(&mut s)["paths"].as_array().unwrap().len(), all, "one undo step");
+    s.execute("cutting.group.set", &json!({"group": names[1], "pause": false})).unwrap();
+    assert_eq!(job(&mut s)["groups"][1]["pause"], json!(false));
+    s.execute("cutting.group.set", &json!({"group": names[1], "pause": true})).unwrap();
+    let settings = s.execute("cutting.settings.get", &json!({})).unwrap();
+    assert!(settings["settings"].get("groupOptions").is_none(), "back to the usual, nothing kept: {settings}");
+}
+
+#[test]
+fn groups_by_fill_colour() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 400, "height": 400})).unwrap();
+    let a = s.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap()["id"].clone();
+    s.execute("paint.setFill", &json!({"ids": [a], "color": "#ff0000"})).unwrap();
+    s.execute("cutting.settings.set", &json!({"grouping": "fillColor"})).unwrap();
+    let g = groups(&mut s);
+    assert_eq!(g["grouping"], json!("fillColor"));
+    assert_eq!(g["groups"][0]["name"], json!("#ff0000"), "the fill, not the black outline: {g}");
+    s.execute("cutting.settings.set", &json!({"grouping": "color"})).unwrap();
+    assert_eq!(groups(&mut s)["groups"][0]["name"], json!("#000000"), "by line colour, the outline");
+}
