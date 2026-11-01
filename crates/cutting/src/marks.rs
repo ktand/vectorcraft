@@ -123,7 +123,7 @@ pub const STALE_MARKS: &str = "the registration marks in the document aren't the
 
 /// Whether the marks layer `layer` is drawn as the settings say: each of its marks where the
 /// settings put that mark (within a hundredth of a mm), and the corners' line the settings' width.
-fn matches_settings(d: &Document, layer: NodeId, s: &CuttingSettings, m: &MarkLayout) -> bool {
+pub(crate) fn matches_settings(d: &Document, layer: NodeId, s: &CuttingSettings, m: &MarkLayout) -> bool {
     let Some(a) = d.artboards.get(usize::try_from(s.artboard).unwrap_or(usize::MAX)).map(|a| a.rect) else { return true };
     let Some(children) = d.node(layer).and_then(|n| n.children()) else { return false };
     let want = m.marks();

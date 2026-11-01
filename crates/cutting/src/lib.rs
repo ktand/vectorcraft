@@ -31,6 +31,7 @@ pub mod edge;
 pub mod geometry;
 pub mod group;
 pub mod hatch;
+pub mod live;
 pub mod marks;
 pub mod nest;
 pub mod ops;

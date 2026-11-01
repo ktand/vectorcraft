@@ -102,15 +102,43 @@ fn a_print_bleed_is_added_updated_and_removed() {
     let job = s.execute("cutting.job", &json!({})).unwrap();
     assert_eq!(job["job"]["paths"].as_array().unwrap().len(), 1, "the bleed isn't cut");
     assert_eq!(job["job"]["warnings"], json!([]));
+    // C14.2: the bleed follows the art, in the same undo step.
+    let bleed_x0 = |s: &mut Session| {
+        let d = &s.doc().unwrap().doc;
+        d.layers[0].children().unwrap()[0].geometric_bounds().unwrap().x0
+    };
+    let before = bleed_x0(&mut s);
     s.execute("select.set", &json!({"ids": [rect]})).unwrap();
     s.execute("object.move", &json!({"dx": 20, "dy": 0})).unwrap();
-    assert!(s.execute("cutting.job", &json!({})).unwrap()["job"]["warnings"].to_string().contains("Update Bleed"));
-    s.execute("cutting.bleed.add", &json!({})).unwrap();
-    assert_eq!(s.execute("cutting.job", &json!({})).unwrap()["job"]["warnings"], json!([]), "made again");
+    assert_eq!(s.execute("cutting.job", &json!({})).unwrap()["job"]["warnings"], json!([]), "made again by itself");
+    assert!((bleed_x0(&mut s) - (before + 20.0)).abs() < 0.01, "moved with the art");
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!((bleed_x0(&mut s) - before).abs() < 0.01, "undone with the move");
+    s.execute("cutting.bleed.add", &json!({"radiusMm": 2.5})).unwrap();
+    assert_eq!(s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["bleedMm"], json!(2.5), "the distance kept");
     let layers = s.doc().unwrap().doc.layers.len();
     s.execute("edit.undo", &json!({})).unwrap();
     assert_eq!(s.doc().unwrap().doc.layers.len(), layers, "undo puts the first bleed back");
     assert_eq!(s.execute("cutting.bleed.remove", &json!({})).unwrap()["removed"], json!(true));
     assert_eq!(s.doc().unwrap().doc.layers.len(), layers - 1);
     assert_eq!(s.execute("cutting.bleed.remove", &json!({})).unwrap()["removed"], json!(false));
+}
+
+/// C14.2: the marks follow the artboard's size, in the same undo step.
+#[test]
+fn the_marks_follow_the_artboard() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 612, "height": 792})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 200, "y": 300, "width": 100, "height": 100})).unwrap();
+    s.execute("cutting.settings.set", &json!({"printAndCut": true})).unwrap();
+    s.execute("cutting.marks.add", &json!({})).unwrap();
+    let size = |s: &mut Session| s.execute("cutting.job", &json!({})).unwrap()["job"]["registration"]["sizeMm"].clone();
+    let before = size(&mut s);
+    s.execute("artboard.setProps", &json!({"index": 0, "width": 700})).unwrap();
+    let job = s.execute("cutting.job", &json!({})).unwrap();
+    assert_eq!(job["job"]["warnings"], json!([]), "the marks drawn again: {job}");
+    assert_ne!(size(&mut s), before);
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(size(&mut s), before, "one undo: the size and the marks");
+    assert_eq!(s.execute("cutting.job", &json!({})).unwrap()["job"]["warnings"], json!([]));
 }
