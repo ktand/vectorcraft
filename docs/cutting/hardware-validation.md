@@ -48,9 +48,11 @@ control is and what it does: the [user guide](user-guide.md).
    window can stay open beside the art; drag its corner to make the preview larger.
 
 Where things are in Cut Settings: **Selected** (only with a selection: how the selected objects are cut),
-**Default** (how everything else is cut), **Groups**, **Weeding**, **Tool Settings** (the material, then a table
-with a **Cut** column and a **Score** column: Force, Speed, Passes, Overcut, Blade depth; hover a row's name for
-its range), and **Advanced** (closed at first: Accel., Corners, Blade offset, Track Enhancing).
+**Default** (how everything else is cut), **Groups**, and **Advanced** (closed at first: Perforate, Cut Order).
+In the Send window (since C14.8), between the machine and the test cut: **Tool Settings** (the material, then a
+table with a **Cut** column and a **Score** column: Tool, Force, Speed, Passes, Overcut, Blade depth; hover a
+row's name for its range) and its **Advanced** (closed at first: Accel., Corners, Blade offset, Track
+Enhancing).
 
 If something goes wrong anywhere: note what the Send window said, word for word. A send that fails writes a
 report to `%APPDATA%\VectorCraft\Cutting\Reports\`, and the app's log is in `%APPDATA%\VectorCraft\logs\`; both
@@ -132,7 +134,7 @@ Result:
 
 - With the AutoBlade: **Blade depth** 1 in the Score column, score a line; then 3. The deeper one should mark
   more. (`TF` n)
-- Open **Advanced**. **Accel.** 1 and then 3 in the Score column on the same square: 1 should move more gently.
+- Open the Send window's **Advanced**. **Accel.** 1 and then 3 in the Score column on the same square: 1 should move more gently.
   (`TJ` n)
 - **Track Enhancing** on: the rollers should grip differently, or the machine reports it. Which of `FY0`/`FY1`
   turns it on is a guess (`FY1` now): if on and off behave the other way round, note it.
@@ -260,7 +262,7 @@ Result:
   holders line should name it. The punch tool's code isn't known: note what the window shows for it ("unknown tool
   n").
 - With nothing in a holder, the line should say "empty" for it.
-- The pen: Cut Settings › Tool Settings › **Tool** Pen in the Cut column, a pen in holder 1, a 20 mm square
+- The pen: Send window › Tool Settings › **Tool** Pen in the Cut column, a pen in holder 1, a 20 mm square
   drawn: the corners should be sharp, with no little loops (a pen has no blade offset).
 - If you have a holder 2 tool: choose it for the Cut column (the window warns while holder 2 is empty), fit it,
   and cut a 20 mm square in card. The machine should use holder 2. If it uses holder 1 or ignores the settings,

@@ -23,6 +23,9 @@ not from the sources.
   [dual tool carriage](https://www.silhouetteschoolblog.com/2019/06/silhouette-cameo-4-dual-tool-carriage.html),
   [adapters](https://www.silhouetteschoolblog.com/2019/09/silhouette-cameo-4-adapters-explained.html),
   [Studio V5 Send panel, Tool 2](https://www.silhouetteschoolblog.com/2026/03/silhouette-studio-v5-send-panel-tool-2.html).
+- **[ISC]** inkscape-silhouette's command list, `Commands.md`, and its pull request
+  [#369](https://github.com/fablabnbg/inkscape-silhouette/pull/369) (merged as `f166edc`, 2026-10-08), read
+  2026-11-01 for facts only, as [IS].
 - **[HW]** Checked on the owner's Cameo 4 (USB `0x0B4D:0x1137`) on 2026-11-01, steps 1–3 of
   [hardware-validation.md](hardware-validation.md): 10 mm squares scored at 20 and 280 mm across, 20 mm down,
   measured against the 12 × 12 in mat's grid.
@@ -97,6 +100,15 @@ at the commit above, the tool class and `setup()`]. A tool's settings go in this
 Mat codes for `TG`: 0 none, 1 the 12 × 12 in mat, 2 the 12 × 24 in mat, 3 the Portrait's 8 × 12 in, 8 a 15 × 15
 in, 9 a 24 × 24 in, 11 an 8.5 × 12 in [IS]. Media codes 100–138 and 300 (custom) name materials for the machine's
 own presets [IS]; the encoder sends settings directly and needs none.
+
+### Curves
+
+| Fact | Source |
+|---|---|
+| The driver sends only straight moves: `M` (blade up) and `D` (blade down) to each point of a path already flattened; it never sends a curve or circle. Ours does the same, to the document's tolerance (0.025 mm at first). | [IS] |
+| GP-GL also has curve commands: `BZ` (a cubic Bézier through four control points, with a leading number and an optional trailing one whose meanings the list calls unclear), `Y` (a curve through points, open or closed), `W` and `WP` (circles), `)` (an ellipse). All are listed from Graphtec's reference, not seen from a Silhouette. | [ISC], **to confirm** |
+| `BZ` with its leading number 1 (a cubic) was reported working on a CAMEO Pro Mark II, firmware V1.09; the Cameo 4 and 5 are expected to take it, untested. The driver doesn't use it. | [ISC] (#369), **to confirm** |
+| Not planned: the machine's 0.05 mm step is coarser than the tolerance already, and the blade offset, overcut and clipping to the mat work on straight segments. Worth trying only if long jobs stutter or the job is too large to send. | our decision, 2026-11-01 |
 
 ## Sizes
 

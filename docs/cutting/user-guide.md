@@ -23,8 +23,8 @@ Workspace › Reset Cutting brings back this layout.
 The five panels (each also on the Window menu):
 
 - **Cut Settings:** how things are cut. At the top, a summary of the job ("2 paths · 392 mm · 5 s") and **Send
-  to Cutter…**. Below it: what the selection is cut as and along, the default, groups, the material and tool
-  settings, and **Advanced**.
+  to Cutter…**. Below it: what the selection is cut as and along, the default, groups, and **Advanced**. The
+  material and tool settings are in the Send window, beside the test cut that tunes them (section 4).
 - **Cut Lines:** what adds cut lines to cut the art out: a contour round it, stencil bridges, and weeding.
 - **Patterns:** designs made from the art: a sketch fill for the pen, a rhinestone template, a puzzle.
 - **Cutting Mat:** the mat and where the artboard sits on it, and nesting.
@@ -122,7 +122,9 @@ material, the pause says what to load ("Paused before Gold. Load Cardstock, then
 
 ### The tool table
 
-Under **Tool Settings**, a table with a **Cut** column and a **Score** column. Hover a row's name for its range.
+In the Send window (**Send to Cutter…**), under **Tool Settings**: the **Material**, then a table with a **Cut**
+column and a **Score** column. Hover a row's name for its range. They are there, not in Cut Settings, because
+they belong to what is on the mat today: test, adjust, test again, then send, without leaving the window.
 
 | Row | What it sets |
 |---|---|
@@ -133,10 +135,11 @@ Under **Tool Settings**, a table with a **Cut** column and a **Score** column. H
 | **Overcut** | How far a closed shape's cut runs on past its start, so it lifts out cleanly. |
 | **Blade depth** | The AutoBlade's depth (1–10; 0 leaves the machine's own). Other tools show "—". |
 
-**Advanced** (closed at first) holds what most cuts leave alone: **Accel.** (gentler or faster moves), **Corners**
-(the blade runs a little past each sharp corner), **Blade offset** (how far the blade's tip trails its axis; the
-machine turns the blade round corners with it; a pen shows "—"), **Perforate** (the cut and gap lengths for
-objects set to Perforate), **Cut Order** and **Track Enhancing**.
+The Send window's **Advanced** (closed at first, under the table) holds what most cuts leave alone: **Accel.**
+(gentler or faster moves), **Corners** (the blade runs a little past each sharp corner), **Blade offset** (how far
+the blade's tip trails its axis; the machine turns the blade round corners with it; a pen shows "—") and **Track
+Enhancing**. Cut Settings' own **Advanced** holds the design's: **Perforate** (the cut and gap lengths for
+objects set to Perforate) and **Cut Order**.
 
 **Cut Order** decides the order the lines are cut in. Scoring always comes before cutting, and with the first two
 choices a shape inside another (the counter of an O) is cut before it, so the piece around it stays held:
