@@ -43,8 +43,23 @@ In the **Cutting Mat** tab:
 - **Offset:** moves the artboard on the mat, in mm from the cut area's top-left corner.
 - **Clip to Mat:** lines that run off the cut area are cut up to its edge. Without it, a job that runs off the
   mat isn't sent.
+- **Cut Mirrored:** cuts the design flipped left to right, for material cut from the back such as heat transfer
+  vinyl (iron-on). Your art stays as you drew it; Show Toolpaths shows the mirrored lines. Print & Cut is never
+  cut mirrored (the marks are read as printed): print the art mirrored instead.
 
 If the artboard runs off the mat, the panel says so in red. It says nothing while all is well.
+
+### Designs larger than the mat: tiles
+
+**Tiles** cuts a design too large for the mat in parts, each on its own sheet:
+
+1. Select the design (or nothing, for the whole artboard) and set **Overlap**: how far neighbouring tiles overlap,
+   so the pieces can be joined (default 5 mm).
+2. Press **Tile onto Mats**. Artboards named Tile 1, Tile 2… are added over the design, each the size the mat can
+   cut, row by row from the top left. **Clip to Mat** is turned on and the cutting artboard set to Tile 1. Undo
+   takes it all back.
+3. Cut Tile 1, then choose Tile 2 as the **Artboard**, load the next sheet and cut again, and so on. Each tile cuts
+   what lies on it, up to its edges.
 
 ### Is it the right size?
 
@@ -370,7 +385,7 @@ workflow can be tried before the machine is plugged in. Nothing is cut, of cours
 | "load the mat into the cutter first" | Load the mat with the machine's load button, then Send again. |
 | "the cutter didn't answer in time" | Switch the machine off and on, press Find Cutters, and try again. If it keeps happening, pass on the report and the log. |
 | "the cutter didn't find the registration marks" | Check the sheet's position (square mark at the top left), print at 100 %, and that the marks printed dark. |
-| The artboard goes off the mat | Move it with **Offset**, choose a larger mat, turn on **Clip to Mat**, or nest the pieces. |
+| The artboard goes off the mat | Move it with **Offset**, choose a larger mat, turn on **Clip to Mat**, nest the pieces, or cut it in **Tiles**. |
 | A tool warning in the Send window | Fit the tool the job needs in the holder it names, or choose the fitted tool in the Tool row, then **Check Tools**. |
 
 The app's log is in `%APPDATA%\VectorCraft\logs\`. With a failed send's report from

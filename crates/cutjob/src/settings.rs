@@ -380,6 +380,9 @@ pub struct CuttingSettings {
     /// Paths that leave the cut area are cut up to its edge (with a warning) instead of stopping
     /// the job.
     pub clip_to_mat: bool,
+    /// Cut mirrored, left to right (C14.7), for material cut from the back, such as heat transfer
+    /// vinyl; the art itself isn't changed. Not with Print & Cut.
+    pub mirror: bool,
     /// The material the tool settings were last set from (C5.1), by name; none when set by hand.
     pub material: Option<String>,
     /// Track enhancing: the machine grips the material harder as it feeds (C5.2).
@@ -435,6 +438,7 @@ impl Default for CuttingSettings {
             operations: Operations::default(),
             ordering: Ordering::InsideFirst,
             clip_to_mat: false,
+            mirror: false,
             material: None,
             track_enhancing: false,
             grouping: Grouping::None,
@@ -463,7 +467,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 28] = [
+    const KEYS: [&'static str; 29] = [
         "version",
         "mat",
         "customMatMm",
@@ -475,6 +479,7 @@ impl CuttingSettings {
         "operations",
         "ordering",
         "clipToMat",
+        "mirror",
         "material",
         "trackEnhancing",
         "grouping",
@@ -525,6 +530,7 @@ impl CuttingSettings {
             },
             ordering: choice(m, "ordering", &Ordering::CHOICES, d.ordering),
             clip_to_mat: flag(m, "clipToMat", d.clip_to_mat),
+            mirror: flag(m, "mirror", d.mirror),
             track_enhancing: flag(m, "trackEnhancing", d.track_enhancing),
             grouping: choice(m, "grouping", &Grouping::CHOICES, d.grouping),
             print_and_cut: flag(m, "printAndCut", d.print_and_cut),
@@ -585,6 +591,7 @@ impl CuttingSettings {
         m.insert("operations".into(), Value::Object(ops));
         m.insert("ordering".into(), json!(self.ordering.id()));
         m.insert("clipToMat".into(), json!(self.clip_to_mat));
+        m.insert("mirror".into(), json!(self.mirror));
         m.insert("trackEnhancing".into(), json!(self.track_enhancing));
         m.insert("grouping".into(), json!(self.grouping.id()));
         m.insert("printAndCut".into(), json!(self.print_and_cut));
