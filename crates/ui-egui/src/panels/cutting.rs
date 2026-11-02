@@ -24,16 +24,17 @@ pub mod print;
 pub const ID: &str = "cutting";
 
 /// Every cutting panel (C14.9: one for each feature), in the Cutting workspace's order: Cut
-/// Settings, what shapes the cut, then what lays it on the mat.
+/// Settings, the mat (C14.10: first, as it is set up first), what shapes the cut, then what lays
+/// it on the mat.
 pub const PANELS: &[&str] = &[
     ID,
+    mat::ID,
     lines::ID,
     lines::STENCIL_ID,
     lines::WEEDING_ID,
     patterns::ID,
     patterns::RHINESTONES_ID,
     patterns::PUZZLE_ID,
-    mat::ID,
     mat::TILES_ID,
     mat::NESTING_ID,
     print::ID,

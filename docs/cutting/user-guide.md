@@ -15,8 +15,8 @@ panels on the right:
 
 - **Layers** at the top. Cutting by layer is set up here.
 - **Cut Settings** below it: what you change for each cut, and Send to Cutter….
-- Beside them, a strip of icons, one for each feature: **Contour**, **Stencil**, **Weeding**, **Sketch Fill**,
-  **Rhinestones**, **Puzzle**, then **Cutting Mat**, **Tiles**, **Nesting** and **Print & Cut**. Click an icon to
+- Beside them, a strip of icons, one for each feature: **Cutting Mat** first, then **Contour**, **Stencil**,
+  **Weeding**, **Sketch Fill**, **Rhinestones**, **Puzzle**, **Tiles**, **Nesting** and **Print & Cut**. Click an icon to
   open that feature's panel beside it, and again (or anywhere else) to close it. Hover an icon for its name.
 
 If your Cutting workspace looks different (you moved its panels, or saved it with an older version), Window ›
