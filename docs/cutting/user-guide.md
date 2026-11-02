@@ -14,27 +14,32 @@ Window › Workspace › **Cutting**. It turns on Cutting View (the mat drawn be
 panels on the right:
 
 - **Layers** at the top. Cutting by layer is set up here.
-- **Cut Settings**, **Cut Lines** and **Patterns**, as tabs below it: what you change for each cut.
-- **Cutting Mat** and **Print & Cut**, as two tabs below those: what you set once per document.
+- **Cut Settings** below it: what you change for each cut, and Send to Cutter….
+- Beside them, a strip of icons, one for each feature: **Contour**, **Stencil**, **Weeding**, **Sketch Fill**,
+  **Rhinestones**, **Puzzle**, then **Cutting Mat**, **Tiles**, **Nesting** and **Print & Cut**. Click an icon to
+  open that feature's panel beside it, and again (or anywhere else) to close it. Hover an icon for its name.
 
 If your Cutting workspace looks different (you moved its panels, or saved it with an older version), Window ›
-Workspace › Reset Cutting brings back this layout.
+Workspace › Reset Cutting brings back this layout. Any panel can also be dragged out of the strip and docked open.
 
-The five panels (each also on the Window menu):
+The panels (each also on the Window › Cutting menu):
 
 - **Cut Settings:** how things are cut. At the top, a summary of the job ("2 paths · 392 mm · 5 s") and **Send
   to Cutter…**. Below it: what the selection is cut as and along, the default, groups, and **Advanced**. The
   material and tool settings are in the Send window, beside the test cut that tunes them (section 4).
-- **Cut Lines:** what adds cut lines to cut the art out: a contour round it, stencil bridges, and weeding.
-- **Patterns:** designs made from the art: a sketch fill for the pen, a rhinestone template, a puzzle.
-- **Cutting Mat:** the mat and where the artboard sits on it, and nesting.
+- **Contour**, **Stencil** and **Weeding:** what adds cut lines to cut the art out: a contour round it, stencil
+  bridges, weeding's box and lines (section 5).
+- **Sketch Fill**, **Rhinestones** and **Puzzle:** designs made from the art: lines for the pen, a rhinestone
+  template, a puzzle (section 5).
+- **Cutting Mat:** the mat and where the artboard sits on it. **Tiles** cuts a design larger than the mat in parts,
+  **Nesting** packs the pieces onto it (section 2).
 - **Print & Cut:** printing with registration marks and cutting round the print.
 
-Each group can be made taller by dragging the line above it.
+The line above Cut Settings can be dragged to give it or Layers more room.
 
 ## 2. Setting up the mat
 
-In the **Cutting Mat** tab:
+In the **Cutting Mat** panel:
 
 - **Mat:** Silhouette 12 × 12 in, 12 × 24 in, or Custom (type its size). A **≈** beside it means the cut area
   was measured rather than taken from the maker's specifications: hover it, and check the area on your own mat.
@@ -201,7 +206,7 @@ Cut the machine measures from the marks, so the adjustment only moves where it s
 
 ### Contour: a cut line round your art
 
-For stickers and shapes printed and cut out. Select the art, then Cut Lines › **Contour**:
+For stickers and shapes printed and cut out. Select the art, then open **Contour**:
 
 - **Offset:** how far out the line runs (default 2 mm). Corners are rounded.
 - **Keep Holes:** also cut round the holes inside the art. Off, only the outside is cut.
@@ -214,7 +219,7 @@ contour away and puts the art's operation back.
 ### Stencils: bridges
 
 Cut a letter O out of a stencil sheet and its middle falls out with it. **Stencil** › **Add Bridges** keeps such
-middles joined to the sheet by narrow bridges (Cut Lines › **Stencil**):
+middles joined to the sheet by narrow bridges (the **Stencil** panel):
 
 - **Bridges:** how wide each bridge is (default 1.5 mm). Wider holds better; narrower shows less.
 - **Direction:** **Vertical** puts a bridge above and below each hole, **Horizontal** one either side.
@@ -227,7 +232,7 @@ see what will be cut. Undo takes the stencil away and brings the art back. If th
 
 ### Rhinestones
 
-A rhinestone template is a sheet with a hole for each stone. Select the art, then Patterns › **Rhinestones**:
+A rhinestone template is a sheet with a hole for each stone. Select the art, then open **Rhinestones**:
 
 - **Stone:** the stones' size, SS6 to SS30; the hole is made 0.2 mm larger than the stone. Choose Custom and set
   **Hole** for any other size.
@@ -241,7 +246,7 @@ A rhinestone template is a sheet with a hole for each stone. Select the art, the
 
 ### Puzzles
 
-Patterns › **Puzzle** cuts a jigsaw over the selected art (a printed picture, say), or over the whole artboard
+The **Puzzle** panel cuts a jigsaw over the selected art (a printed picture, say), or over the whole artboard
 when nothing is selected:
 
 - **Rows** and **Columns:** how many pieces (up to 50 each way).
@@ -254,7 +259,7 @@ when nothing is selected:
 
 ### Sketch fill: shading for the pen
 
-A pen draws lines, not areas. Patterns › **Sketch Fill** fills the selected shapes with lines for the pen to draw:
+A pen draws lines, not areas. The **Sketch Fill** panel fills the selected shapes with lines for the pen to draw:
 
 - **Pattern:** Lines (straight lines across); Concentric (rings following the outline inward); or Spiral (one line
   from the middle out).
@@ -268,7 +273,7 @@ own and the pen in that group's setup).
 
 ### Weeding
 
-In Cut Lines › **Weeding**, for vinyl and heat-transfer material, where the waste around the design is peeled away:
+In the **Weeding** panel, for vinyl and heat-transfer material, where the waste around the design is peeled away:
 
 - **Weed Box:** a box cut round the design, **Margin** mm out.
 - **Weed Lines:** lines from the box in towards the design, stopping just short of it, so the waste comes off in
@@ -278,7 +283,7 @@ When cutting in groups, each group gets its own box and lines.
 
 ## 6. Arranging the pieces: nesting
 
-Cutting Mat › **Nesting** packs pieces close together on the mat by their real shapes, not their bounding boxes,
+The **Nesting** panel packs pieces close together on the mat by their real shapes, not their bounding boxes,
 so a small piece can sit in a larger one's hole:
 
 - **Gap:** the least space between pieces.

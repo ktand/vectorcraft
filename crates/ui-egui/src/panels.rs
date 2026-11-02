@@ -188,9 +188,15 @@ pub fn show_icon_panel(app: &mut VectorcraftApp, ui: &mut Ui, id: &str) {
         crate::addons::pen::ID => crate::addons::pen::show(app, ui),
         cutting::ID => cutting::show(app, ui),
         cutting::mat::ID => cutting::mat::show(app, ui),
+        cutting::mat::TILES_ID => cutting::mat::show_tiles(app, ui),
+        cutting::mat::NESTING_ID => cutting::mat::show_nesting(app, ui),
         cutting::lines::ID => cutting::lines::show(app, ui),
+        cutting::lines::STENCIL_ID => cutting::lines::show_stencil(app, ui),
+        cutting::lines::WEEDING_ID => cutting::lines::show_weeding(app, ui),
         cutting::print::ID => cutting::print::show(app, ui),
         cutting::patterns::ID => cutting::patterns::show(app, ui),
+        cutting::patterns::RHINESTONES_ID => cutting::patterns::show_rhinestones(app, ui),
+        cutting::patterns::PUZZLE_ID => cutting::patterns::show_puzzle(app, ui),
         id if library_panel::parse(id).is_some() => library_panel::show(app, ui, id),
         _ => {
             dim_label(ui, tl!("This panel is on the roadmap (see the parity plan)."));

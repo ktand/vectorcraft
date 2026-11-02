@@ -2,10 +2,10 @@
 //! saved workspaces open it): the job in a line with Send to Cutter… (the Send window, C7.1, runs
 //! the cut), the selection's operation, the document's default operation and groups, the
 //! material and tool settings (cut and score side by side, C9.1), the rarely changed ones behind
-//! Advanced (C7.2). The mat and nesting are the Cutting Mat panel's ([`mat`]), contour, stencil
-//! and weeding the Cut Lines panel's ([`lines`]), the registration marks the Print & Cut panel's
-//! ([`print`]) (C12.2). It reads the engine's `cutting.*` queries and acts through `app.run`, as
-//! every panel does.
+//! Advanced (C7.2). Each feature has a panel of its own (C14.9, [`PANELS`]): the mat, tiles and
+//! nesting in [`mat`], contour, stencil and weeding in [`lines`], sketch fill, rhinestones and
+//! puzzles in [`patterns`], the registration marks in [`print`] (C12.2). It reads the engine's
+//! `cutting.*` queries and acts through `app.run`, as every panel does.
 
 use egui::Ui;
 use serde_json::{Value, json};
@@ -22,6 +22,31 @@ pub mod patterns;
 pub mod print;
 
 pub const ID: &str = "cutting";
+
+/// Every cutting panel (C14.9: one for each feature), in the Cutting workspace's order: Cut
+/// Settings, what shapes the cut, then what lays it on the mat.
+pub const PANELS: &[&str] = &[
+    ID,
+    lines::ID,
+    lines::STENCIL_ID,
+    lines::WEEDING_ID,
+    patterns::ID,
+    patterns::RHINESTONES_ID,
+    patterns::PUZZLE_ID,
+    mat::ID,
+    mat::TILES_ID,
+    mat::NESTING_ID,
+    print::ID,
+];
+
+/// Whether there is a document to cut; the line saying so when there isn't.
+pub(crate) fn has_document(app: &VectorcraftApp, ui: &mut Ui) -> bool {
+    let open = app.session.active().is_some();
+    if !open {
+        widgets::dim_label(ui, tl!("Open a document to cut it."));
+    }
+    open
+}
 
 pub(crate) const LABEL_W: f32 = 80.0;
 /// A number field in the tool table.
@@ -794,20 +819,20 @@ mod tests {
     fn every_cutting_panel_is_on_the_window_menu() {
         let app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let entries = crate::menus::menu_entries(&app);
-        for panel in [ID, lines::ID, patterns::ID, mat::ID, print::ID] {
+        for &panel in PANELS {
             assert!(
                 entries.iter().any(|e| e.command.as_deref() == Some("window.panel")
                     && e.params["panel"] == panel
-                    && e.path.first().map(String::as_str) == Some("Window")),
+                    && e.path.iter().map(String::as_str).take(2).eq(["Window", "Cutting"])),
                 "{panel} on the Window menu"
             );
             assert!(crate::state::ICON_PANEL_GROUPS.iter().any(|g| g.contains(&panel)), "{panel} in a group");
         }
     }
 
-    /// Window → Workspace → Cutting is the cutting mode: the mat shows, and the four cutting
-    /// panels are docked open under Layers (not in the icon column); another workspace hides the
-    /// mat.
+    /// Window → Workspace → Cutting is the cutting mode: the mat shows, Cut Settings is docked
+    /// open under Layers and each feature's panel is an icon beside it; another workspace hides
+    /// the mat.
     #[test]
     fn the_cutting_workspace_is_the_cutting_mode() {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
@@ -816,8 +841,10 @@ mod tests {
         assert!(app.ui.view.cutting);
         let layout = app.ui.docking.clone().expect("the workspace's own layout");
         assert!(crate::panel_docking::valid(&layout));
-        for panel in [ID, lines::ID, patterns::ID, mat::ID, print::ID] {
-            assert!(layout.contains(&panel.to_string()) && !crate::panel_docking::in_iconic_column(&layout, panel), "{panel} docked open");
+        assert!(layout.contains(&ID.to_string()) && !crate::panel_docking::in_iconic_column(&layout, ID), "Cut Settings docked open");
+        // C14.9: each feature an icon of its own, opened with a click.
+        for &panel in &PANELS[1..] {
+            assert!(crate::panel_docking::in_iconic_column(&layout, panel), "{panel} an icon");
         }
         assert_eq!(app.ui.dock_tab, crate::state::DockTab::Layers);
         // A Cutting workspace remembered before it had a layout of its own gets it too.

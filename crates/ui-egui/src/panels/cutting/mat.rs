@@ -1,7 +1,7 @@
 //! Fork: the Cutting Mat panel (C7.2): what is set once for a document, the mat, where the
-//! artboard lies on it and whether it goes off it, a mirrored cut and tiles (C14.7), and nesting
-//! (Print & Cut is its own panel since
-//! C12.2, [`super::print`]); only what asks for something is said (C9.1), and how the canvas shows
+//! artboard lies on it and whether it goes off it, and a mirrored cut; and, one panel each since
+//! C14.9, the Tiles panel (C14.7) and the Nesting panel (C8.5). Print & Cut is its own panel since
+//! C12.2 ([`super::print`]); only what asks for something is said (C9.1), and how the canvas shows
 //! the mat is in the View menu. Cut Settings (the parent module) holds what is set per object and per cut.
 
 use egui::Ui;
@@ -13,6 +13,8 @@ use crate::theme::Tokens;
 use crate::widgets;
 
 pub const ID: &str = "cuttingMat";
+pub const TILES_ID: &str = "cuttingTiles";
+pub const NESTING_ID: &str = "cuttingNesting";
 
 /// The mat, where the artboard lies on it, and whether it fits.
 fn mat_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
@@ -234,12 +236,20 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         return;
     };
     mat_rows(app, ui, &info);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Tiles"));
-    tile_rows(app, ui);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Nesting"));
-    nest_rows(app, ui);
+}
+
+/// The Tiles panel.
+pub fn show_tiles(app: &mut VectorcraftApp, ui: &mut Ui) {
+    if super::has_document(app, ui) {
+        tile_rows(app, ui);
+    }
+}
+
+/// The Nesting panel.
+pub fn show_nesting(app: &mut VectorcraftApp, ui: &mut Ui) {
+    if super::has_document(app, ui) {
+        nest_rows(app, ui);
+    }
 }
 
 #[cfg(test)]
@@ -247,6 +257,10 @@ mod tests {
     use super::*;
 
     fn texts(app: &mut VectorcraftApp, ctx: &egui::Context) -> Vec<String> {
+        panel_texts(app, ctx, show)
+    }
+
+    fn panel_texts(app: &mut VectorcraftApp, ctx: &egui::Context, show: fn(&mut VectorcraftApp, &mut Ui)) -> Vec<String> {
         let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 1600.0))), ..Default::default() };
         let mut out = ctx.run_ui(raw, |ui| show(app, ui));
         out.textures_delta.clear();
@@ -268,10 +282,13 @@ mod tests {
         assert!(texts(&mut app, &ctx).iter().any(|t| t == "Open a document to cut it."));
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
         let t = texts(&mut app, &ctx);
-        for label in ["Mat", "Orientation", "Offset", "Clip to Mat", "Cut Mirrored", "Tiles", "Overlap", "Tile onto Mats"] {
+        for label in ["Mat", "Orientation", "Offset", "Clip to Mat", "Cut Mirrored"] {
             assert!(t.iter().any(|x| x == label), "{label}: {t:?}");
         }
-        for gone in ["Force", "Send to Cutter…", "Cutting View", "Show Toolpaths", "The artboard fits the mat."] {
+        // C14.9: tiles and nesting are panels of their own.
+        let tiles = panel_texts(&mut app, &ctx, show_tiles);
+        assert!(tiles.iter().any(|x| x == "Overlap") && tiles.iter().any(|x| x == "Tile onto Mats"), "{tiles:?}");
+        for gone in ["Force", "Send to Cutter…", "Cutting View", "Show Toolpaths", "The artboard fits the mat.", "Overlap", "Nest All"] {
             assert!(!t.iter().any(|x| x == gone), "{gone}: {t:?}");
         }
         assert!(!t.iter().any(|x| x.starts_with("The cut area isn't")), "a hover note now: {t:?}");
@@ -286,14 +303,14 @@ mod tests {
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 1200, "height": 300})).unwrap();
         app.run("shape.rectangle", json!({"x": 1000, "y": 20, "width": 100, "height": 100})).unwrap();
-        assert!(texts(&mut app, &ctx).iter().any(|t| t == "Nest Selected"), "the new rectangle is selected");
+        assert!(panel_texts(&mut app, &ctx, show_nesting).iter().any(|t| t == "Nest Selected"), "the new rectangle is selected");
         app.run("select.none", json!({})).unwrap();
-        let t = texts(&mut app, &ctx);
+        let t = panel_texts(&mut app, &ctx, show_nesting);
         assert!(t.iter().any(|x| x == "Nest All") && t.iter().any(|x| x == "Turn Pieces") && t.iter().any(|x| x == "Gap"), "{t:?}");
         assert!(app.run("cutting.job", json!({})).is_err(), "off the mat");
         app.run("cutting.nest", json!({})).unwrap();
         assert!(app.run("cutting.job", json!({})).is_ok(), "nested onto it");
-        assert!(texts(&mut app, &ctx).iter().any(|x| x == "Copies"), "Replicate (C13.1)");
+        assert!(panel_texts(&mut app, &ctx, show_nesting).iter().any(|x| x == "Copies"), "Replicate (C13.1)");
         let r = app.run("cutting.nest", json!({"copies": 3})).unwrap();
         assert_eq!(super::nest_note(&r, false), (false, "4 nested".to_string()));
         let left = json!({"moved": [1], "unplaced": [], "copies": 1, "copiesLeftOut": 7});

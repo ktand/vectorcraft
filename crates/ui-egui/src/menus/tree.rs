@@ -644,9 +644,25 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
                 panel("Color Guide", "colorGuide"),
                 panel("Color Themes", "colorThemes"),
                 panel("CSS Properties", crate::panels::css_properties::ID),
-                panel("Cut Lines", crate::panels::cutting::lines::ID),
-                panel("Cut Settings", crate::panels::cutting::ID),
-                panel("Cutting Mat", crate::panels::cutting::mat::ID),
+                // Fork: the cutting panels, one for each feature (C14.9).
+                sub("Cutting", {
+                    use crate::panels::cutting::{ID, lines, mat, patterns, print};
+                    let mut cutting = vec![
+                        panel("Cut Settings", ID),
+                        panel("Contour", lines::ID),
+                        panel("Stencil", lines::STENCIL_ID),
+                        panel("Weeding", lines::WEEDING_ID),
+                        panel("Sketch Fill", patterns::ID),
+                        panel("Rhinestones", patterns::RHINESTONES_ID),
+                        panel("Puzzle", patterns::PUZZLE_ID),
+                        panel("Cutting Mat", mat::ID),
+                        panel("Tiles", mat::TILES_ID),
+                        panel("Nesting", mat::NESTING_ID),
+                        panel("Print & Cut", print::ID),
+                    ];
+                    sort_by_localized_label(&mut cutting, lang);
+                    cutting
+                }),
                 panel("Document Info", "docInfo"),
                 panel("Flattener Preview", crate::panels::flattener_preview::ID),
                 panel("Gradient", "gradient"),
@@ -661,8 +677,6 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
                 panel("Navigator", "navigator"),
                 panel("Pathfinder", "pathfinder"),
                 panel("Pattern Options", "patternOptions"),
-                panel("Patterns", crate::panels::cutting::patterns::ID),
-                panel("Print & Cut", crate::panels::cutting::print::ID),
                 panel("Properties", "properties"),
                 panel("Separations Preview", "separations"),
                 panel("Stroke", "stroke"),

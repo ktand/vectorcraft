@@ -188,7 +188,7 @@ Result:
 ## Step 11: nesting (C8.5)
 
 - A few shapes of different sizes (one with a hole), spread over and off the artboard. Cutting Mat tab ›
-  Nesting › **Nest All**: they come onto the mat close together from the top left, none closer than **Gap**. Cut
+  The Nesting panel › **Nest All**: they come onto the mat close together from the top left, none closer than **Gap**. Cut
   them on paper.
 
 Note: did the pieces come free whole? The smallest gap between neighbours, mm, against the Gap set.
@@ -197,7 +197,7 @@ Result:
 
 ## Step 12: more than one sheet (C8.6)
 
-- More pieces than one mat holds. Nesting › **Onto New Sheets**, **Nest All**: Sheet 2 (and more) appear to the
+- More pieces than one mat holds. The Nesting panel › **Onto New Sheets**, **Nest All**: Sheet 2 (and more) appear to the
   right of the artboard. Send window: "Sheet 1 of 2"; cut it, unload, load a fresh sheet, **Next Sheet**, Send:
   the second sheet's pieces are cut where the preview shows them, from the mat's origin as for the first.
 
