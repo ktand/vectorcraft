@@ -556,6 +556,12 @@ pub(crate) fn tool_settings(app: &mut VectorcraftApp, ui: &mut Ui) {
     let Ok(info) = app.session.execute("cutting.settings.get", &json!({})) else { return };
     widgets::section_header(ui, tl!("Tool Settings"));
     tool_rows(app, ui, &info);
+    // C14.7: for material cut from the back, such as heat transfer vinyl (C14.11: here, with the
+    // material it is for).
+    let mirror = info["settings"]["mirror"].as_bool() == Some(true);
+    if widgets::check(ui, tl!("Cut Mirrored"), mirror, true) {
+        set(app, json!({ "mirror": !mirror }));
+    }
     machine_advanced_rows(app, ui, &info);
 }
 

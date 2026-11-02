@@ -48,9 +48,6 @@ In the **Cutting Mat** panel:
 - **Offset:** moves the artboard on the mat, in mm from the cut area's top-left corner.
 - **Clip to Mat:** lines that run off the cut area are cut up to its edge. Without it, a job that runs off the
   mat isn't sent.
-- **Cut Mirrored:** cuts the design flipped left to right, for material cut from the back such as heat transfer
-  vinyl (iron-on). Your art stays as you drew it; Show Toolpaths shows the mirrored lines. Print & Cut is never
-  cut mirrored (the marks are read as printed): print the art mirrored instead.
 
 If the artboard runs off the mat, the panel says so in red. It says nothing while all is well.
 
@@ -128,7 +125,7 @@ material, the pause says what to load ("Paused before Gold. Load Cardstock, then
 ### The tool table
 
 In the Send window (**Send to Cutter…**), under **Tool Settings**: the **Material**, then a table with a **Cut**
-column and a **Score** column. Hover a row's name for its range. They are there, not in Cut Settings, because
+column and a **Score** column, then **Cut Mirrored**. Hover a row's name for its range. They are there, not in Cut Settings, because
 they belong to what is on the mat today: test, adjust, test again, then send, without leaving the window.
 
 | Row | What it sets |
@@ -139,6 +136,10 @@ they belong to what is on the mat today: test, adjust, test again, then send, wi
 | **Passes** | How many times each line is cut (1–10). |
 | **Overcut** | How far a closed shape's cut runs on past its start, so it lifts out cleanly. |
 | **Blade depth** | The AutoBlade's depth (1–10; 0 leaves the machine's own). Other tools show "—". |
+
+**Cut Mirrored** cuts the design flipped left to right, for material cut from the back such as heat transfer
+vinyl (iron-on). Your art stays as you drew it; Show Toolpaths shows the mirrored lines. Print & Cut is never
+cut mirrored (the marks are read as printed): print the art mirrored instead.
 
 The Send window's **Advanced** (closed at first, under the table) holds what most cuts leave alone: **Accel.**
 (gentler or faster moves), **Corners** (the blade runs a little past each sharp corner), **Blade offset** (how far
