@@ -217,6 +217,7 @@ used for behaviour, not kept); what falls short, then what it adds that suits us
 | C14.9 | **A panel for each feature** (owner, 2026-11-02: separate, as the maker's app keeps them) — **done**: Cut Lines, Patterns and Cutting Mat split into Contour, Stencil, Weeding, Sketch Fill, Rhinestones, Puzzle, Cutting Mat, Tiles and Nesting (`panels::cutting::PANELS`; the old ids kept by Contour, Sketch Fill and Cutting Mat, so saved workspaces still open); the Cutting workspace docks Cut Settings under Layers and puts each feature in a column of icons beside it, a click opening it (six tabs in one group didn't fit their names); the Window menu has them under Window › Cutting | Frame tests: each panel shows only its feature; every cutting panel on Window › Cutting and in the icon group; the workspace docks Cut Settings open and each feature as an icon; screenshot: the strip, and Puzzle opened from it |
 | C14.10 | **The mat first in the strip** (owner, 2026-11-02) — **done**: `PANELS` puts Cutting Mat straight after Cut Settings, so it is the first icon of the Cutting workspace's strip (a saved Cutting layout keeps its order until Window › Workspace › Reset Cutting) | The workspace test: Cut Settings docked, every feature an icon |
 | C14.11 | **Cut Mirrored in the Send window** (owner, 2026-11-02) — **done**: the switch moves from the Cutting Mat panel to the Send window's Tool Settings, under the tool table: it goes with the material on the mat (heat transfer vinyl face down), not with the mat; the setting stays the document's `mirror` | Frame tests: the mat panel has no Cut Mirrored; the window has it after Force and before the test cut |
+| C14.12 | **Ask whether to mirror** (owner, 2026-11-02) | A material can be marked as cut from the back (`mirror` in the material; the built-in heat transfer vinyl ones marked, Save as Material keeps it); sending with such a material asks **Cut Mirrored** or **As Is** before anything moves (Cut Mirrored the default), the answer setting Cut Mirrored for that send; never with Print & Cut (never cut mirrored), not for a test cut | Unit: the material's mark read, written and kept; frame tests: the dialog shows only for a marked material, not with Print & Cut, not for a test cut; send test: As Is cuts unmirrored with a marked material |
 
 Later (outline; size later):
 
@@ -264,6 +265,21 @@ for the puzzle (C13.5); the geometry is our own.
 | C16.1 | **One fold** in `cutting::popup`: from the selected design and a fold line across it, the card outline, the fold lines as dashes (cut and gap `dashPitchMm`, the perforation C14.4 already cuts) and the struts (`strutWidthMm` wide) that lift the design, the design joined along the fold over `baseWidthPct` of its width; `cutting.popup` adds one group, remade in place with new settings as the puzzle is; a Pop Up panel in the icon strip (C14.9) with Base Width, Strut Width and Dash Pitch | Unit: struts and folds from a square and a line; a fold line that misses the design refused; property: nothing outside the card; the panel's frame test |
 | C16.2 | **Several fold lines**: each fold line a layer of its own, standing up in turn as the card opens; struts placed so the layers don't collide when folded | Unit: two folds give two layers, each joined and lifted; folds that cross refused |
 | C16.3 | **The preview**: the folds drawn as score lines already are, and a check that the card fits the mat | Frame test; screenshot |
+
+## Phase 17 — More of the machine (planned)
+
+Owner, 2026-11-02: planned, not yet sized; each needs the machine for its last step, and its facts come from
+public sources only (the maker's manuals and help pages, the protocol notes' sources), recorded in
+`protocol-silhouette.md` in our own words. Agents build up to the USB write against the virtual cutter; a person
+checks the rest with a checklist in `hardware-validation.md`.
+
+| ID | Task | Tests |
+|---|---|---|
+| C17.1 | **Cutting without a mat (roll feed)**: a "No mat" choice (the `TG` code 0 the notes have) with the material's width and a length up to the machine's (the notes' sizes); the preview a strip, not a mat; nesting, tiles and Clip to Mat on the strip; the Cameo 4's cross-cutter at the end, if its command is public | Encoder goldens for a no-mat job; the length refused past the machine's; frame tests; hardware checklist: a 500 mm strip of vinyl |
+| C17.2 | **Bluetooth**: the Cameo 4's wireless link as a second transport beside USB (`cutter` transport trait), found with Find Cutters, chosen in the Send window; the same bytes as USB | Transport tests against a fake link; hardware checklist: the status query and a square over Bluetooth |
+| C17.3 | **PixScan**: line the cut up with a photo of the mat: find the mat's printed markers in the photo, correct the lens and perspective, place the image on the mat for tracing or for cutting round art already on it | Unit: markers found and the image placed in synthetic photos drawn from our own mat description; hardware checklist with the maker's PixScan mat (deferred in Phase 13: it needs that mat) |
+| C17.4 | **Specialty tools on the machine**: the tool table's Kraft blade, rotary blade, punch, deep-point blade and pen checked on the Cameo 4 (holder, force, speed, depth), and the tools it doesn't list yet (embossing, foil/heat pen, engraving) added from the maker's public tool list | Encoder goldens per tool; hardware checklist per tool the owner has |
+| C17.5 | **Other machines**: the Cameo 3, 4 Plus/Pro, 5 and Portrait models (the notes' USB ids and sizes) as devices of their own, each with its widths, mats and tools; Curio-type machines (embossing, another bed) noted for later | Device tests per model; a checklist row per model someone owns |
 
 ## How agents should work on this
 
