@@ -184,6 +184,12 @@ starting points only: make a test cut before trusting them.
 - **Update "name"** saves your changes into one of your own materials in one click.
 - **Delete** removes one of your own.
 
+Some materials are cut from the back, such as **Heat Transfer Vinyl** (iron-on): choosing one turns **Cut
+Mirrored** on, and choosing another turns it off. When you press **Send** with such a material, a dialog asks
+**Cut Mirrored** (the default, also Enter) or **As Is** before anything moves; **Cancel** sends nothing. It
+doesn't ask with Print & Cut (never cut mirrored) or for a test cut. A material you save while Cut Mirrored is
+on is marked as cut from the back too.
+
 Your materials are kept in `%APPDATA%\VectorCraft\Cutting\Materials.json` and are there in every document.
 
 ### The test cut

@@ -2,7 +2,8 @@
 //! starting points (`vectorcraft_cutjob::builtin_materials`); the user's are kept for the process
 //! and, once the app [`attach`]es a file (next to the preferences), in it, so they are there next
 //! time. Applying one to the document sets its tool settings and remembers its name; the
-//! document's settings are then "changed" once a number is set by hand.
+//! document's settings are then "changed" once a number is set by hand. A material cut from the
+//! back (C14.12) turns Cut Mirrored on when applied, and one saved while it is on is marked so.
 
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
@@ -80,7 +81,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Materials",
             [],
             None,
-            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since}",
+            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, mirror: cut from the back (Send asks whether to cut mirrored), cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since}",
             has_doc,
             list
         ),
@@ -89,7 +90,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Apply Cutting Material",
             [],
             None,
-            "{name} set the document's cut and score tool settings to the material's, one undo step → as cutting.materials",
+            "{name} set the document's cut and score tool settings to the material's, and Cut Mirrored to whether it is cut from the back, one undo step → as cutting.materials",
             has_doc,
             apply
         ),
@@ -98,7 +99,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save Cutting Material",
             [],
             None,
-            "{name} keep the document's cut and score tool settings as the user's material `name` (replacing one of that name; a built-in name is refused), next to the preferences, and name it as the document's material → as cutting.materials",
+            "{name} keep the document's cut and score tool settings as the user's material `name` (replacing one of that name; a built-in name is refused; cut from the back when Cut Mirrored is on), next to the preferences, and name it as the document's material → as cutting.materials",
             has_doc,
             save_cmd
         ),
@@ -116,8 +117,10 @@ pub fn specs() -> Vec<CommandSpec> {
 
 fn listing(s: &Session) -> Result<Value> {
     let settings = vectorcraft_cutting::settings(&s.doc()?.doc);
-    let materials: Vec<Value> =
-        all().iter().map(|m| json!({"name": m.name, "builtin": m.builtin, "cut": m.cut.to_value(), "score": m.score.to_value()})).collect();
+    let materials: Vec<Value> = all()
+        .iter()
+        .map(|m| json!({"name": m.name, "builtin": m.builtin, "mirror": m.mirror, "cut": m.cut.to_value(), "score": m.score.to_value()}))
+        .collect();
     Ok(json!({"materials": materials, "current": settings.material, "changed": changed(&settings)}))
 }
 
@@ -136,6 +139,7 @@ fn set_material(s: &mut Session, m: &Material, label: &str) -> Result<()> {
     settings.operations.cut = ToolSettings { extra: cut_extra, tool: cut_tool, ..m.cut.clone() };
     settings.operations.score = ToolSettings { extra: score_extra, tool: score_tool, ..m.score.clone() };
     settings.material = Some(m.name.clone());
+    settings.mirror = m.mirror;
     if settings != before {
         s.edit(label, |d, _| {
             vectorcraft_cutting::set_settings(d, &settings);
@@ -170,6 +174,7 @@ fn save_cmd(s: &mut Session, p: &Value) -> Result<Value> {
         cut: ToolSettings { tool: None, ..settings.operations.cut.clone() },
         score: ToolSettings { tool: None, ..settings.operations.score.clone() },
         builtin: false,
+        mirror: settings.mirror,
     };
     {
         let mut st = store().lock().map_err(|_| bad(CMD, "the materials are damaged"))?;

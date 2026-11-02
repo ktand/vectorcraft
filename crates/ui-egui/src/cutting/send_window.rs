@@ -61,6 +61,63 @@ struct Machines {
     /// `cutting.tools`' answer or why there is none. Asked once a machine is found, and again on
     /// Check Tools: asking is the machine's I/O, not each frame's.
     tools: Option<(String, Result<Value, String>)>,
+    /// C14.12: Send was pressed with a material cut from the back: the device to send to and the
+    /// material, until Cut Mirrored or As Is is chosen.
+    ask_mirror: Option<(String, String)>,
+}
+
+/// The material the document is cut with, when it is cut from the back and the job isn't Print &
+/// Cut (never cut mirrored, C14.7): Send asks whether to cut mirrored (C14.12).
+fn from_the_back(app: &mut VectorcraftApp) -> Option<String> {
+    let listed = app.session.execute("cutting.materials", &json!({})).ok()?;
+    let current = listed["current"].as_str()?;
+    let print = app.session.execute("cutting.settings.get", &json!({})).ok()?["settings"]["printAndCut"].as_bool() == Some(true);
+    let marked = listed["materials"].as_array()?.iter().any(|m| m["name"] == current && m["mirror"] == json!(true));
+    (marked && !print).then(|| current.to_string())
+}
+
+/// Send the job to `device`; what it said goes in `m.note`.
+fn send(app: &mut VectorcraftApp, m: &mut Machines, device: &str) {
+    m.note = Some(match app.run("cutting.send", json!({ "device": device })) {
+        Ok(r) => (false, r["warnings"].as_array().map(|w| w.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" ")).unwrap_or_default()),
+        Err(e) => (true, e),
+    });
+}
+
+/// C14.12: asked before a send with a material cut from the back: Cut Mirrored (the default) or
+/// As Is sets Cut Mirrored and sends; Cancel, Escape or a click outside sends nothing.
+fn ask_mirror_dialog(app: &mut VectorcraftApp, ctx: &egui::Context, m: &mut Machines) {
+    let Some((device, material)) = m.ask_mirror.clone() else { return };
+    let modal = egui::Modal::new(egui::Id::unique("cutting-ask-mirror")).show(ctx, |ui| {
+        ui.set_max_width(340.0);
+        ui.label(egui::RichText::new(tl!("Cut mirrored?")).strong());
+        ui.label(format!("{material}: {}", tl!("cut from the back, so the design is usually cut mirrored.")));
+        let mut answer = None;
+        ui.horizontal(|ui| {
+            if widgets::primary_button_enabled(ui, tl!("Cut Mirrored"), true).clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                answer = Some(Some(true));
+            }
+            if ui.button(tl!("As Is")).clicked() {
+                answer = Some(Some(false));
+            }
+            if ui.button(tl!("Cancel")).clicked() {
+                answer = Some(None);
+            }
+        });
+        answer
+    });
+    let answer = match modal.inner {
+        Some(a) => a,
+        None if modal.should_close() => None,
+        None => return,
+    };
+    m.ask_mirror = None;
+    let Some(mirror) = answer else { return };
+    if let Err(e) = app.run("cutting.settings.set", json!({ "mirror": mirror })) {
+        m.note = Some((true, e));
+        return;
+    }
+    send(app, m, &device);
 }
 
 /// `cutting.tools`' holders as the driver reads them, holder 1 first.
@@ -512,12 +569,10 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     ui.horizontal(|ui| {
         if widgets::primary_button_enabled(ui, "Send", !found.is_empty() && has_job && !sending).clicked() {
             let device = found.get(m.chosen).or(found.first()).map(|(id, _)| id.clone()).unwrap_or_default();
-            m.note = Some(match app.run("cutting.send", json!({ "device": device })) {
-                Ok(r) => {
-                    (false, r["warnings"].as_array().map(|w| w.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" ")).unwrap_or_default())
-                }
-                Err(e) => (true, e),
-            });
+            match from_the_back(app) {
+                Some(material) => m.ask_mirror = Some((device, material)),
+                None => send(app, &mut m, &device),
+            }
         }
         if waiting.is_some() && ui.button(tl!("Continue")).clicked() {
             let _ = app.run("cutting.continue", json!({}));
@@ -530,6 +585,7 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
             m.chosen = 0;
         }
     });
+    ask_mirror_dialog(app, &ctx, &mut m);
     if let Some((device, _)) = found.get(m.chosen).or(found.first()) {
         let device = device.clone();
         tools_rows(app, ui, &mut m, &device, sending);
@@ -779,5 +835,61 @@ mod tests {
         // C8.8: and can be sent again, from this document.
         assert!(texts.iter().any(|t| t == "Send Again"), "{texts:?}");
         vectorcraft_cutter::registry::install(None);
+    }
+
+    /// C14.12: Send asks whether to cut mirrored only with a material cut from the back, and never
+    /// with Print & Cut; Cut Mirrored and As Is set the switch before the send, Cancel sends nothing.
+    #[test]
+    fn a_material_cut_from_the_back_asks_whether_to_mirror() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        app.run("cutting.material.apply", json!({"name": "Vinyl"})).unwrap();
+        assert_eq!(from_the_back(&mut app), None, "plain vinyl doesn't ask");
+        app.run("cutting.material.apply", json!({"name": "Heat Transfer Vinyl"})).unwrap();
+        assert_eq!(from_the_back(&mut app).as_deref(), Some("Heat Transfer Vinyl"));
+        app.run("cutting.settings.set", json!({"printAndCut": true})).unwrap();
+        assert_eq!(from_the_back(&mut app), None, "Print & Cut is never cut mirrored");
+        app.run("cutting.settings.set", json!({"printAndCut": false})).unwrap();
+
+        // The dialog shows while the question is open, with the material's name.
+        let ctx = egui::Context::default();
+        let mut m = Machines { ask_mirror: Some(("no-such-device".into(), "Heat Transfer Vinyl".into())), ..Default::default() };
+        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))), ..Default::default() };
+        // The first frame sizes the dialog unseen; the second shows it.
+        ctx.run_ui(raw.clone(), |ui| ask_mirror_dialog(&mut app, ui.ctx(), &mut m)).textures_delta.clear();
+        let mut out = ctx.run_ui(raw, |ui| ask_mirror_dialog(&mut app, ui.ctx(), &mut m));
+        out.textures_delta.clear();
+        let texts: Vec<String> = out
+            .shapes
+            .iter()
+            .filter_map(|c| match &c.shape {
+                egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect();
+        for label in ["Cut mirrored?", "Cut Mirrored", "As Is", "Cancel"] {
+            assert!(texts.iter().any(|t| t == label), "{label}: {texts:?}");
+        }
+        assert!(texts.iter().any(|t| t.starts_with("Heat Transfer Vinyl:")), "{texts:?}");
+        assert!(m.ask_mirror.is_some(), "still asking");
+
+        // Enter is Cut Mirrored: the switch set, the send tried (to a device that isn't there).
+        app.run("cutting.settings.set", json!({"mirror": false})).unwrap();
+        let raw = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))),
+            events: vec![egui::Event::Key {
+                key: egui::Key::Enter,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        };
+        ctx.run_ui(raw, |ui| ask_mirror_dialog(&mut app, ui.ctx(), &mut m)).textures_delta.clear();
+        assert!(m.ask_mirror.is_none());
+        let settings = app.session.execute("cutting.settings.get", &json!({})).unwrap();
+        assert_eq!(settings["settings"]["mirror"], json!(true));
+        assert!(m.note.as_ref().is_some_and(|(bad, _)| *bad), "the send was tried: {:?}", m.note);
     }
 }
