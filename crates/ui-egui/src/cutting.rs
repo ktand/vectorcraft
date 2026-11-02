@@ -35,8 +35,8 @@ struct Cached {
 /// Libraries (Layers in front: a cut by layer is set up there) and gains the cutting panels below
 /// it, taken out of the icon column: Cut Settings, in the height Layers leaves. Each feature's
 /// panel (C14.9) is an icon of its own in a column of icons beside it, opened with a click, as
-/// the cutting apps keep theirs: what shapes the cut (contour to puzzle), then what lays it on
-/// the mat (the mat to Print & Cut).
+/// the cutting apps keep theirs, in [`crate::panels::cutting::PANELS`]' order: the mat, what
+/// shapes the cut (contour to puzzle), then what lays it on the mat (tiles to Print & Cut).
 pub(crate) fn workspace_layout() -> craft_ui::docking::Layout<String> {
     use craft_ui::docking::{Column, Group, Node};
     let ui = crate::state::UiState { dock_tab: crate::state::DockTab::Layers, ..Default::default() };
