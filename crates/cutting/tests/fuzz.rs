@@ -240,7 +240,7 @@ fn document(objs: &[Obj], settings: &Value) -> Document {
 fn document_with(objs: &[Obj], layers: &[Layer], settings: &Value) -> Document {
     let mut d = Document::new(500.0, 500.0);
     let art = Node::path(d.alloc_id(), PathData::from_bezpath(&bez(&[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)], true, false)), Appearance::default());
-    d.symbols.push(Symbol { name: "s".into(), art: Arc::new(art) });
+    d.symbols.push(Symbol { name: "s".into(), art: Arc::new(art), dynamic: false });
     let mut targets: Vec<NodeId> = vec![d.layers[0].id];
     for l in layers {
         let mut n = Node::layer(d.alloc_id(), &l.name, vectorcraft_doc::LayerColor::Preset(1));

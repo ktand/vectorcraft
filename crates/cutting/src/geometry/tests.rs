@@ -98,7 +98,7 @@ fn type_is_cut_along_its_glyphs() {
 fn a_symbol_instance_is_cut_along_its_placed_art() {
     let mut d = Document::new(200.0, 200.0);
     let art = square(&mut d, 0.0, 0.0, 10.0);
-    d.symbols.push(Symbol { name: "dot".into(), art: Arc::new(art) });
+    d.symbols.push(Symbol { name: "dot".into(), art: Arc::new(art), dynamic: false });
     let layer = d.layers[0].id;
     let inst = Node::new(d.alloc_id(), NodeKind::SymbolInstance { symbol: "dot".into(), xf: Affine::translate((100.0, 50.0)) });
     let id = d.insert(Some(layer), usize::MAX, inst).unwrap();
@@ -128,7 +128,7 @@ fn hidden_members_of_a_symbols_art_arent_cut() {
     let mut hidden = square(&mut d, 20.0, 0.0, 10.0);
     hidden.visible = false;
     let g = Node::group(d.alloc_id(), vec![Arc::new(shown), Arc::new(hidden)]);
-    d.symbols.push(Symbol { name: "pair".into(), art: Arc::new(g) });
+    d.symbols.push(Symbol { name: "pair".into(), art: Arc::new(g), dynamic: false });
     let layer = d.layers[0].id;
     let inst = Node::new(d.alloc_id(), NodeKind::SymbolInstance { symbol: "pair".into(), xf: Affine::IDENTITY });
     let id = d.insert(Some(layer), usize::MAX, inst).unwrap();
