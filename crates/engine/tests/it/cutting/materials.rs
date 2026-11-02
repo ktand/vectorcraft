@@ -23,7 +23,7 @@ fn materials_are_applied_saved_and_kept() {
     let mut s = Session::new();
     s.execute("file.new", &json!({"width": 300, "height": 300})).unwrap();
     let m = materials(&mut s);
-    assert_eq!(names(&m), ["Paper (light)", "Cardstock", "Vinyl"], "the starting points, none of the user's yet");
+    assert_eq!(names(&m), ["Paper (light)", "Cardstock", "Vinyl", "Heat Transfer Vinyl"], "the starting points, none of the user's yet");
     assert_eq!((m["current"].clone(), m["changed"].clone()), (Value::Null, json!(false)));
 
     // Apply: the tool settings become the material's, in one undo step.
@@ -61,6 +61,21 @@ fn materials_are_applied_saved_and_kept() {
     s.execute("cutting.material.apply", &json!({"name": "My card"})).unwrap();
     let cut = s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"].clone();
     assert_eq!((cut["depth"].clone(), cut["bladeOffsetMm"].clone()), (json!(4), json!(0.25)));
+
+    // C14.12: a material cut from the back turns Cut Mirrored on, another turns it off; one saved
+    // while it is on is marked so, and kept so.
+    let mirror = |s: &mut Session| s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["mirror"].clone();
+    let r = s.execute("cutting.material.apply", &json!({"name": "Heat Transfer Vinyl"})).unwrap();
+    assert!(r["materials"].as_array().unwrap().iter().any(|m| m["name"] == "Heat Transfer Vinyl" && m["mirror"] == json!(true)));
+    assert_eq!(mirror(&mut s), json!(true));
+    s.execute("cutting.material.save", &json!({"name": "My iron-on"})).unwrap();
+    let kept: Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    assert!(kept.as_array().unwrap().iter().any(|m| m["name"] == "My iron-on" && m["mirror"] == json!(true)), "{kept}");
+    s.execute("cutting.material.apply", &json!({"name": "Cardstock"})).unwrap();
+    assert_ne!(mirror(&mut s), json!(true));
+    s.execute("cutting.material.apply", &json!({"name": "My iron-on"})).unwrap();
+    assert_eq!(mirror(&mut s), json!(true));
+    s.execute("cutting.material.delete", &json!({"name": "My iron-on"})).unwrap();
 
     // Built-in names and unknown ones are refused; the user's own can go.
     assert!(s.execute("cutting.material.save", &json!({"name": "Vinyl"})).is_err());

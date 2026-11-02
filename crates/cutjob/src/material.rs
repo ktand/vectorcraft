@@ -22,6 +22,9 @@ pub struct Material {
     pub score: ToolSettings,
     /// Built in (a starting point that can't be changed or deleted), else the user's.
     pub builtin: bool,
+    /// Cut from the back, as heat transfer vinyl is (C14.12): applying it turns Cut Mirrored on,
+    /// and a send asks whether to cut mirrored or as is.
+    pub mirror: bool,
 }
 
 fn tool(force: f64, speed_mm_s: f64, passes: u8) -> ToolSettings {
@@ -30,11 +33,12 @@ fn tool(force: f64, speed_mm_s: f64, passes: u8) -> ToolSettings {
 
 /// The starting points built in: light settings to test from, not tested values.
 pub fn builtin_materials() -> Vec<Material> {
-    let m = |name: &str, cut, score| Material { name: name.into(), cut, score, builtin: true };
+    let m = |name: &str, cut, score| Material { name: name.into(), cut, score, builtin: true, mirror: false };
     vec![
         m("Paper (light)", tool(0.2, 100.0, 1), tool(0.08, 100.0, 1)),
         m("Cardstock", tool(0.45, 80.0, 2), tool(0.15, 100.0, 1)),
         m("Vinyl", tool(0.25, 100.0, 1), tool(0.1, 100.0, 1)),
+        Material { mirror: true, ..m("Heat Transfer Vinyl", tool(0.3, 100.0, 1), tool(0.1, 100.0, 1)) },
     ]
 }
 
@@ -47,7 +51,11 @@ pub fn valid_name(name: &str) -> Option<String> {
 impl Material {
     /// As kept in the user's file.
     pub fn to_value(&self) -> Value {
-        json!({"name": self.name, "cut": self.cut.to_value(), "score": self.score.to_value()})
+        let mut v = json!({"name": self.name, "cut": self.cut.to_value(), "score": self.score.to_value()});
+        if let (true, Some(m)) = (self.mirror, v.as_object_mut()) {
+            m.insert("mirror".into(), json!(true));
+        }
+        v
     }
 
     /// One read from the user's file (leniently, as the document's settings are), `None` when it
@@ -61,6 +69,7 @@ impl Material {
             cut: ToolSettings::read_lenient(object(m, "cut"), defaults.cut),
             score: ToolSettings::read_lenient(object(m, "score"), defaults.score),
             builtin: false,
+            mirror: m.get("mirror").and_then(Value::as_bool) == Some(true),
         })
     }
 }
@@ -128,16 +137,21 @@ mod tests {
 
     #[test]
     fn materials_round_trip_through_their_file() {
-        let user = Material { name: "My vinyl".into(), cut: tool(0.3, 90.0, 1), score: tool(0.1, 100.0, 1), builtin: false };
+        let user = Material { name: "My vinyl".into(), cut: tool(0.3, 90.0, 1), score: tool(0.1, 100.0, 1), builtin: false, mirror: false };
         let file = json!([user.to_value()]);
-        assert_eq!(read_materials(&file), [user]);
+        assert_eq!(read_materials(&file), std::slice::from_ref(&user));
+        assert!(file[0].get("mirror").is_none(), "only a mark is written");
+        // C14.12: cut from the back, kept.
+        let iron_on = Material { name: "My iron-on".into(), mirror: true, ..user };
+        assert_eq!(read_materials(&json!([iron_on.to_value()])), [iron_on]);
+        assert!(!read_materials(&json!([{"name": "x", "mirror": "yes"}]))[0].mirror, "read leniently");
     }
 
     /// C5.5: the blade's setup is kept with the material, as the force and speed are.
     #[test]
     fn the_blade_setup_is_kept() {
         let cut = ToolSettings { depth: Some(4), accel: Some(2), corner_overcut_mm: 0.3, blade_offset_mm: Some(0.25), ..tool(0.3, 90.0, 1) };
-        let user = Material { name: "Thick card".into(), cut, score: tool(0.1, 100.0, 1), builtin: false };
+        let user = Material { name: "Thick card".into(), cut, score: tool(0.1, 100.0, 1), builtin: false, mirror: false };
         let back = read_materials(&json!([user.to_value()]));
         assert_eq!(back, std::slice::from_ref(&user));
         assert!(back[0].cut.same_setup(&user.cut));
@@ -183,6 +197,8 @@ mod tests {
             assert!(m.builtin && m.cut.problem().is_none() && m.score.problem().is_none());
             assert!(m.score.force < m.cut.force, "{}: scoring lighter than cutting", m.name);
         }
+        let marked: Vec<String> = builtin_materials().into_iter().filter(|m| m.mirror).map(|m| m.name).collect();
+        assert_eq!(marked, ["Heat Transfer Vinyl"], "C14.12");
         assert_eq!(valid_name(&"x".repeat(MAX_NAME + 1)), None);
         assert_eq!(valid_name("  a  ").as_deref(), Some("a"));
     }
