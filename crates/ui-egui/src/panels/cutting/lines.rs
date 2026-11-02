@@ -1,7 +1,7 @@
-//! Fork: the Cut Lines panel (C12.2): what adds cut lines to cut the art out, taken out of Cut
-//! Settings: a contour round the art (C11.1), stencil bridges (C11.5), and weeding's box and lines
-//! (C8.2, C8.3). The designs made from the art (sketch fill, rhinestones, puzzles) are the
-//! Patterns panel's ([`super::patterns`], C14.0).
+//! Fork: the panels that add cut lines to cut the art out (C12.2, one panel each since C14.9): the
+//! Contour panel, a contour round the art (C11.1); the Stencil panel, stencil bridges (C11.5); and
+//! the Weeding panel, weeding's box and lines (C8.2, C8.3). The designs made from the art (sketch
+//! fill, rhinestones, puzzles) are in [`super::patterns`].
 
 use egui::Ui;
 use serde_json::{Value, json};
@@ -11,7 +11,10 @@ use crate::VectorcraftApp;
 use crate::theme::Tokens;
 use crate::widgets;
 
+/// The Contour panel: the id is the one Cut Lines had, so a saved workspace still opens it.
 pub const ID: &str = "cuttingLines";
+pub const STENCIL_ID: &str = "cuttingStencil";
+pub const WEEDING_ID: &str = "cuttingWeeding";
 
 /// Weeding (C8.2, C8.3): a box round the design and lines from it in to the design, cut by the
 /// job (not added to the art), so vinyl's waste comes away easily.
@@ -143,18 +146,26 @@ fn bridge_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     crate::panels::set_pstate(&ctx, "cutting-bridges", c);
 }
 
+/// The Contour panel.
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
+    if super::has_document(app, ui) {
+        contour_rows(app, ui);
+    }
+}
+
+/// The Stencil panel.
+pub fn show_stencil(app: &mut VectorcraftApp, ui: &mut Ui) {
+    if super::has_document(app, ui) {
+        bridge_rows(app, ui);
+    }
+}
+
+/// The Weeding panel.
+pub fn show_weeding(app: &mut VectorcraftApp, ui: &mut Ui) {
     let Ok(info) = app.session.execute("cutting.settings.get", &json!({})) else {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
         return;
     };
-    widgets::section_header(ui, tl!("Contour"));
-    contour_rows(app, ui);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Stencil"));
-    bridge_rows(app, ui);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Weeding"));
     weeding_rows(app, ui, &info);
 }
 
@@ -162,7 +173,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
 mod tests {
     use super::*;
 
-    fn panel_texts(app: &mut VectorcraftApp, ctx: &egui::Context) -> Vec<String> {
+    fn panel_texts(app: &mut VectorcraftApp, ctx: &egui::Context, show: fn(&mut VectorcraftApp, &mut Ui)) -> Vec<String> {
         let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 1600.0))), ..Default::default() };
         let mut out = ctx.run_ui(raw, |ui| show(app, ui));
         out.textures_delta.clear();
@@ -181,11 +192,11 @@ mod tests {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
+        let texts = panel_texts(&mut app, &ctx, show_weeding);
         assert!(texts.iter().any(|t| t == "Weed Box") && texts.iter().any(|t| t == "Weed Lines"), "{texts:?}");
         assert!(!texts.iter().any(|t| t == "Margin" || t == "Every"), "off: no numbers");
         app.run("cutting.settings.set", json!({"weedBox": true, "weedLines": true, "weedMarginMm": 5})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
+        let texts = panel_texts(&mut app, &ctx, show_weeding);
         assert!(texts.iter().any(|t| t == "Margin") && texts.iter().any(|t| t == "Every"), "{texts:?}");
         assert!(app.run("cutting.settings.set", json!({"weedMarginMm": 80})).is_err(), "out of range");
     }
@@ -196,11 +207,8 @@ mod tests {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
-        assert!(
-            texts.iter().any(|t| t == "Contour") && texts.iter().any(|t| t == "Add Contour") && texts.iter().any(|t| t == "Keep Holes"),
-            "{texts:?}"
-        );
+        let texts = panel_texts(&mut app, &ctx, show);
+        assert!(texts.iter().any(|t| t == "Add Contour") && texts.iter().any(|t| t == "Keep Holes"), "{texts:?}");
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
         app.run("cutting.contour", json!({"offsetMm": 2})).unwrap();
         assert!(app.session.active().unwrap().doc.layers.iter().any(|l| l.name.as_deref() == Some("Cut Contour")));
@@ -212,11 +220,8 @@ mod tests {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
-        assert!(
-            texts.iter().any(|t| t == "Stencil") && texts.iter().any(|t| t == "Add Bridges") && texts.iter().any(|t| t == "Vertical"),
-            "{texts:?}"
-        );
+        let texts = panel_texts(&mut app, &ctx, show_stencil);
+        assert!(texts.iter().any(|t| t == "Add Bridges") && texts.iter().any(|t| t == "Vertical"), "{texts:?}");
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
         let r = app.run("cutting.bridges", json!({})).unwrap();
         assert_eq!(r["bridges"], json!(0), "a square has no hole");

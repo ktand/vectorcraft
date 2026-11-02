@@ -33,20 +33,15 @@ struct Cached {
 
 /// The Cutting workspace's panels (C7.2): the dock's main column keeps Properties · Layers ·
 /// Libraries (Layers in front: a cut by layer is set up there) and gains the cutting panels below
-/// it, taken out of the icon column, so the settings show without opening anything: Cut Settings,
-/// Cut Lines as the tabs of one group, Cutting Mat and Print & Cut of another below it (C9.1,
-/// C12.2: four tabs in one group don't fit their names), sharing the height Layers leaves.
+/// it, taken out of the icon column: Cut Settings, in the height Layers leaves. Each feature's
+/// panel (C14.9) is an icon of its own in a column of icons beside it, opened with a click, as
+/// the cutting apps keep theirs: what shapes the cut (contour to puzzle), then what lays it on
+/// the mat (the mat to Print & Cut).
 pub(crate) fn workspace_layout() -> craft_ui::docking::Layout<String> {
-    use craft_ui::docking::{Group, Node};
+    use craft_ui::docking::{Column, Group, Node};
     let ui = crate::state::UiState { dock_tab: crate::state::DockTab::Layers, ..Default::default() };
     let mut layout = crate::panel_docking::default_layout(&ui);
-    let ours = [
-        crate::panels::cutting::ID,
-        crate::panels::cutting::lines::ID,
-        crate::panels::cutting::patterns::ID,
-        crate::panels::cutting::mat::ID,
-        crate::panels::cutting::print::ID,
-    ];
+    let ours = crate::panels::cutting::PANELS;
     if let Some(Node::Split { second, .. }) = layout.root.as_mut()
         && let Node::Dock { columns, .. } = second.as_mut()
     {
@@ -58,18 +53,16 @@ pub(crate) fn workspace_layout() -> craft_ui::docking::Layout<String> {
             column.groups.retain(|g| !g.panels.is_empty());
         }
         columns.retain(|c| !c.groups.is_empty());
-        if let Some(main) = columns.first_mut() {
-            if let Some(tabs) = main.groups.first_mut() {
-                tabs.height = Some(LAYERS_HEIGHT);
-            }
-            // What is set for each cut (Cut Settings, Cut Lines, Patterns), then what is set once
-            // for the document (Cutting Mat, Print & Cut): few enough tabs a group that their
-            // names fit the column.
-            let (per_cut, per_document) = ours.split_at(3);
-            for tabs in [per_cut, per_document] {
-                main.groups.push(Group::new(tabs.iter().map(|p| p.to_string()).collect(), 0));
-            }
+        let Some(main) = columns.first_mut() else { return layout };
+        if let Some(tabs) = main.groups.first_mut() {
+            tabs.height = Some(LAYERS_HEIGHT);
         }
+        let Some((settings, features)) = ours.split_first() else { return layout };
+        main.groups.push(Group::new(vec![settings.to_string()], 0));
+        let width = main.width;
+        let mut icons = Column::new(features.iter().map(|p| Group::new(vec![p.to_string()], 0)).collect(), width);
+        icons.iconic = true;
+        columns.insert(1, icons);
     }
     layout
 }

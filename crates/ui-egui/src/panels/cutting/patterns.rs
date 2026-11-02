@@ -1,6 +1,7 @@
-//! Fork: the Patterns panel (C14.0, taken out of Cut Lines): designs made from the selected art
-//! or the artboard for the machine to draw or cut: a sketch fill for the pen (C13.3, patterns
-//! C14.5), a rhinestone template (C13.4, stone sizes and a radial fill C14.5) and a puzzle (C13.5).
+//! Fork: the panels of designs made from the selected art or the artboard for the machine to draw
+//! or cut (C14.0, one panel each since C14.9): the Sketch Fill panel, lines for the pen (C13.3,
+//! patterns C14.5); the Rhinestones panel, a rhinestone template (C13.4, stone sizes and a radial
+//! fill C14.5); and the Puzzle panel (C13.5).
 
 use egui::Ui;
 use serde_json::json;
@@ -12,7 +13,10 @@ use crate::VectorcraftApp;
 use crate::theme::Tokens;
 use crate::widgets;
 
+/// The Sketch Fill panel: the id is the one Patterns had, so a saved workspace still opens it.
 pub const ID: &str = "cuttingPatterns";
+pub const RHINESTONES_ID: &str = "cuttingRhinestones";
+pub const PUZZLE_ID: &str = "cuttingPuzzle";
 
 /// What the Sketch Fill section keeps between frames: the pattern, spacing, angle and
 /// cross-hatching asked for, and what the last Add Sketch Fill said.
@@ -252,26 +256,32 @@ fn puzzle_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     crate::panels::set_pstate(&ctx, "cutting-puzzle", c);
 }
 
+/// The Sketch Fill panel.
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
-    if app.session.active().is_none() {
-        widgets::dim_label(ui, tl!("Open a document to cut it."));
-        return;
+    if super::has_document(app, ui) {
+        sketch_rows(app, ui);
     }
-    widgets::section_header(ui, tl!("Sketch Fill"));
-    sketch_rows(app, ui);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Rhinestones"));
-    stone_rows(app, ui);
-    widgets::divider(ui);
-    widgets::section_header(ui, tl!("Puzzle"));
-    puzzle_rows(app, ui);
+}
+
+/// The Rhinestones panel.
+pub fn show_rhinestones(app: &mut VectorcraftApp, ui: &mut Ui) {
+    if super::has_document(app, ui) {
+        stone_rows(app, ui);
+    }
+}
+
+/// The Puzzle panel.
+pub fn show_puzzle(app: &mut VectorcraftApp, ui: &mut Ui) {
+    if super::has_document(app, ui) {
+        puzzle_rows(app, ui);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn panel_texts(app: &mut VectorcraftApp, ctx: &egui::Context) -> Vec<String> {
+    fn panel_texts(app: &mut VectorcraftApp, ctx: &egui::Context, show: fn(&mut VectorcraftApp, &mut Ui)) -> Vec<String> {
         let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 1600.0))), ..Default::default() };
         let mut out = ctx.run_ui(raw, |ui| show(app, ui));
         out.textures_delta.clear();
@@ -290,17 +300,14 @@ mod tests {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
-        assert!(
-            texts.iter().any(|t| t == "Sketch Fill") && texts.iter().any(|t| t == "Add Sketch Fill") && texts.iter().any(|t| t == "Cross-Hatch"),
-            "{texts:?}"
-        );
+        let texts = panel_texts(&mut app, &ctx, show);
+        assert!(texts.iter().any(|t| t == "Add Sketch Fill") && texts.iter().any(|t| t == "Cross-Hatch"), "{texts:?}");
         // C14.5: the pattern; rings have no angle.
         assert!(texts.iter().any(|t| t == "Lines"), "{texts:?}");
         let mut c: SketchChoice = crate::panels::pstate(&ctx, "cutting-sketch");
         c.pattern = Pattern::Concentric;
         crate::panels::set_pstate(&ctx, "cutting-sketch", c);
-        let texts = panel_texts(&mut app, &ctx);
+        let texts = panel_texts(&mut app, &ctx, show);
         assert!(texts.iter().any(|t| t == "Concentric") && !texts.iter().any(|t| t == "Cross-Hatch"), "{texts:?}");
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 100, "height": 100})).unwrap();
         assert!(app.run("cutting.sketchFill", json!({})).unwrap()["lines"].as_u64().unwrap() > 5);
@@ -312,11 +319,8 @@ mod tests {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
-        assert!(
-            texts.iter().any(|t| t == "Rhinestones") && texts.iter().any(|t| t == "Add Template") && texts.iter().any(|t| t == "Fill Inside"),
-            "{texts:?}"
-        );
+        let texts = panel_texts(&mut app, &ctx, show_rhinestones);
+        assert!(texts.iter().any(|t| t == "Add Template") && texts.iter().any(|t| t == "Fill Inside"), "{texts:?}");
         // C14.5: the stone's size, the hole a little larger.
         assert!(texts.iter().any(|t| t == "SS10 (2.8 mm)") && texts.iter().any(|t| t == "Outline Only"), "{texts:?}");
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 100, "height": 100})).unwrap();
@@ -330,14 +334,14 @@ mod tests {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
-        let texts = panel_texts(&mut app, &ctx);
-        for label in ["Puzzle", "Add Puzzle over Artboard", "Curvature", "Curve", "Ripple", "Wobble", "Randomize Selected Puzzle"] {
+        let texts = panel_texts(&mut app, &ctx, show_puzzle);
+        for label in ["Add Puzzle over Artboard", "Curvature", "Curve", "Ripple", "Wobble", "Randomize Selected Puzzle"] {
             assert!(texts.iter().any(|t| t == label), "{label}: {texts:?}");
         }
         let r = app.run("cutting.puzzle", json!({})).unwrap();
         assert_eq!(r["pieces"], json!(16));
         app.run("select.set", json!({"ids": [r["id"]]})).unwrap();
         assert!(super::puzzle_selected(&app));
-        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Apply to Selected Puzzle"));
+        assert!(panel_texts(&mut app, &ctx, show_puzzle).iter().any(|t| t == "Apply to Selected Puzzle"));
     }
 }
