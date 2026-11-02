@@ -676,6 +676,8 @@ mod tests {
         // C14.8: the tool settings, tuned here, just above the test cut.
         let at = |label: &str| texts.iter().position(|t| t == label).unwrap();
         assert!(at("Send") < at("Tool Settings") && at("Force") < at("Test at") && at("Material") < at("Force"), "{texts:?}");
+        // C14.11: the mirrored cut goes with the material, before the test cut.
+        assert!(at("Force") < at("Cut Mirrored") && at("Cut Mirrored") < at("Test at"), "{texts:?}");
         assert!(texts.iter().any(|t| t.contains("lands on the design")), "{texts:?}");
         crate::panels::set_pstate(&ctx, "cutting-test", TestChoice { corner: 3, ..Default::default() });
         let texts = window_texts(&mut app, &ctx);

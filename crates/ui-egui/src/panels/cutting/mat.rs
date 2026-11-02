@@ -1,5 +1,6 @@
 //! Fork: the Cutting Mat panel (C7.2): what is set once for a document, the mat, where the
-//! artboard lies on it and whether it goes off it, and a mirrored cut; and, one panel each since
+//! artboard lies on it and whether it goes off it (a mirrored cut is the Send window's since
+//! C14.11, with the material it is for); and, one panel each since
 //! C14.9, the Tiles panel (C14.7) and the Nesting panel (C8.5). Print & Cut is its own panel since
 //! C12.2 ([`super::print`]); only what asks for something is said (C9.1), and how the canvas shows
 //! the mat is in the View menu. Cut Settings (the parent module) holds what is set per object and per cut.
@@ -77,11 +78,6 @@ fn mat_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let clip = s["clipToMat"].as_bool() == Some(true);
     if widgets::check(ui, tl!("Clip to Mat"), clip, true) {
         set(app, json!({ "clipToMat": !clip }));
-    }
-    // C14.7: for material cut from the back, such as heat transfer vinyl.
-    let mirror = s["mirror"].as_bool() == Some(true);
-    if widgets::check(ui, tl!("Cut Mirrored"), mirror, true) {
-        set(app, json!({ "mirror": !mirror }));
     }
     if info["placement"]["fits"].as_bool() == Some(false) {
         ui.label(egui::RichText::new(tl!("The artboard goes off the mat.")).color(t.bleed));
@@ -282,13 +278,15 @@ mod tests {
         assert!(texts(&mut app, &ctx).iter().any(|t| t == "Open a document to cut it."));
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
         let t = texts(&mut app, &ctx);
-        for label in ["Mat", "Orientation", "Offset", "Clip to Mat", "Cut Mirrored"] {
+        for label in ["Mat", "Orientation", "Offset", "Clip to Mat"] {
             assert!(t.iter().any(|x| x == label), "{label}: {t:?}");
         }
         // C14.9: tiles and nesting are panels of their own.
         let tiles = panel_texts(&mut app, &ctx, show_tiles);
         assert!(tiles.iter().any(|x| x == "Overlap") && tiles.iter().any(|x| x == "Tile onto Mats"), "{tiles:?}");
-        for gone in ["Force", "Send to Cutter…", "Cutting View", "Show Toolpaths", "The artboard fits the mat.", "Overlap", "Nest All"] {
+        for gone in
+            ["Cut Mirrored", "Force", "Send to Cutter…", "Cutting View", "Show Toolpaths", "The artboard fits the mat.", "Overlap", "Nest All"]
+        {
             assert!(!t.iter().any(|x| x == gone), "{gone}: {t:?}");
         }
         assert!(!t.iter().any(|x| x.starts_with("The cut area isn't")), "a hover note now: {t:?}");
