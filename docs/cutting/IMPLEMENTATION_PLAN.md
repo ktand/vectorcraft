@@ -251,6 +251,19 @@ cut or score, ready to print on, nest and send.
 - **To decide.** Which families first; whether the folds go in a layer of their own; whether a template can wrap
   the selected art (a box sized to it).
 
+## Phase 16 — Pop-up cards (planned)
+
+Owner, 2026-11-02: planned, not yet sized. A pop-up card made from a design: the card folds in half, and the
+design, joined to it along fold lines and held by narrow struts, stands up when the card opens. With several fold
+lines the design stands up in layers. Behaviour comes from the maker's public documentation only, cited by URL as
+for the puzzle (C13.5); the geometry is our own.
+
+| ID | Task | Tests |
+|---|---|---|
+| C16.1 | **One fold** in `cutting::popup`: from the selected design and a fold line across it, the card outline, the fold lines as dashes (cut and gap `dashPitchMm`, the perforation C14.4 already cuts) and the struts (`strutWidthMm` wide) that lift the design, the design joined along the fold over `baseWidthPct` of its width; `cutting.popup` adds one group, remade in place with new settings as the puzzle is; a Pop Up panel in the icon strip (C14.9) with Base Width, Strut Width and Dash Pitch | Unit: struts and folds from a square and a line; a fold line that misses the design refused; property: nothing outside the card; the panel's frame test |
+| C16.2 | **Several fold lines**: each fold line a layer of its own, standing up in turn as the card opens; struts placed so the layers don't collide when folded | Unit: two folds give two layers, each joined and lifted; folds that cross refused |
+| C16.3 | **The preview**: the folds drawn as score lines already are, and a check that the card fits the mat | Frame test; screenshot |
+
 ## How agents should work on this
 
 - One task per branch (`cutting/C2.3-op-commands`) and per PR; the PR updates this file's status column (to be
