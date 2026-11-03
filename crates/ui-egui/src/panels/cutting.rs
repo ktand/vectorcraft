@@ -19,6 +19,7 @@ use crate::widgets;
 pub mod lines;
 pub mod mat;
 pub mod patterns;
+pub mod popup;
 pub mod print;
 
 pub const ID: &str = "cutting";
@@ -35,6 +36,7 @@ pub const PANELS: &[&str] = &[
     patterns::ID,
     patterns::RHINESTONES_ID,
     patterns::PUZZLE_ID,
+    popup::ID,
     mat::TILES_ID,
     mat::NESTING_ID,
     print::ID,

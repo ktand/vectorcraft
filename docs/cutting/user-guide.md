@@ -16,7 +16,7 @@ panels on the right:
 - **Layers** at the top. Cutting by layer is set up here.
 - **Cut Settings** below it: what you change for each cut, and Send to Cutter….
 - Beside them, a strip of icons, one for each feature: **Cutting Mat** first, then **Contour**, **Stencil**,
-  **Weeding**, **Sketch Fill**, **Rhinestones**, **Puzzle**, **Tiles**, **Nesting** and **Print & Cut**. Click an icon to
+  **Weeding**, **Sketch Fill**, **Rhinestones**, **Puzzle**, **Pop Up**, **Tiles**, **Nesting** and **Print & Cut**. Click an icon to
   open that feature's panel beside it, and again (or anywhere else) to close it. Hover an icon for its name.
 
 If your Cutting workspace looks different (you moved its panels, or saved it with an older version), Window ›
@@ -29,8 +29,8 @@ The panels (each also on the Window › Cutting menu):
   material and tool settings are in the Send window, beside the test cut that tunes them (section 4).
 - **Contour**, **Stencil** and **Weeding:** what adds cut lines to cut the art out: a contour round it, stencil
   bridges, weeding's box and lines (section 5).
-- **Sketch Fill**, **Rhinestones** and **Puzzle:** designs made from the art: lines for the pen, a rhinestone
-  template, a puzzle (section 5).
+- **Sketch Fill**, **Rhinestones**, **Puzzle** and **Pop Up:** designs made from the art: lines for the pen, a
+  rhinestone template, a puzzle, a pop-up card (section 5).
 - **Cutting Mat:** the mat and where the artboard sits on it. **Tiles** cuts a design larger than the mat in parts,
   **Nesting** packs the pieces onto it (section 2).
 - **Print & Cut:** printing with registration marks and cutting round the print.
@@ -263,6 +263,24 @@ when nothing is selected:
 - **Add Puzzle:** adds the cut lines on top as one path. The art stays as it is, to be printed (Print & Cut).
 - With the puzzle selected, **Apply to Selected Puzzle** makes it again with the settings, and **Randomize
   Selected Puzzle** with another layout.
+
+### Pop-up cards
+
+The **Pop Up** panel makes the selected design (text converted to outlines, shapes, or several together) into a
+card that folds in half, the design standing up when the card is opened at a right angle:
+
+- **Base Width:** a bar under the design, as a share of its height, so every part stands on one straight fold.
+- **Strut Width:** a narrow strip rises from the top of each part of the design to a fold on the back of the card,
+  holding it upright.
+- **Dash Pitch:** the folds are cut as dashes this long, with gaps as long, so the card bends along them.
+- **Margin:** how much larger than the pop-up the card is on each side.
+- **Make Pop Up:** adds a group on top: the card's outline, the design's cut (open where it joins the card) and
+  the folds, each set to Cut. The design itself is set to No Cut, left to be printed (Print & Cut) or as a guide.
+  With the pop-up alone selected, the button reads **Apply to Selected Pop Up** and makes it again with the new
+  settings.
+
+Fold the card along its middle fold first, then push the design forward along its folds. For now a pop-up has one
+fold across the card; designs that stand up in layers are planned.
 
 ### Sketch fill: shading for the pen
 
