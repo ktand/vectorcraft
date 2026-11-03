@@ -189,6 +189,24 @@ fn sent_to_a_ready_machine() {
     assert!(written.ends_with(b"SO0\x03"));
 }
 
+/// C4.6, seen on the Cameo 4: the tools were asked while the machine was still finishing a cut,
+/// and their answer (an AutoBlade in holder 1: `2,0`) came only when the next send asked for
+/// status. It is passed over, not read as "load the mat", and the send goes on once ready.
+#[test]
+fn a_late_tools_answer_doesnt_stop_the_next_send() {
+    let j = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }],
+        vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]])],
+        "silhouette.12x12",
+    );
+    let e = Silhouette.encode(&j, &cameo4()).unwrap();
+    let mut t = MemoryTransport::answering(b"0\x03");
+    t.state.lock().unwrap().replies.push_back(b"2,0\x03".to_vec());
+    let progress = Mutex::new(Progress::default());
+    send(&mut t, &Silhouette, &e, Patience { polls: 3, poll_ms: 0 }, &Controls::default(), &progress).unwrap();
+    assert!(t.written().ends_with(b"SO0\x03"));
+}
+
 /// C5.2: blade depth, acceleration and track enhancing as their commands.
 #[test]
 fn depth_acceleration_and_track_enhancing() {

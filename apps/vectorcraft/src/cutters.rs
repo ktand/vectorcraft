@@ -166,8 +166,11 @@ mod windows_usb {
                 let mut moved = 0u32;
                 if WaitForSingleObject(self.event, timeout_ms) != WAIT_OBJECT_0 {
                     let _ = CancelIoEx(self.handle, Some(&ov));
-                    let _ = GetOverlappedResult(self.handle, &ov, &mut moved, true);
-                    return if write { Err(TransportError::Timeout) } else { Ok(0) };
+                    // A read that completed before the cancel took effect keeps its bytes: they
+                    // are the machine's answer, and dropping them would leave the next read to
+                    // find the one after it.
+                    let done = GetOverlappedResult(self.handle, &ov, &mut moved, true).is_ok();
+                    return if write { Err(TransportError::Timeout) } else { Ok(if done { moved as usize } else { 0 }) };
                 }
                 GetOverlappedResult(self.handle, &ov, &mut moved, false).map_err(|e| TransportError::Io(e.message()))?;
                 Ok(moved as usize)

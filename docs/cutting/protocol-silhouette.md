@@ -70,7 +70,7 @@ relies on most are listed again in [Checks on the machine](#checks-on-the-machin
 
 | Fact | Source |
 |---|---|
-| Status is asked for with ESC followed by ENQ (`0x1B 0x05`). The reply is one character and ETX: `0` ready, `1` moving, `2` no media loaded. | [IS]; ready with the mat loaded confirmed [HW] (the send's ready check passed) |
+| Status is asked for with ESC followed by ENQ (`0x1B 0x05`). The reply is one character and ETX: `0` ready, `1` moving, `2` no media loaded. | [IS]; ready with the mat loaded confirmed [HW] (the send's ready check passed); an answer asked for while the machine is busy can come late and be read with the next one's (a tools answer `2,0` before a status `0`), [HW] 2026-11-03, so each answer is told by its form |
 | ESC followed by NAK (`0x1B 0x15`) asks which tools are in the holders: a comma-separated code per holder (0 empty, 1 ratchet blade, 2 AutoBlade, 3 deep-cut blade, 4 kraft blade, 5 rotary blade, 7 pen, 255 error). | [IS]; 2 (AutoBlade, holder 1) and 0 (holder 2 empty) confirmed [HW] |
 | The firmware version is asked for with the `FG` query. | [IS], **to confirm** |
 

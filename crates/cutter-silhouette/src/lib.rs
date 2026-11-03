@@ -24,7 +24,7 @@ pub const UNITS_PER_MM: f64 = 20.0;
 /// Most bytes in one chunk.
 pub const CHUNK_BYTES: usize = 4_096;
 /// The answer to a registration mark search that found them: four spaces, `0`, ETX.
-pub const MARKS_FOUND: &[u8] = b"    0";
+pub const MARKS_FOUND: &[u8] = b"    0\x03";
 /// How long the machine may take to find the marks, ms.
 pub const MARK_SEARCH_MS: u32 = 40_000;
 /// The search starts this far (mm) before where the top-left mark should be, on each axis.
@@ -41,6 +41,16 @@ const MAX_HOLDERS: usize = 4;
 /// What a holder's code in the answer to the tools query stands for (protocol notes › Status):
 /// an empty holder, a tool, or a code this version doesn't know; the Kraft blade's one code is
 /// the 2 mm blade in holder 1 and the 3 mm one in holder 2.
+/// The tools answer in `answer`: the last part ended by ETX with a comma in it (one code per
+/// holder, and the Cameo 3 and later have two), so a late status answer read before it (`0`+ETX)
+/// isn't taken for it.
+fn tools_segment(answer: &[u8]) -> Option<&[u8]> {
+    let mut parts: Vec<&[u8]> = answer.split(|b| *b == ETX).collect();
+    // What follows the last ETX isn't a whole answer yet.
+    parts.pop();
+    parts.into_iter().rev().find(|p| p.contains(&b','))
+}
+
 fn fitted(code: &str, holder: usize) -> vectorcraft_cutter::tools::Fitted {
     use vectorcraft_cutter::tools::Fitted;
     let id = match code.trim().parse::<u32>() {
@@ -496,25 +506,30 @@ impl Driver for Silhouette {
     }
 
     fn tools_answer_done(&self, answer: &[u8]) -> bool {
-        answer.contains(&ETX)
+        tools_segment(answer).is_some()
     }
 
     /// A code per holder, comma-separated, up to ETX (protocol notes › Status; to confirm).
     fn parse_tools(&self, answer: &[u8]) -> Vec<vectorcraft_cutter::tools::Fitted> {
-        let text = String::from_utf8_lossy(answer.split(|b| *b == ETX).next().unwrap_or_default()).to_string();
+        let Some(segment) = tools_segment(answer) else { return vec![] };
+        let text = String::from_utf8_lossy(segment).to_string();
         if text.trim().is_empty() {
             return vec![];
         }
         text.split(',').take(MAX_HOLDERS).enumerate().map(|(i, code)| fitted(code, i + 1)).collect()
     }
 
+    /// The last status answer in `reply`, a single `0`, `1` or `2`. A late answer to another
+    /// question read with it is passed over: the tools answer of an AutoBlade in holder 1 is
+    /// `2,0`, which must not read as "no mat" (C4.6, seen on the Cameo 4).
     fn parse_status(&self, reply: &[u8]) -> DeviceStatus {
-        match reply.iter().copied().find(|b| *b != ETX && !b.is_ascii_whitespace()) {
-            Some(b'0') => DeviceStatus::Ready,
-            Some(b'1') => DeviceStatus::Moving,
-            Some(b'2') => DeviceStatus::Unloaded,
-            _ => DeviceStatus::Unknown,
-        }
+        let status = reply.split(|b| *b == ETX).rev().find_map(|seg| match seg.trim_ascii() {
+            b"0" => Some(DeviceStatus::Ready),
+            b"1" => Some(DeviceStatus::Moving),
+            b"2" => Some(DeviceStatus::Unloaded),
+            _ => None,
+        });
+        status.unwrap_or(DeviceStatus::Unknown)
     }
 }
 
@@ -564,6 +579,29 @@ mod tests {
         assert_eq!(s.parse_status(b""), DeviceStatus::Unknown);
         assert_eq!(s.parse_status(b"x"), DeviceStatus::Unknown);
         assert_eq!(s.status_query(), &[0x1B, 0x05]);
+    }
+
+    /// A tools answer that came late (the machine was busy when it was asked) is read with the
+    /// next status answer: it isn't "no mat", and the status after it counts (C4.6).
+    #[test]
+    fn late_tools_answer_is_not_a_status() {
+        let s = Silhouette;
+        assert_eq!(s.parse_status(b"2,0\x03"), DeviceStatus::Unknown);
+        assert_eq!(s.parse_status(b"2,0\x030\x03"), DeviceStatus::Ready);
+        assert_eq!(s.parse_status(b"2,0\x031\x03"), DeviceStatus::Moving);
+        assert_eq!(s.parse_status(b"0\x032\x03"), DeviceStatus::Unloaded);
+    }
+
+    /// A late status answer read before the tools answer isn't taken for it.
+    #[test]
+    fn late_status_answer_is_not_the_tools() {
+        use vectorcraft_cutter::tools::Fitted;
+        let s = Silhouette;
+        assert!(!s.tools_answer_done(b"0\x03"));
+        assert!(s.tools_answer_done(b"0\x032,0\x03"));
+        assert_eq!(s.parse_tools(b"0\x032,0\x03"), [Fitted::Tool("autoblade".into()), Fitted::Empty]);
+        assert_eq!(s.parse_tools(b"0\x03"), []);
+        assert_eq!(s.parse_tools(b"2,0\x03"), [Fitted::Tool("autoblade".into()), Fitted::Empty]);
     }
 
     #[test]

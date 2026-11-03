@@ -126,8 +126,13 @@ left 1 mm and 3 mm from the bottom, bottom right 5 mm and 3 mm from the bottom. 
 left across: the same 2 mm shift as step 3 at both sides, so the cut area's width is right and only the origin
 is off; Across +2 takes it. With the design at the top left, Test at Top Left showed "the test cut lands on the
 design: choose another corner or move the artboard" before anything was cut. Still to note: a corner cut with
-Across +2 (expected 3 mm in), and the force that cut the paper cleanly. Seen along the way, to look at later:
-the tools in the holders sometimes not read, and "load the mat" said now and then with the mat loaded.
+Across +2 (expected 3 mm in), and the force that cut the paper cleanly. Seen along the way: the tools in the holders
+sometimes not read, and "load the mat" said with the mat loaded when Send was pressed after a cut. The cause
+found: the tools were asked while the machine was still finishing, their answer (an AutoBlade in holder 1 is
+`2,0`) came late, and the next send's status check took its leading `2` for "no mat". Since then a status
+answer must be a single `0`, `1` or `2`, a tools answer must have its comma, and a Windows read that completes
+as it times out keeps its bytes. To check: Send straight after a cut goes ahead; if the holders still read as
+nothing after a cut, press Check Tools once the head has stopped.
 
 ## Step 5: speed (for the speed mapping)
 
