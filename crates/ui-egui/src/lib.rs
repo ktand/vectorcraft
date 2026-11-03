@@ -36,6 +36,7 @@ mod custom_toolbars;
 // Fork: what the Cutting panel and the canvas share.
 pub(crate) mod cutting;
 pub mod dialogs;
+pub mod doc_windows;
 pub mod dock;
 mod edit_toolbar;
 pub mod export_progress;
