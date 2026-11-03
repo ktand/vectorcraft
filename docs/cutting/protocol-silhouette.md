@@ -1,7 +1,8 @@
 # Silhouette cutters: protocol notes
 
 > **Status:** facts gathered for the encoder (C4.3); framing, units, axes, the origin, status and the tools query
-> checked on the owner's Cameo 4 (2026-11-01, [HW]) · **Written:** 2026-10-28 ·
+> checked on the owner's Cameo 4 (2026-11-01, [HW]); Print & Cut facts from Silhouette Studio's interface replaced
+> by public tutorials where they cover them (2026-11-03, R2) · **Written:** 2026-10-28 ·
 > **Scope:** Cameo 4 first; other models noted where the source gives them
 
 These are facts about how a computer talks to a Silhouette cutter: what it sends, what it gets back, and in
@@ -128,9 +129,14 @@ The Cameo 4 width agrees with our mat presets (`vectorcraft_cutjob::MAT_PRESETS`
 The machine's optical sensor finds marks printed on the sheet, then cuts relative to them. Sources:
 **[IS]** `silhouette/Graphtec.py` (as above) for the commands, and **[IS-R]** `render_silhouette_regmarks.py`
 at the same commit ([`f376a083`](https://github.com/fablabnbg/inkscape-silhouette/blob/f376a0836b53826e57f50d7ec44658663e629f05/render_silhouette_regmarks.py))
-for what the marks look like. **[ST]**: the Print & Cut panel of the maker's software, Silhouette Studio, in
-screenshots the owner took on 2026-10-31 (defaults, least and greatest values, More Settings, the hatched areas;
-seen, not kept). All **to confirm** on the Cameo 4.
+for what the marks look like. User tutorials on the maker's software, Silhouette Studio, read 2026-11-03:
+**[SEC]** Silhouette Secrets, [v4 registration marks](https://silhouette-secrets.com/2018/01/16/lets-explore-v4-registration-marks/)
+(2018, updated 2023) and [v4.3 registration marks](https://silhouette-secrets.com/2020/01/21/lets-explore-registration-marks-v4-3/)
+(2020); **[SS]** Silhouette School on [moving the marks](https://silhouetteschoolblog.com/2023/03/how-to-change-position-of-registration.html),
+[the four-point marks](https://www.silhouetteschoolblog.com/2026/01/silhouette-registration-mark-types.html) and
+[Print Bleed](https://silhouetteschoolblog.com/2018/08/silhouette-studio-print-bleed-tool-v42.html). **[ST]**: the
+Print & Cut panel of Silhouette Studio, in screenshots the owner took on 2026-10-31 (seen, not kept), now only for
+what those don't give (R2). All **to confirm** on the Cameo 4.
 
 | Fact | Source |
 |---|---|
@@ -142,9 +148,13 @@ seen, not kept). All **to confirm** on the Cameo 4.
 | The answer to the search is read with a long timeout (40 s): success is four spaces, `0`, ETX. Anything else, or no answer, means the marks weren't found and the job must not be cut. | [IS] |
 | After registration the machine's origin is the top-left mark's anchor: cut positions are measured from it, and the cut area is the rectangle the marks span. | [IS] |
 | The driver's defaults put the origin 15 mm from the left and 20 mm from the top, with marks 180 mm apart across and 230 mm down; the mark drawing's defaults are 10 mm from each edge. Ours come from the marks we draw (C6.1): whatever is printed is what is searched for. | [IS], [IS-R] |
-| The maker's software lets the marks be set: **Length** 5–20 mm (default 20), **Thickness** 0.3–1 mm (default 0.5), **Inset** 10–84 mm (default 15.88, 5/8 in), and under More Settings each edge's inset (left, top, right, bottom) and a choice of **Default** or **Inverted** marks (inverted: the set turned half round, the square at the bottom with the sheet fed the other way). Its defaults, 20 mm and 0.5 mm at 20 machine units a mm, are the `TB51,400` and `TB53,10` above, so we take both numbers as the length and line width in those units and send what is drawn (C12.1). | [ST] |
-| It hatches where nothing may be printed: from each mark out to the page's edges at its corner and a little past the mark's arms (about 1–2 mm, measured off the screen), and a band across the whole page along the top (the square's side), down to the foot of the top marks' areas. In the inverted set the band is along the bottom. Nothing marks the left, right or bottom margins. | [ST] |
-| It also offers a **Print Bleed** (default radius 1.27 mm): the printed colour spread past the cut line, so a cut a little off leaves no white edge. | [ST] |
+| The maker's software lets the marks be set: **Length**, **Thickness** and **Inset** (all three marks at once), and under Advanced Options each edge's inset; Restore Defaults puts them back. Its defaults are a length of 0.787 in (20 mm), an inset of 0.625 in (15.88 mm) and a thickness of 0.50 (the post says "in"; read as mm, half a millimetre, since half an inch would be wider than the marks are long). The marks can be placed **Inverted**, on the opposite corner of the mat. | [SEC], [SS] |
+| Its least and greatest values, **Length** 5–20 mm, **Thickness** 0.3–1 mm, **Inset** 10–84 mm; More Settings' edges named left, top, right and bottom; inverted meaning the set turned half round, the square at the bottom with the sheet fed the other way. No public source found. | [ST] |
+| Those defaults, 20 mm and 0.5 mm at 20 machine units a mm, are the `TB51,400` and `TB53,10` above, so we take both numbers as the length and line width in those units and send what is drawn (C12.1). | [SEC], [IS] |
+| It cross-hatches the areas where the sensor reads the sheet: the hatching itself doesn't print, and a design, cut line or background in it can stop the marks being read. A shorter or thinner mark makes the hatched area smaller; the four-point marks of newer models add a mark and a hatched area at the bottom right. | [SEC], [SS] |
+| Where exactly the hatching goes: from each mark out to the page's edges at its corner and a little past the mark's arms (about 1–2 mm, measured off the screen), and a band across the whole page along the top (the square's side), down to the foot of the top marks' areas; in the inverted set the band is along the bottom; nothing marks the left, right or bottom margins. No public source found. | [ST] |
+| It also offers a **Print Bleed** (since version 4.2; first under Page Setup, now under Registration Marks): a little printed colour spread past the cut line, the cut line staying where it is, the distance adjustable. | [SS] |
+| Print Bleed's default distance, 1.27 mm (0.05 in). No public source found. | [ST] |
 
 ## Mapping from the cut job
 
