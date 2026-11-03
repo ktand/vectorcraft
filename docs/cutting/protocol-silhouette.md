@@ -162,9 +162,10 @@ How `vectorcraft-cutjob`'s machine-neutral settings become these commands (the e
 
 - **Coordinates:** mat mm × 20, rounded, written vertical first.
 - **Force** 0–1 → `FX` 1–33, linearly, rounded, clamped.
-- **Speed** mm/s → `!` 1–30. **Unknown mapping:** the source gives no unit for a speed step. Until measured, the
-  encoder maps the job's speed linearly onto the range, warns that the speed is approximate, and C4.6 times a
-  known line at several settings.
+- **Speed** mm/s → `!` 1–30. The source gives no unit for a speed step; the encoder takes one step as 10 mm/s
+  and warns that the speed is approximate. **[HW] 2026-11-03** (hardware-validation step 5): a 100 mm line took
+  10 s at 1 and 1 s at 10 on the Cameo 4, so 10 mm/s a step holds from 1 to 10; at 30 it took about 0.6 s, too
+  short a line to show the top speed.
 - **Passes:** the encoder repeats each path's strokes, as the simulator does.
 - **Overcut:** the encoder extends closed paths, as the simulator does.
 - **Score:** the same commands at the score operation's force and speed.

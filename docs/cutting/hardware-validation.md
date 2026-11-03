@@ -1,6 +1,6 @@
 # Cutting on the machine: first checks
 
-> **Status:** steps 1–3 passed 2026-11-01 (a 2 mm origin adjustment on a Nicapa mat), step 4 in part 2026-11-03, the rest not yet run · **Machine:** the owner's Silhouette Cameo 4 (USB `0x0B4D:0x1137`) · **For:** C4.2 and
+> **Status:** steps 1–3 passed 2026-11-01 (a 2 mm origin adjustment on a Nicapa mat), step 4 in part and step 5 for speeds 1–10 2026-11-03, the rest not yet run · **Machine:** the owner's Silhouette Cameo 4 (USB `0x0B4D:0x1137`) · **For:** C4.2 and
 > C4.6 and every task marked "to confirm on the machine" · **Revised:** 2026-11-01 (C4.6: steps 1–3 run, results recorded, the origin adjustment); 2026-10-30 (C9.3: reordered safest
 > first, the controls named as the panels show them since C9.1, what to note at each step)
 
@@ -20,7 +20,7 @@ control is and what it does: the [user guide](user-guide.md).
 | 2 | Which way the axes go | Pass | As the preview: nothing mirrored or swapped |
 | 3 | Size | Pass | 10.0 × 10.0 mm; 2 mm left of where sent on a Nicapa mat: Origin Adjustment Across +2 |
 | 4 | Test cut at each corner | Pass (part) | All four 2 mm left of where sent (Across 0), none off down: the step 3 shift; the design warning shows; force not yet noted |
-| 5 | Speed | | |
+| 5 | Speed | Pass (1–10) | 100 mm: 10 s at 1, 1 s at 10 (10 mm/s a step, as taken); 0.6 s at 30, too short a line to tell |
 | 6 | Blade depth, acceleration, track enhancing, corners | | |
 | 7 | Blade offset | | |
 | 8 | Cutting in groups, with a pause | | |
@@ -136,7 +136,10 @@ the tools in the holders sometimes not read, and "load the mat" said now and the
 
 Note: seconds for the 100 mm at speeds 1, 10 and 30.
 
-Result:
+Result: **pass for 1–10** (2026-11-03, stopwatch): 10 s at speed 1, 1 s at 10, so 10 and 100 mm/s, one step 10
+mm/s as the encoder takes it. At 30 about 0.6 s (hard to time), where 300 mm/s would be 0.33 s: over 100 mm the
+head probably spends most of the line speeding up and slowing down. To tell the top speed: a 300 mm line at 30
+(1.0 s at 300 mm/s), timed from a video.
 
 ## Step 6: blade depth, acceleration, track enhancing, corners (C5.2)
 
