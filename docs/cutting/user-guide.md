@@ -279,8 +279,11 @@ card that folds in half, the design standing up when the card is opened at a rig
   With the pop-up alone selected, the button reads **Apply to Selected Pop Up** and makes it again with the new
   settings.
 
-Fold the card along its middle fold first, then push the design forward along its folds. For now a pop-up has one
-fold across the card; designs that stand up in layers are planned.
+Each selected object stands up as a layer of its own, on a fold of its own: a design lower on the sheet stands
+further forward, in front of the ones above it. Group objects (or convert text to outlines as one) to stand them
+up together. Designs whose struts would run into each other are refused: move them apart.
+
+Fold the card along its middle fold first, then push each design forward along its folds.
 
 ### Sketch fill: shading for the pen
 

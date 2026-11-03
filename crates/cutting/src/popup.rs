@@ -80,13 +80,22 @@ pub struct PopUp {
     pub fold_y: f64,
     /// The struts holding the design up.
     pub struts: usize,
+    /// The layers standing up (C16.2): one for each design.
+    pub layers: usize,
 }
 
-/// The pop-up card for the art of `ids` (and what is inside them), or why there is none.
+/// The pop-up card for the art of `ids` (and what is inside them), or why there is none. Each of
+/// `ids` is a layer of its own (C16.2): group objects to stand them up together.
 pub fn popup(d: &Document, ids: &[NodeId], opt: Options) -> Result<PopUp, String> {
     check(opt)?;
-    let area = crate::bridges::area(d, ids).map_err(|e| e.replace("to bridge", "to pop up"))?;
-    popup_of(&area, opt)
+    if ids.len() > MAX_PARTS {
+        return Err(format!("at most {MAX_PARTS} designs can pop up on one card"));
+    }
+    let areas = ids
+        .iter()
+        .map(|id| crate::bridges::area(d, std::slice::from_ref(id)).map_err(|e| e.replace("to bridge", "to pop up")))
+        .collect::<Result<Vec<_>, _>>()?;
+    popup_layers(&areas, opt)
 }
 
 fn check(opt: Options) -> Result<(), String> {
@@ -106,27 +115,91 @@ fn check(opt: Options) -> Result<(), String> {
     Ok(())
 }
 
-/// The pop-up for a filled `area` (document points).
+/// The pop-up for a filled `area` (document points), standing as one layer.
 pub fn popup_of(area: &PathData, opt: Options) -> Result<PopUp, String> {
+    popup_layers(std::slice::from_ref(area), opt)
+}
+
+/// One design's place in the pop-up: its bounds, its base's fold with the floor and its top.
+struct Design<'a> {
+    area: &'a PathData,
+    b: Rect,
+    base: f64,
+    floor_y: f64,
+    top_y: f64,
+}
+
+/// The pop-up for several filled `areas`, each a layer (C16.2). The card's fold is shared: it is
+/// halfway down the shortest-standing face, so each design stands as far in front of the back as
+/// its base's fold is below the card's, a design lower on the sheet standing further forward.
+pub fn popup_layers(areas: &[PathData], opt: Options) -> Result<PopUp, String> {
     check(opt)?;
-    let b = area.bounds().filter(|b| b.width() > 0.0 && b.height() > 0.0 && b.width().is_finite() && b.height().is_finite());
-    let Some(b) = b else { return Err("the design has no size to pop up".into()) };
-    let rings = polylines(&area.to_bezpath());
+    let mut designs = vec![];
+    for area in areas {
+        let b = area.bounds().filter(|b| b.width() > 0.0 && b.height() > 0.0 && b.width().is_finite() && b.height().is_finite());
+        let Some(b) = b else { return Err("the design has no size to pop up".into()) };
+        let base = b.height() * opt.base_pct / 100.0;
+        designs.push(Design { area, b, base, floor_y: b.y1 + base, top_y: b.y0 });
+    }
+    let Some(fold_y) = designs.iter().map(|d| d.floor_y - (d.floor_y - d.top_y) / 2.0).reduce(f64::min) else {
+        return Err("the design has no size to pop up".into());
+    };
+    // Each design's flat place, struts included: no two may overlap.
+    let places: Vec<Rect> = designs.iter().map(|d| Rect::new(d.b.x0, d.top_y - (d.floor_y - fold_y), d.b.x1, d.floor_y)).collect();
+    for (i, a) in places.iter().enumerate() {
+        if places.iter().skip(i + 1).any(|c| a.intersect(*c).area() > 0.0) {
+            return Err("the designs would overlap once they are held up: move them apart, or group them to stand together".into());
+        }
+    }
+    let dash = opt.dash_mm / MM_PER_PT;
+    let (mut cuts, mut folds, mut face_rings) = (vec![], vec![], vec![]);
+    let mut struts = 0;
+    for d in &designs {
+        let layer = layer(d, fold_y, opt)?;
+        struts += layer.struts;
+        for (y, spans) in [(layer.back_y, &layer.strut_x), (d.top_y, &layer.strut_x), (d.floor_y, &vec![(d.b.x0, d.b.x1)])] {
+            for &(x0, x1) in spans {
+                dashes(x0, x1, y, dash, &mut folds)?;
+            }
+        }
+        cuts.extend(layer.cuts);
+        face_rings.extend(layer.rings);
+    }
+
+    let margin = opt.margin_mm / MM_PER_PT;
+    let all = places.iter().copied().reduce(|a, c| a.union(c)).ok_or("the design has no size to pop up")?;
+    let reach = (fold_y - all.y0).max(all.y1 - fold_y) + margin;
+    let card = Rect::new(all.x0 - margin, fold_y - reach, all.x1 + margin, fold_y + reach);
+    for (x0, x1) in outside(&face_rings, fold_y, card.x0, card.x1) {
+        dashes(x0, x1, fold_y, dash, &mut folds)?;
+    }
+    Ok(PopUp { card: rect(card), cuts: PathData::new(cuts), folds: PathData::new(folds), fold_y, struts, layers: designs.len() })
+}
+
+/// One layer: its face's cut, its rings, its struts' spans and their fold with the back.
+struct Layer {
+    cuts: Vec<SubPath>,
+    rings: Vec<Vec<Point>>,
+    strut_x: Vec<(f64, f64)>,
+    back_y: f64,
+    struts: usize,
+}
+
+/// Design `d` held up for the card's fold at `fold_y`: the face (the design and its base) and a
+/// strut from the top of each of its parts to the back, as far above the face as the face's base
+/// is below the card's fold.
+fn layer(d: &Design, fold_y: f64, opt: Options) -> Result<Layer, String> {
+    let b = d.b;
+    let rings = polylines(&d.area.to_bezpath());
     // The outsides of the design's parts: rings inside an even number of the others.
     let outsides: Vec<&Vec<Point>> = (0..rings.len()).filter(|&i| depth(&rings, i).is_multiple_of(2)).filter_map(|i| rings.get(i)).collect();
     if outsides.len() > MAX_PARTS {
         return Err(format!("at most {MAX_PARTS} parts can be held up"));
     }
-    let base = b.height() * opt.base_pct / 100.0;
-    let floor_y = b.y1 + base;
-    let top_y = b.y0;
-    let depth_pt = (floor_y - top_y) / 2.0;
-    let fold_y = floor_y - depth_pt;
-    let back_y = top_y - depth_pt;
+    let back_y = d.top_y - (d.floor_y - fold_y);
     // No wider than the design, so a strut stays over it (and on the card).
     let half = (opt.strut_mm / MM_PER_PT / 2.0).min(b.width() / 2.0);
-
-    let mut pieces = vec![area.clone(), rect(Rect::new(b.x0, b.y1 - (BASE_HOLD_MM / MM_PER_PT).min(base / 2.0), b.x1, floor_y))];
+    let mut pieces = vec![d.area.clone(), rect(Rect::new(b.x0, b.y1 - (BASE_HOLD_MM / MM_PER_PT).min(d.base / 2.0), b.x1, d.floor_y))];
     let mut strut_x: Vec<(f64, f64)> = vec![];
     for ring in &outsides {
         let Some(top) = ring.iter().copied().min_by(|p, q| p.y.total_cmp(&q.y)) else { continue };
@@ -141,29 +214,15 @@ pub fn popup_of(area: &PathData, opt: Options) -> Result<PopUp, String> {
     let strut_x = merged(strut_x);
     let inputs: Vec<(&PathData, FillRule)> = pieces.iter().map(|p| (p, FillRule::NonZero)).collect();
     let face = try_unite_all(&inputs).map_err(|e| format!("the pop-up couldn't be made: {e}"))?;
-    let face_rings = polylines(&face.to_bezpath());
-
+    let rings = polylines(&face.to_bezpath());
     // Cut round the face, but not where it joins the card.
     let base_x = [(b.x0, b.x1)];
-    let joined = |a: Point, c: Point| on(a, c, back_y, &strut_x) || on(a, c, floor_y, &base_x);
+    let joined = |a: Point, c: Point| on(a, c, back_y, &strut_x) || on(a, c, d.floor_y, &base_x);
     let mut cuts = vec![];
-    for ring in &face_rings {
+    for ring in &rings {
         cut_except(ring, &joined, &mut cuts);
     }
-
-    let margin = opt.margin_mm / MM_PER_PT;
-    let reach = (fold_y - back_y).max(floor_y - fold_y) + margin;
-    let card = Rect::new(b.x0 - margin, fold_y - reach, b.x1 + margin, fold_y + reach);
-    let dash = opt.dash_mm / MM_PER_PT;
-    let mut folds = vec![];
-    for (y, spans) in
-        [(back_y, strut_x.clone()), (top_y, strut_x.clone()), (floor_y, base_x.to_vec()), (fold_y, outside(&face_rings, fold_y, card.x0, card.x1))]
-    {
-        for (x0, x1) in spans {
-            dashes(x0, x1, y, dash, &mut folds)?;
-        }
-    }
-    Ok(PopUp { card: rect(card), cuts: PathData::new(cuts), folds: PathData::new(folds), fold_y, struts })
+    Ok(Layer { cuts, rings, strut_x, back_y, struts })
 }
 
 fn rect(r: Rect) -> PathData {
@@ -394,5 +453,41 @@ mod tests {
         assert!(popup_of(&s, Options { strut_mm: f64::NAN, ..Options::default() }).is_err());
         assert!(popup_of(&s, Options { dash_mm: 100.0, ..Options::default() }).is_err());
         assert!(popup_of(&PathData::new(vec![]), Options::default()).is_err());
+    }
+
+    /// C16.2: two designs, one lower on the sheet, stand as two layers sharing the card's fold: the
+    /// lower one further forward, so its struts are longer.
+    #[test]
+    fn designs_stand_in_layers() {
+        let mm = 1.0 / MM_PER_PT;
+        let (high, low) = (square(0.0, 0.0, 30.0 * mm), square(50.0 * mm, 20.0 * mm, 30.0 * mm));
+        let p = popup_layers(&[high.clone(), low.clone()], Options::default()).unwrap();
+        assert_eq!((p.layers, p.struts), (2, 2));
+        let one = popup_of(&high, Options::default()).unwrap();
+        assert!((p.fold_y - one.fold_y).abs() < 1e-6, "the card's fold is halfway down the shortest-standing face");
+        // Faces as tall fold onto the back at one height; the lower design's struts run from its
+        // own top, so they are longer: it stands further forward.
+        let folds_at = |x_lo: f64, x_hi: f64| -> Vec<f64> {
+            let mut ys: Vec<f64> =
+                p.folds.subpaths.iter().filter_map(|s| s.anchors.first().map(|a| a.p)).filter(|q| (x_lo..x_hi).contains(&q.x)).map(|q| q.y).collect();
+            ys.sort_by(f64::total_cmp);
+            ys.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+            ys
+        };
+        let (left, right) = (folds_at(0.0, 30.0 * mm), folds_at(50.0 * mm, 80.0 * mm));
+        let back = left.first().copied().unwrap();
+        assert!((right.first().copied().unwrap() - back).abs() < 1e-6, "{left:?} {right:?}");
+        let near = |v: &[f64], y: f64| v.iter().any(|w| (w - y).abs() < 1e-6);
+        assert!(near(&left, 0.0) && near(&right, 20.0 * mm), "each strut folds with its own design's top: {left:?} {right:?}");
+        let card = p.card.bounds().unwrap().inflate(1e-6, 1e-6);
+        assert!(p.cuts.subpaths.iter().chain(&p.folds.subpaths).flat_map(|s| &s.anchors).all(|a| card.contains(a.p)));
+    }
+
+    /// C16.2: designs whose struts would run into each other are refused.
+    #[test]
+    fn overlapping_layers_are_refused() {
+        let mm = 1.0 / MM_PER_PT;
+        let e = popup_layers(&[square(0.0, 0.0, 30.0 * mm), square(10.0 * mm, 40.0 * mm, 30.0 * mm)], Options::default()).unwrap_err();
+        assert!(e.contains("overlap"), "{e}");
     }
 }

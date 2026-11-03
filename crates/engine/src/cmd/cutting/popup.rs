@@ -27,7 +27,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Make Pop Up",
         [],
         None,
-        "{ids?, baseWidthPct?: 2–50 (default 10: the base under the design, % of its height), strutWidthMm?: 0.5–50 (default 2), dashPitchMm?: 0.25–10 (default 1: each dash of a fold, and the gap after it), marginMm?: 0–200 (default 10: the card round the pop-up)} the design (ids, else the selection) made into a pop-up card that stands up when opened at a right angle: a group on top with the card, the design's cut (open where it joins the card) and the folds as dashes, each set to Cut, and the design set to No Cut (left to be printed); with a pop-up alone selected, made again in place from the same design; one undo step → {id, struts, replaced}",
+        "{ids?, baseWidthPct?: 2–50 (default 10: the base under the design, % of its height), strutWidthMm?: 0.5–50 (default 2), dashPitchMm?: 0.25–10 (default 1: each dash of a fold, and the gap after it), marginMm?: 0–200 (default 10: the card round the pop-up)} the design (ids, else the selection; each a layer of its own, a design lower on the sheet standing further forward; group objects to stand them up together) made into a pop-up card that stands up when opened at a right angle: a group on top with the card, the design's cut (open where it joins the card) and the folds as dashes, each set to Cut, and the design set to No Cut (left to be printed); with a pop-up alone selected, made again in place from the same design; one undo step → {id, layers, struts, replaced}",
         has_doc,
         add
     )]
@@ -119,5 +119,5 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
         Ok(())
     })?;
     let id = id.ok_or_else(|| bad(CMD, "the pop-up wasn't added"))?;
-    Ok(json!({ "id": id.0, "struts": made.struts, "replaced": again.is_some() }))
+    Ok(json!({ "id": id.0, "layers": made.layers, "struts": made.struts, "replaced": again.is_some() }))
 }
