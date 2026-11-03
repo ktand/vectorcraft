@@ -275,7 +275,9 @@ on, nest and send. Planned 2026-11-03 (owner), from the sources below; not yet s
 | C15.6 | **Papercraft from a 3D model** (neither Silhouette Studio nor Cricut has it): import OBJ or STL (sizes and counts capped: untrusted input), unfold into flat pieces that don't overlap (spanning tree over the faces, cut along the rest, pieces split where they would overlap), glue tabs on one side of each cut edge, edges numbered in pairs, folds as Score (mountain and valley told apart by dash), nested onto sheets (C8.6) | Unit: a cube unfolds to six squares in one piece; a shape that would overlap is split; every cut edge has one tab and a matching number; fuzz: random and malformed meshes |
 | C15.7 | **Box round the selection**: a template sized to the selected art (its bounds plus a clearance), and the art placed on a chosen face | Unit: the box's inside fits the art's bounds plus the clearance |
 
-- **To decide.** Whether the folds go in a layer of their own; inside or outside sizes as the default.
+- **Sizes are inside sizes** (owner, 2026-11-03): what goes in the box. The panels grow by the material's
+  thickness at each fold so the contents fit; an outside size can still be asked for.
+- **To decide.** Whether the folds go in a layer of their own.
 
 ## Phase 16 — Pop-up cards (planned)
 
