@@ -281,7 +281,7 @@ card that folds in half, the design standing up when the card is opened at a rig
 - **Make Pop Up:** adds a group on top: the card's outline, the design's cut (open where it joins the card) and
   the folds, each set to Cut. The design itself is set to No Cut, left to be printed (Print & Cut) or as a guide.
   With the pop-up alone selected, the button reads **Apply to Selected Pop Up** and makes it again with the new
-  settings.
+  settings. If the card is larger than the mat's cut area where it lies, the panel says so.
 
 Each selected object stands up as a layer of its own, on a fold of its own: a design lower on the sheet stands
 further forward, in front of the ones above it. Group objects (or convert text to outlines as one) to stand them
