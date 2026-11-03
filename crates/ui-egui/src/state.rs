@@ -210,6 +210,7 @@ pub const ICON_PANELS: &[(&str, &str, &str)] = &[
     (crate::panels::cutting::patterns::RHINESTONES_ID, "Rhinestones", "sparkles"),
     (crate::panels::cutting::patterns::PUZZLE_ID, "Puzzle", "shapes"),
     (crate::panels::cutting::popup::ID, "Pop Up", "layers"),
+    (crate::panels::cutting::templates::ID, "Templates", "dc-cube"),
     (crate::panels::cutting::mat::ID, "Cutting Mat", "grid-3x3"),
     (crate::panels::cutting::mat::TILES_ID, "Tiles", "layout-grid"),
     (crate::panels::cutting::mat::NESTING_ID, "Nesting", "group"),

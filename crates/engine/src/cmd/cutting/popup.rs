@@ -87,7 +87,7 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad(CMD, "select the design to pop up"));
     }
     let made = popup(d, &design, opt).map_err(|e| bad(CMD, e))?;
-    let warnings = off_the_mat(d, &made.card);
+    let warnings = off_the_mat(d, &made.card, "card");
     let top = design.last().and_then(|last| d.layer_of(*last)).ok_or_else(|| bad(CMD, "the design isn't on a layer"))?;
     let keep = json!(design.iter().map(|i| i.0).collect::<Vec<_>>()).to_string();
     let mut id = None;
@@ -124,8 +124,8 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 /// C16.3: what to say when the card (document points) doesn't lie in the mat's cut area as the
-/// document is placed on it.
-fn off_the_mat(d: &vectorcraft_doc::Document, card: &PathData) -> Vec<String> {
+/// document is placed on it; `what` names it (a template's net, C15.1, too).
+pub(super) fn off_the_mat(d: &vectorcraft_doc::Document, card: &PathData, what: &str) -> Vec<String> {
     let s = vectorcraft_cutting::settings(d);
     let (Some(p), Some(b)) = (vectorcraft_cutting::placement::place(&s, d), card.bounds()) else { return vec![] };
     let c = p.mat.cut_area_mm;
@@ -135,5 +135,6 @@ fn off_the_mat(d: &vectorcraft_doc::Document, card: &PathData) -> Vec<String> {
         return vec![];
     }
     let (w, h) = (b.width() * vectorcraft_cutting::placement::MM_PER_PT, b.height() * vectorcraft_cutting::placement::MM_PER_PT);
-    vec![format!("the card ({w:.0} × {h:.0} mm) goes off the mat's cut area: move it onto the mat, make the design smaller, or choose a larger mat")]
+    let smaller = if what == "card" { "make the design smaller" } else { "make it smaller" };
+    vec![format!("the {what} ({w:.0} × {h:.0} mm) goes off the mat's cut area: move it onto the mat, {smaller}, or choose a larger mat")]
 }

@@ -21,6 +21,7 @@ pub mod mat;
 pub mod patterns;
 pub mod popup;
 pub mod print;
+pub mod templates;
 
 pub const ID: &str = "cutting";
 
@@ -37,6 +38,7 @@ pub const PANELS: &[&str] = &[
     patterns::RHINESTONES_ID,
     patterns::PUZZLE_ID,
     popup::ID,
+    templates::ID,
     mat::TILES_ID,
     mat::NESTING_ID,
     print::ID,

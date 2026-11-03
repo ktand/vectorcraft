@@ -17,4 +17,5 @@ mod send;
 mod sketch;
 mod stones;
 mod svg_size;
+mod template;
 mod tile;

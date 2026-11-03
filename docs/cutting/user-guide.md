@@ -16,7 +16,7 @@ panels on the right:
 - **Layers** at the top. Cutting by layer is set up here.
 - **Cut Settings** below it: what you change for each cut, and Send to Cutter….
 - Beside them, a strip of icons, one for each feature: **Cutting Mat** first, then **Contour**, **Stencil**,
-  **Weeding**, **Sketch Fill**, **Rhinestones**, **Puzzle**, **Pop Up**, **Tiles**, **Nesting** and **Print & Cut**. Click an icon to
+  **Weeding**, **Sketch Fill**, **Rhinestones**, **Puzzle**, **Pop Up**, **Templates**, **Tiles**, **Nesting** and **Print & Cut**. Click an icon to
   open that feature's panel beside it, and again (or anywhere else) to close it. Hover an icon for its name.
 
 If your Cutting workspace looks different (you moved its panels, or saved it with an older version), Window ›
@@ -31,6 +31,7 @@ The panels (each also on the Window › Cutting menu):
   bridges, weeding's box and lines (section 5).
 - **Sketch Fill**, **Rhinestones**, **Puzzle** and **Pop Up:** designs made from the art: lines for the pen, a
   rhinestone template, a puzzle, a pop-up card (section 5).
+- **Templates:** boxes and other nets made to the size you give, ready to cut and fold (section 5).
 - **Cutting Mat:** the mat and where the artboard sits on it. **Tiles** cuts a design larger than the mat in parts,
   **Nesting** packs the pieces onto it (section 2).
 - **Print & Cut:** printing with registration marks and cutting round the print.
@@ -290,6 +291,24 @@ further forward, in front of the ones above it. Group objects (or convert text t
 up together. Designs whose struts would run into each other are refused: move them apart.
 
 Fold the card along its middle fold first, then push each design forward along its folds.
+
+### Templates: boxes made to size
+
+The **Templates** panel makes a flat net you cut out and fold up, at the size you ask for. Only the **Open Tray**
+is there so far; boxes with lids, envelopes and more are planned.
+
+- **Template:** which one. A picture of its net shows under it (the outline, the folds dashed in blue, the glue
+  tabs shaded), with the net's size, and changes as you change the sizes.
+- **Length**, **Width**, **Height:** the inside sizes, what has to fit in it.
+- **Thickness:** the material's. Each fold takes up some of it, so the panels are made slightly larger for what
+  you put in to fit. Turn on **Outside Sizes** to give the finished size instead.
+- **Glue Tab:** how far each corner's tab reaches along the wall it is glued inside.
+- **Add Template:** adds a group, centred on the artboard: the outline set to Cut, the folds set to Score (in a
+  blue of their own, so cutting by colour can send them to a pen or an embosser instead), and the glue tabs
+  shaded and not cut. With the template alone selected, the button reads **Apply to Selected Template** and makes
+  it again where it is with the new sizes. If the net is larger than the mat's cut area, the panel says so.
+
+Fold up along the scored lines, then glue each tab inside the wall next to it.
 
 ### Sketch fill: shading for the pen
 

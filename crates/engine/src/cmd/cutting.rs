@@ -37,6 +37,8 @@ mod stones;
 // Puzzles (C13.5).
 mod popup;
 mod puzzle;
+// Templates made to size (C15.1).
+mod template;
 // Tiles larger than the mat (C14.7).
 mod tile;
 // The machine's origin adjustment (C4.6).
@@ -59,6 +61,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(stones::specs());
     v.extend(puzzle::specs());
     v.extend(popup::specs());
+    v.extend(template::specs());
     v.extend(tile::specs());
     v.extend(machine::specs());
     v.extend(vec![

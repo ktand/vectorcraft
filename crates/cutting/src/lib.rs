@@ -45,6 +45,7 @@ pub mod puzzle;
 pub mod select;
 pub mod setups;
 pub mod stones;
+pub mod template;
 pub mod test_cut;
 pub mod tile;
 pub mod weed;

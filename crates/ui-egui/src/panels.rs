@@ -198,6 +198,7 @@ pub fn show_icon_panel(app: &mut VectorcraftApp, ui: &mut Ui, id: &str) {
         cutting::patterns::RHINESTONES_ID => cutting::patterns::show_rhinestones(app, ui),
         cutting::patterns::PUZZLE_ID => cutting::patterns::show_puzzle(app, ui),
         cutting::popup::ID => cutting::popup::show(app, ui),
+        cutting::templates::ID => cutting::templates::show(app, ui),
         id if library_panel::parse(id).is_some() => library_panel::show(app, ui, id),
         _ => {
             dim_label(ui, tl!("This panel is on the roadmap (see the parity plan)."));
