@@ -30,7 +30,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Templates",
             [],
             None,
-            "{} the templates cutting.template makes, in the panel's order → {templates: [{id, name, family, sized: whether it has inside and outside sizes, params: [{key, label, unit: mm|deg|count, default, min, max, help}]}]}",
+            "{} the templates cutting.template makes, in the panel's order → {templates: [{id, name, family, sized: whether it has inside and outside sizes, params: [{key, label, unit: mm|deg|count|toggle (true or false, or 1 or 0), default, min, max, help}]}]}",
             always,
             list
         ),
@@ -142,8 +142,9 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
             _ => return Err(bad(CMD, "folds must be score or perforate")),
         },
     };
-    let given = |key: &str| p.get(key).map(|v| v.as_f64().unwrap_or(f64::NAN));
-    let keys: Vec<&str> = kind.params.iter().map(|q| q.key).collect();
+    // A switch may come as true or false, or as 1 or 0.
+    let given = |key: &str| p.get(key).map(|v| v.as_bool().map_or_else(|| v.as_f64().unwrap_or(f64::NAN), |b| f64::from(u8::from(b))));
+    let keys: Vec<&str> = kind.params.iter().filter(|q| q.unit != template::Unit::Toggle).map(|q| q.key).collect();
     check_numbers(p, &keys, CMD)?;
     let fallback = again.as_ref().filter(|(_, m)| m.kind.id == kind.id).map(|(_, m)| &m.values);
     let values = kind.values(&given, fallback, outside).map_err(|e| bad(CMD, e))?;

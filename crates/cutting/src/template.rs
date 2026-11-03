@@ -10,6 +10,7 @@
 use vectorcraft_geom::{Anchor, PathData, Point, SubPath};
 
 mod boxes;
+mod cards;
 mod tuck;
 
 /// What a parameter measures, for its field.
@@ -18,6 +19,8 @@ pub enum Unit {
     Mm,
     Deg,
     Count,
+    /// On (1) or off (0): a checkbox.
+    Toggle,
 }
 
 impl Unit {
@@ -26,6 +29,7 @@ impl Unit {
             Unit::Mm => "mm",
             Unit::Deg => "deg",
             Unit::Count => "count",
+            Unit::Toggle => "toggle",
         }
     }
 }
@@ -109,6 +113,9 @@ impl Kind {
             if p.unit == Unit::Count && v.fract() != 0.0 {
                 return Err(format!("{} must be a whole number", p.key));
             }
+            if p.unit == Unit::Toggle && v != 0.0 && v != 1.0 {
+                return Err(format!("{} must be true or false", p.key));
+            }
             nums.push((p.key, v));
         }
         Ok(Values { nums, outside: outside && self.sized })
@@ -116,7 +123,17 @@ impl Kind {
 
     /// The net for `values`.
     pub fn make(&self, values: &Values) -> Result<Net, String> {
-        let net = (self.make)(values)?;
+        let mut net = (self.make)(values)?;
+        // Every net's outline starts at the origin, whatever its curves reach.
+        if let Some(b) = net.cut.bounds()
+            && b.x0.is_finite()
+            && b.y0.is_finite()
+        {
+            let to = vectorcraft_geom::Affine::translate((-b.x0, -b.y0));
+            for p in [&mut net.cut, &mut net.folds, &mut net.glue] {
+                p.transform(to);
+            }
+        }
         // A net that isn't finite or has no size is a template's bug: refused, not drawn.
         let finite = |p: &PathData| p.subpaths.iter().flat_map(|s| &s.anchors).all(|a| a.p.x.is_finite() && a.p.y.is_finite());
         let (w, h) = net.size();
@@ -128,7 +145,19 @@ impl Kind {
 }
 
 /// Every template, in the order the panel lists them.
-pub const KINDS: &[Kind] = &[tuck::STRAIGHT, tuck::REVERSE, TRAY, boxes::TRAY_LID, boxes::PILLOW];
+pub const KINDS: &[Kind] = &[
+    tuck::STRAIGHT,
+    tuck::REVERSE,
+    TRAY,
+    boxes::TRAY_LID,
+    boxes::PILLOW,
+    cards::ENVELOPE,
+    cards::POINTED_ENVELOPE,
+    cards::PLACE_CARD,
+    cards::GIFT_TAG,
+    cards::EARRING_CARD,
+    cards::GIFT_CARD_HOLDER,
+];
 
 /// The template `id`.
 pub fn kind(id: &str) -> Option<&'static Kind> {
@@ -476,8 +505,9 @@ mod tests {
             let net = k.make(&values(k, &[], false).unwrap()).unwrap_or_else(|e| panic!("{}: {e}", k.id));
             let b = net.cut.bounds().unwrap();
             assert!(b.x0.abs() < 1e-9 && b.y0.abs() < 1e-9, "{}: top left at the origin", k.id);
-            let g = net.glue.bounds().unwrap();
-            assert!(g.x0 >= b.x0 - 1e-9 && g.y0 >= b.y0 - 1e-9 && g.x1 <= b.x1 + 1e-9 && g.y1 <= b.y1 + 1e-9, "{}", k.id);
+            if let Some(g) = net.glue.bounds() {
+                assert!(g.x0 >= b.x0 - 1e-9 && g.y0 >= b.y0 - 1e-9 && g.x1 <= b.x1 + 1e-9 && g.y1 <= b.y1 + 1e-9, "{}", k.id);
+            }
         }
     }
 }

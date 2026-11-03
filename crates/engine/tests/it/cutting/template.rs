@@ -99,3 +99,17 @@ fn folds_may_be_perforated() {
     assert_eq!(back["folds"], "score");
     assert_eq!(kinds(&mut s).iter().filter(|k| *k == "score").count(), 8);
 }
+
+/// A switch takes true or false (or 1 or 0), nothing else.
+#[test]
+fn switches_take_true_or_false() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 800, "height": 800})).unwrap();
+    for ok in [json!(false), json!(true), json!(0), json!(1)] {
+        s.execute("cutting.template", &json!({"kind": "earringCard", "hangSlot": ok})).unwrap();
+        s.execute("select.none", &json!({})).unwrap();
+    }
+    for bad in [json!("yes"), json!(0.5), json!(2)] {
+        assert!(s.execute("cutting.template", &json!({"kind": "earringCard", "hangSlot": bad})).is_err(), "{bad}");
+    }
+}

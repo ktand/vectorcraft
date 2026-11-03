@@ -132,10 +132,17 @@ fn template_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         }
     }
     for p in kind.params {
+        if p.unit == Unit::Toggle {
+            let mut on = c.value(kind, p.key) > 0.5;
+            if ui.checkbox(&mut on, tl!(p.label)).on_hover_text(tl!(p.help)).changed() {
+                c.set(p.key, if on { 1.0 } else { 0.0 });
+            }
+            continue;
+        }
         let (suffix, decimals, step) = match p.unit {
             Unit::Mm => (" mm", if p.max <= 10.0 { 2 } else { 1 }, if p.max <= 10.0 { 0.1 } else { 1.0 }),
             Unit::Deg => ("°", 0, 1.0),
-            Unit::Count => ("", 0, 1.0),
+            Unit::Count | Unit::Toggle => ("", 0, 1.0),
         };
         let v = c.value(kind, p.key);
         widgets::label_row(ui, tl!(p.label), LABEL_W, |ui| {

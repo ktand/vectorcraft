@@ -298,7 +298,9 @@ The **Templates** panel makes a flat net you cut out and fold up, at the size yo
 Box** (a card-deck box, both ends tucked in from the back), the **Reverse Tuck End Box** (the bottom tucked in
 from the front), the **Open Tray**, the **Tray with Lid** (the lid sized to slide over the tray, with the
 **Clearance** you give) and the **Pillow Box** (curved ends that fold in; **Depth** is how far they bow).
-Envelopes, cards and more are planned.
+Under **Cards & Envelopes**: an **Envelope** and a **Pointed Envelope** (give the card's size and the **Ease**
+round it), a **Place Card**, a **Gift Tag**, an **Earring Card** (with a **Hang Slot** you can switch off) and a
+**Gift Card Holder**. Solids are planned.
 
 - **Template:** which one. A picture of its net shows under it (the outline, the folds dashed in blue, the glue
   tabs shaded), with the net's size, and changes as you change the sizes.
