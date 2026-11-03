@@ -1,7 +1,7 @@
 # Cutting with VectorCraft: user guide
 
 > **For:** anyone using this fork to prepare and cut designs on a Silhouette cutter · **Machines:** the Cameo 4
-> family first (Cameo 3, 4, 4 Plus, 4 Pro, 5, 5 Plus are recognised) · **Status:** written 2026-10-30, before the
+> family first (Cameo 3, 4, 4 Plus, 4 Pro, 5, 5 Plus and Portrait 3, 4 are recognised) · **Status:** written 2026-10-30, before the
 > first cut on a real machine: some steps may change once the [hardware checks](hardware-validation.md) are done
 
 VectorCraft can send a design straight to a cutting machine. This guide walks through it in the order you'd

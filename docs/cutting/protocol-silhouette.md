@@ -40,7 +40,8 @@ relies on most are listed again in [Checks on the machine](#checks-on-the-machin
 
 | Fact | Source |
 |---|---|
-| USB vendor id `0x0B4D` (Graphtec). Cameo 4 product id `0x1137`; Cameo 4 Plus `0x1138`, Cameo 4 Pro `0x1139`, Cameo 3 `0x112F`, Cameo 5 `0x1140`, Cameo 5 Plus `0x1141`. The Cameo 5 Alpha family uses another vendor id, `0x3844`. | [IS]; Cameo 4 also [WIN] |
+| USB vendor id `0x0B4D` (Graphtec). Cameo 4 product id `0x1137`; Cameo 4 Plus `0x1138`, Cameo 4 Pro `0x1139`, Cameo 3 `0x112F`, Cameo 5 `0x1140`, Cameo 5 Plus `0x1141`, Portrait 3 `0x113A`, Portrait 4 `0x113F` (the Portrait and Portrait 2, `0x1123` and `0x1132`, take the older, unaddressed commands and aren't driven). The Cameo 5 Alpha family uses another vendor id, `0x3844`. | [IS]; Cameo 4 also [WIN] |
+| The Portrait 3 and 4 are driven as the Cameo 4 family (holder-numbered settings, speed 1–30, the mat codes) but have one tool holder: no `J` is sent to them. Cut widths 203 mm and 216 mm in the reference; the maker sells an 8 × 12 in mat for the Portrait 3 and gives the Portrait 4 an 8.5 in cut width (<https://www.silhouetteamerica.com/CUT-MAT-LTR-3T>, <https://www.silhouetteamerica.com/portrait-4>), so we take the Portrait 3 as 8 in (203.2 mm). | [IS] (`PRODUCT_LINE_CAMEO4`, `PRODUCTS_WITH_TWO_TOOLS`), [SA] |
 | The Cameo 4 presents a USB printer-class interface (class 7, subclass 1, protocol 2: bidirectional); Windows binds it to its own `usbprint.sys`, with no vendor driver. | [WIN] |
 | Commands go to the bulk OUT endpoint and replies come from the bulk IN endpoint of interface 0 (`0x01` and `0x82`). Through `usbprint.sys` these are a file's writes and reads. | [IS]; the usbprint mapping is ours, **to confirm** |
 | Writes are sent in pieces of at most 4,096 bytes; a careful mode sends 1,024 bytes and waits for the machine to be ready before the next. A write that times out is tried again, up to five times, a second apart. | [IS], **to confirm** |

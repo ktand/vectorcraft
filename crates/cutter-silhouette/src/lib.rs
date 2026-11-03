@@ -69,8 +69,11 @@ fn fitted(code: &str, holder: usize) -> vectorcraft_cutter::tools::Fitted {
 }
 
 /// The machines this driver knows: USB product id, name, cut width (mm).
-pub const MODELS: [(u16, &str, f64); 6] = [
+pub const MODELS: [(u16, &str, f64); 8] = [
     (0x112F, "Cameo 3", 304.8),
+    // 8 in: the reference has 203 mm, which would refuse the maker's 8 in Portrait mat by 0.2 mm.
+    (PORTRAIT_3, "Portrait 3", 203.2),
+    (PORTRAIT_4, "Portrait 4", 216.0),
     (0x1137, "Cameo 4", 304.8),
     (0x1138, "Cameo 4 Plus", 372.0),
     (0x1139, "Cameo 4 Pro", 600.0),
@@ -151,6 +154,11 @@ pub fn tool_warnings(job: &vectorcraft_cutjob::CutJob, holders: &[vectorcraft_cu
 
 /// The product id of the one model here whose holder 2 doesn't take the specialty tools.
 const CAMEO_3: u16 = 0x112F;
+/// The Portrait 3 and 4: the Cameo 4's commands, one tool holder (protocol notes › Machines).
+const PORTRAIT_3: u16 = 0x113A;
+const PORTRAIT_4: u16 = 0x113F;
+/// The machines with one tool holder: no tool is chosen (`J`), and holder 2's tools are refused.
+const ONE_HOLDER: [u16; 2] = [PORTRAIT_3, PORTRAIT_4];
 /// `FC`'s second value: a fixed 1 unit (0.05 mm), blade or pen (protocol notes › A job).
 const FC_SECOND: u32 = 1;
 
@@ -338,6 +346,12 @@ impl Silhouette {
     /// `job` as commands for a machine of `width_mm` cut width, every position moved `adjust_mm`
     /// (across, down) on the mat: the user's origin adjustment (C4.6).
     pub fn encode_for(&self, job: &CutJob, width_mm: f64, adjust_mm: [f64; 2]) -> Result<Encoded, String> {
+        self.encode_holders(job, width_mm, adjust_mm, 2)
+    }
+
+    /// As [`Silhouette::encode_for`], for a machine with `holders` tool holders: with one, no
+    /// tool is chosen (the reference sends `J` to two-holder machines only).
+    fn encode_holders(&self, job: &CutJob, width_mm: f64, adjust_mm: [f64; 2], holders: u8) -> Result<Encoded, String> {
         job.validate().map_err(|e| e.to_string())?;
         let area = job.mat.cut_area_mm;
         if area.x1 > width_mm + 1e-6 {
@@ -426,7 +440,9 @@ impl Silhouette {
                 // C10.1: on a two-holder machine each tool setting names its holder (protocol
                 // notes › A job); the AutoBlade's depth is holder 1's only.
                 let h = kind.holder;
-                c.cmd(&format!("J{h}"));
+                if holders > 1 {
+                    c.cmd(&format!("J{h}"));
+                }
                 c.cmd(&format!("FX{force},{h}"));
                 c.cmd(&format!("!{speed},{h}"));
                 let offset = if kind.pen { 0 } else { blade_offset_units(op.tool.blade_offset_mm) };
@@ -494,7 +510,13 @@ impl Driver for Silhouette {
         {
             return Err(format!("the {} fits the Cameo 4 and later only: choose a holder 1 tool for the Cameo 3", t.label));
         }
-        self.encode_for(job, width, adjust_mm)
+        let holders = if ONE_HOLDER.contains(&device.product_id) { 1 } else { 2 };
+        if holders == 1
+            && let Some(t) = job.operations.iter().filter_map(|o| tool(o.tool.tool.as_deref())).find(|t| t.holder == 2)
+        {
+            return Err(format!("the {} goes in holder 2, and the {} has one holder: choose a holder 1 tool", t.label, self.model(device)));
+        }
+        self.encode_holders(job, width, adjust_mm, holders)
     }
 
     fn status_query(&self) -> &[u8] {

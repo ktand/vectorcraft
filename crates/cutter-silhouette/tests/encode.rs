@@ -433,6 +433,32 @@ fn the_tool_decides_the_holder() {
     assert!(encode(Some("kraft2"), &cameo3).is_ok(), "holder 1's adapter tools are any model's");
 }
 
+/// C17.5: the Portrait 3 and 4 are driven as the Cameo 4 with one holder: no tool chosen, the
+/// settings still name holder 1, holder 2's tools refused, the job no wider than the machine.
+#[test]
+fn the_portraits_have_one_holder() {
+    let encode = |tool_id: Option<&str>, device: &DeviceInfo, mat: &str| {
+        let t = ToolSettings { tool: tool_id.map(str::to_string), ..tool(0.5, 100.0, 1, 0.0) };
+        let mut j = job(vec![Operation { kind: OpKind::Cut, tool: t }], vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]])], mat);
+        // The 8 × 12 in Portrait mat, cut all over.
+        if mat == "silhouette.8x12" {
+            j.mat.size_mm = [203.2, 304.8];
+            j.mat.cut_area_mm.x1 = 203.2;
+        }
+        Silhouette.encode(&j, device).map(|e| String::from_utf8_lossy(&e.chunks.concat()).to_string())
+    };
+    for (id, name) in [(0x113A, "Portrait 3"), (0x113F, "Portrait 4")] {
+        let portrait = DeviceInfo { product_id: id, ..cameo4() };
+        assert!(Silhouette.drives(&portrait));
+        assert_eq!(Silhouette.model(&portrait), name);
+        let text = encode(None, &portrait, "silhouette.8x12").unwrap();
+        assert!(!text.contains("J1") && text.contains("FX17,1\u{3}!10,1\u{3}"), "{text:?}");
+        let e = encode(Some("rotary"), &portrait, "silhouette.8x12").unwrap_err();
+        assert!(e.contains("one holder") && e.contains(name), "{e}");
+        assert!(encode(None, &portrait, "silhouette.12x12").unwrap_err().contains("this cutter cuts"), "a 12 in mat is too wide");
+    }
+}
+
 /// C10.3: the answer to the tools query, read: a code per holder, the Kraft blade's by holder;
 /// any bytes at all read without a panic, at most four holders.
 #[test]
