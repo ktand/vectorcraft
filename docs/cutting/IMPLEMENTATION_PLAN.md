@@ -277,7 +277,8 @@ on, nest and send. Planned 2026-11-03 (owner), from the sources below; not yet s
 
 - **Sizes are inside sizes** (owner, 2026-11-03): what goes in the box. The panels grow by the material's
   thickness at each fold so the contents fit; an outside size can still be asked for.
-- **To decide.** Whether the folds go in a layer of their own.
+- **One group per template, folds inside it** (owner, 2026-11-03): no layer of their own. The folds are drawn
+  in a colour of their own, so grouping by colour (C5.3) can send them to a pen or an embosser when wanted.
 
 ## Phase 16 — Pop-up cards (planned)
 
