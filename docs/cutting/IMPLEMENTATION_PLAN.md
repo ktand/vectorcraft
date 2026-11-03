@@ -231,27 +231,51 @@ software blade-offset compensation for a cutter family that can't do it itself (
 reports · more cutter families as their own `cutter-*` crates · upstream PRs for command and overlay
 extension points (ARCHITECTURE §7).
 
-## Phase 15 — Templates made to size (idea)
+## Phase 15 — Templates made to size (planned)
 
-Owner, 2026-11-01: an idea, not yet planned or sized. Sites such as [Templatemaker](https://www.templatemaker.nl/en/)
-make papercraft and packaging templates to the size asked for: boxes (with a lid, tuck-end, gift, pillow, heart,
-star), trays and inserts, envelopes and mailers, cylinders and cones, pyramids, prisms and the Platonic solids,
-bags. A cutting app could make them in place: the net drawn as paths in the document, its lines already set to
-cut or score, ready to print on, nest and send.
+Owner, 2026-11-01: sites such as [Templatemaker](https://www.templatemaker.nl/en/) make papercraft and packaging
+templates to the size asked for: boxes (with a lid, tuck-end, gift, pillow, heart, star), trays and inserts,
+envelopes and mailers, cylinders and cones, pyramids, prisms and the Platonic solids, bags. A cutting app could
+make them in place: the net drawn as paths in the document, its lines already set to cut or score, ready to print
+on, nest and send. Planned 2026-11-03 (owner), from the sources below; not yet sized.
 
-- **Clean-room.** Only the list of what kinds of templates exist comes from such sites. Every net is our own,
-  worked out from its geometry (a box's panels from its inside sizes, a cone's from its radii and slant, a
-  polyhedron's from its faces), never traced from or compared against another tool's output; its licence terms
-  aren't known.
-- **How it would fit.** One command per family (`cutting.template.box`, `….envelope`, `….cone`…) adding one
-  group: the outline set to Cut, the folds to Score (or Perforate), the glue flaps marked; parameters in mm
-  (inside or outside sizes, material thickness taken up at each fold, flap width and angle, lid clearance);
-  remade in place with new settings as the puzzle is (C13.5); a Templates panel (C14.9: one for each feature) with a
-  picture of the folded shape. Folds would show in the preview as score lines already do.
-- **First candidates.** A tuck-end box, a box with a separate lid, a tray, an envelope, a pillow box, a
-  cylinder and a cone (with a top diameter of 0 a true cone), a pyramid of n sides, the five Platonic solids.
-- **To decide.** Which families first; whether the folds go in a layer of their own; whether a template can wrap
-  the selected art (a box sized to it).
+- **Sources** (surveyed 2026-11-03; owner's decision):
+  - **[Die Cut Studio](https://github.com/pradeepsiddappa/diecutstudio)** (MIT, © 2026 Pradeep Siddappa; one
+    commit, 2026-09-28): over 55 parametric craft templates in TypeScript, each a pure function from sizes to a
+    dieline, each with a design note (`docs/models/*.md`). Its generators may be **ported** to Rust: each ported
+    file names the original file and commit in its header and keeps the MIT notice; the port gets a row in
+    `ASSETS.md` and its notice in `NOTICE`. It is new and partly unfinished (its notes: thickness not taken up
+    at the folds yet), and its own rules let contributors look at other tools' output, which ours don't; so each
+    template is checked against its geometry by our own tests as it is ported, never taken on trust.
+  - **The FEFCO code** (<https://www.fefco.org/sites/default/files/documents/FEFCO_Codes_of_Designs.pdf>, free
+    to download, "all rights reserved"): the corrugated industry's catalogue of box styles. Used only for which
+    styles exist, their numbers and names (`0201` regular slotted case…) and what each is; the geometry is our
+    own. Its drawings and text are never copied, and the PDF is not kept in the repo.
+  - **Our own geometry** for what neither covers: cylinders, cones, pyramids, prisms, the Platonic solids.
+  - **[paperfoldmodels](https://github.com/felixfeliz/paperfoldmodels)** (MIT) and
+    [4H-Unfolder](https://github.com/nghiazer/4H-Unfolder) (MIT): how unfolding a mesh is done (C15.6), read for
+    the method; our code is our own.
+  - **Not used:** Templatemaker beyond its list of kinds (licence unknown); [Boxes.py](https://github.com/florianfesti/boxes)
+    (GPL-3.0); open-dieline (PolyForm Noncommercial); packaging-dieline-generator (MIT, but calibrated against a
+    commercial tool's samples); commercial generators (GoVisually, PackMyMan, Pacdora, DielineKit). No net is
+    traced from or compared against any other tool's output.
+- **How it fits.** One command per family (`cutting.template.box`, `….envelope`, `….cone`…) adding one group: the
+  outline set to Cut, the folds to Score (or Perforate), the glue flaps marked; parameters in mm (inside or
+  outside sizes, material thickness taken up at each fold, flap width and angle, lid clearance); remade in place
+  with new settings as the puzzle is (C13.5); a Templates panel (C14.9: one for each feature) with a picture of
+  the folded shape. Folds show in the preview as score lines already do.
+
+| ID | Task | Tests |
+|---|---|---|
+| C15.1 | **Template framework**: a `cutting::template` module (a template a function from its parameters to cut, score and glue paths in mm), `cutting.templates` (the list, with each one's parameters doc), `cutting.template {kind, …}` adding one group remade in place, and the Templates panel (a list by family, the parameters, a flat picture) | Unit: a stub template's group; remade in place keeps its position; command sweep; the panel's frame test |
+| C15.2 | **First boxes, ported**: straight and reverse tuck end, tray with a separate lid, pillow box, from Die Cut Studio's generators with attribution; material thickness taken up at each fold (ours, which it lacks) | Unit per template: panel sizes from the inside sizes, every fold shared by two panels, edges that meet when folded the same length; property: random sizes in range give closed outlines with nothing overlapping |
+| C15.3 | **Envelopes and cards**: envelope, gift-card holder, earring and necklace display cards, place card, gift tag, from Die Cut Studio | As C15.2 |
+| C15.4 | **Solids of our own**: cylinder and cone (a top diameter of 0 a true cone), pyramid and prism of n sides, the five Platonic solids, with glue tabs | Unit: a cone's arc from its radii and slant; each solid's faces and edges counted; edges that meet the same length |
+| C15.5 | **More of Die Cut Studio**: gable, hexagon, heart and drawer boxes, the animal treat boxes, party items (bunting, hat, cake topper), lantern, star; and FEFCO styles worth having at craft size (`0201`, `0427` mailer) in our own geometry | As C15.2, per template |
+| C15.6 | **Papercraft from a 3D model** (neither Silhouette Studio nor Cricut has it): import OBJ or STL (sizes and counts capped: untrusted input), unfold into flat pieces that don't overlap (spanning tree over the faces, cut along the rest, pieces split where they would overlap), glue tabs on one side of each cut edge, edges numbered in pairs, folds as Score (mountain and valley told apart by dash), nested onto sheets (C8.6) | Unit: a cube unfolds to six squares in one piece; a shape that would overlap is split; every cut edge has one tab and a matching number; fuzz: random and malformed meshes |
+| C15.7 | **Box round the selection**: a template sized to the selected art (its bounds plus a clearance), and the art placed on a chosen face | Unit: the box's inside fits the art's bounds plus the clearance |
+
+- **To decide.** Whether the folds go in a layer of their own; inside or outside sizes as the default.
 
 ## Phase 16 — Pop-up cards (planned)
 
