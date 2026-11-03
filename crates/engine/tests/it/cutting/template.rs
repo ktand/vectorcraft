@@ -100,6 +100,27 @@ fn folds_may_be_perforated() {
     assert_eq!(kinds(&mut s).iter().filter(|k| *k == "score").count(), 8);
 }
 
+/// Every template the list names can be added with its defaults, in one piece or more, its outline
+/// cut.
+#[test]
+fn every_template_is_added_with_its_defaults() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 2000, "height": 2000})).unwrap();
+    let list = s.execute("cutting.templates", &json!({})).unwrap();
+    let ids: Vec<String> = list["templates"].as_array().unwrap().iter().map(|t| t["id"].as_str().unwrap().to_string()).collect();
+    assert!(ids.len() >= 19, "{ids:?}");
+    for id in &ids {
+        let r = s.execute("cutting.template", &json!({"kind": id})).unwrap_or_else(|e| panic!("{id}: {e:?}"));
+        assert_eq!(r["kind"], json!(id));
+        // Its outline, set to Cut, is in the group.
+        let doc = &s.active().unwrap().doc;
+        let g = doc.node(vectorcraft_doc::NodeId(r["id"].as_u64().unwrap())).unwrap();
+        let vectorcraft_doc::NodeKind::Group { children, .. } = &g.kind else { panic!("{id}: a group") };
+        assert!(children.iter().any(|c| c.name.as_deref() == Some("Cut")), "{id}");
+        s.execute("edit.undo", &json!({})).unwrap();
+    }
+}
+
 /// A switch takes true or false (or 1 or 0), nothing else.
 #[test]
 fn switches_take_true_or_false() {

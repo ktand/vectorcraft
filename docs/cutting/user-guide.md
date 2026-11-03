@@ -300,7 +300,10 @@ from the front), the **Open Tray**, the **Tray with Lid** (the lid sized to slid
 **Clearance** you give) and the **Pillow Box** (curved ends that fold in; **Depth** is how far they bow).
 Under **Cards & Envelopes**: an **Envelope** and a **Pointed Envelope** (give the card's size and the **Ease**
 round it), a **Place Card**, a **Gift Tag**, an **Earring Card** (with a **Hang Slot** you can switch off) and a
-**Gift Card Holder**. Solids are planned.
+**Gift Card Holder**. Under **Solids**: the **Cube**, **Tetrahedron**, **Octahedron**, **Dodecahedron** and
+**Icosahedron** (give the **Edge**), a **Pyramid** and a **Prism** of 3 to 24 sides, a **Cylinder** and a **Cone**
+(a **Top Diameter** above 0 cuts it off flat). Solids come out in one piece with a glue tab on every edge that
+is cut, the ends of a cylinder or a cone as pieces of their own.
 
 - **Template:** which one. A picture of its net shows under it (the outline, the folds dashed in blue, the glue
   tabs shaded), with the net's size, and changes as you change the sizes.

@@ -11,7 +11,9 @@ use vectorcraft_geom::{Anchor, PathData, Point, SubPath};
 
 mod boxes;
 mod cards;
+mod solids;
 mod tuck;
+mod unfold;
 
 /// What a parameter measures, for its field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -157,6 +159,15 @@ pub const KINDS: &[Kind] = &[
     cards::GIFT_TAG,
     cards::EARRING_CARD,
     cards::GIFT_CARD_HOLDER,
+    solids::CUBE,
+    solids::TETRAHEDRON,
+    solids::OCTAHEDRON,
+    solids::DODECAHEDRON,
+    solids::ICOSAHEDRON,
+    solids::PYRAMID,
+    solids::PRISM,
+    solids::CYLINDER,
+    solids::CONE,
 ];
 
 /// The template `id`.
