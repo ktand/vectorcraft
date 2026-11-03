@@ -59,10 +59,23 @@ impl MatGeometry {
             plate_margin_mm: [10.0; 4],
         }
     }
+
+    /// Material fed from the roll with no mat under it (C17.1), `size_mm` (its width, and the
+    /// length to cut): cut all over, no plastic round it.
+    pub fn roll(size_mm: [f64; 2]) -> MatGeometry {
+        MatGeometry { id: ROLL, label: "Roll (no mat)", plate_margin_mm: [0.0; 4], ..MatGeometry::custom(size_mm) }
+    }
+
+    /// Material fed from the roll, not on a mat.
+    pub fn is_roll(&self) -> bool {
+        self.id == ROLL
+    }
 }
 
 /// [`MatGeometry::id`] of a custom mat.
 pub(crate) const CUSTOM: &str = "custom";
+/// [`MatGeometry::id`] of material fed from the roll (C17.1).
+pub const ROLL: &str = "roll";
 
 /// 12 and 24 inches in millimetres, exactly (written out: `12.0 * 25.4` is 304.79999999999995).
 const IN_12: f64 = 304.8;
@@ -121,6 +134,9 @@ mod tests {
 
     #[test]
     fn a_custom_mat_is_cut_all_over() {
+        let r = MatGeometry::roll([300.0, 1500.0]);
+        assert!(r.is_roll() && !MatGeometry::custom([1.0, 1.0]).is_roll());
+        assert_eq!((r.cut_area_mm.height(), r.plate_margin_mm), (1500.0, [0.0; 4]));
         let m = MatGeometry::custom([200.0, 300.0]);
         assert_eq!(m.cut_area_mm, RectMm { x0: 0.0, y0: 0.0, x1: 200.0, y1: 300.0 });
     }

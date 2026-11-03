@@ -24,13 +24,26 @@ fn mat_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let mats: Vec<&Value> = info["mats"].as_array().map(|a| a.iter().collect()).unwrap_or_default();
     let mat = s["mat"].as_str().unwrap_or_default();
     let custom = mat == "custom";
+    // C17.1: material fed from the roll, with no mat: its width and the length to cut.
+    let roll = mat == vectorcraft_cutjob::ROLL;
     let mut labels: Vec<&str> = mats.iter().map(|m| m["label"].as_str().unwrap_or_default()).collect();
     labels.push(tl!("Custom"));
-    let current = if custom { tl!("Custom") } else { mats.iter().find(|m| m["id"] == mat).and_then(|m| m["label"].as_str()).unwrap_or(mat) };
-    let approximate = !custom && info["mat"]["approximate"].as_bool() == Some(true);
+    labels.push(tl!("Roll (no mat)"));
+    let current = if custom {
+        tl!("Custom")
+    } else if roll {
+        tl!("Roll (no mat)")
+    } else {
+        mats.iter().find(|m| m["id"] == mat).and_then(|m| m["label"].as_str()).unwrap_or(mat)
+    };
+    let approximate = !custom && !roll && info["mat"]["approximate"].as_bool() == Some(true);
     widgets::label_row(ui, tl!("Mat"), LABEL_W, |ui| {
         if let Some(i) = widgets::dropdown_names(ui, ("cutting", "mat"), current, &labels, 170.0) {
-            let id = mats.get(i).and_then(|m| m["id"].as_str()).unwrap_or("custom");
+            let id = match mats.get(i).and_then(|m| m["id"].as_str()) {
+                Some(id) => id,
+                None if i == mats.len() => "custom",
+                None => vectorcraft_cutjob::ROLL,
+            };
             set(app, json!({ "mat": id }));
         }
         // A note, not a warning: every built-in mat's cut area is measured, not published.
@@ -38,9 +51,9 @@ fn mat_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             widgets::dim_name(ui, "≈").on_hover_text(tl!("The cut area isn't from the maker's specifications: check it on the mat."));
         }
     });
-    if custom {
+    if custom || roll {
         let size = |i: usize| s["customMatMm"][i].as_f64().unwrap_or(304.8);
-        widgets::label_row(ui, tl!("Size"), LABEL_W, |ui| {
+        widgets::label_row(ui, if roll { tl!("Width, Length") } else { tl!("Size") }, LABEL_W, |ui| {
             if let Some(w) = mm_field(ui, "mat-w", size(0), 10.0) {
                 set(app, json!({ "customMatMm": [w, size(1)] }));
             }
@@ -292,6 +305,10 @@ mod tests {
         assert!(!t.iter().any(|x| x.starts_with("The cut area isn't")), "a hover note now: {t:?}");
         app.run("cutting.settings.set", json!({"offsetMm": [300, 0]})).unwrap();
         assert!(texts(&mut app, &ctx).iter().any(|x| x == "The artboard goes off the mat."));
+        // C17.1: fed from the roll, its width and the length to cut.
+        app.run("cutting.settings.set", json!({"mat": "roll", "offsetMm": [0, 0]})).unwrap();
+        let t = texts(&mut app, &ctx);
+        assert!(t.iter().any(|x| x == "Roll (no mat)") && t.iter().any(|x| x == "Width, Length"), "{t:?}");
     }
 
     /// C8.5: the Nesting section nests every piece, or the selection when there is one.

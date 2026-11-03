@@ -34,3 +34,18 @@ fn the_artboard_lies_on_the_mat_as_the_settings_say() {
     s.execute("cutting.settings.set", &json!({"mat": "silhouette.12x24", "offsetMm": [0, 400]})).unwrap();
     assert_eq!(placement(&mut s)["fits"], json!(true), "the long mat holds it lower down");
 }
+
+/// C17.1: material fed from the roll: no mat, its width and the length cut from the custom size.
+#[test]
+fn the_roll_is_a_mat_choice() {
+    let mut s = vectorcraft_engine::Session::new();
+    s.execute("file.new", &serde_json::json!({"width": 400, "height": 2000})).unwrap();
+    s.execute("cutting.settings.set", &serde_json::json!({"mat": "roll", "customMatMm": [304.8, 1500]})).unwrap();
+    let got = s.execute("cutting.settings.get", &serde_json::json!({})).unwrap();
+    assert_eq!(got["settings"]["mat"], "roll");
+    s.execute("shape.rectangle", &serde_json::json!({"x": 20, "y": 1500, "width": 100, "height": 100})).unwrap();
+    let job = s.execute("cutting.job", &serde_json::json!({})).unwrap();
+    assert_eq!(job["job"]["mat"]["id"], "roll", "{job}");
+    assert_eq!(job["job"]["mat"]["sizeMm"], serde_json::json!([304.8, 1500.0]), "{job}");
+    assert!(s.execute("cutting.settings.set", &serde_json::json!({"mat": "carpet"})).unwrap_err().to_string().contains("custom or roll"));
+}
