@@ -1,7 +1,7 @@
 # Cutting on the machine: first checks
 
 > **Status:** steps 1–3 passed 2026-11-01 (a 2 mm origin adjustment on a Nicapa mat), step 4 in part and step 5 for speeds 1–10 2026-11-03, the rest not yet run · **Machine:** the owner's Silhouette Cameo 4 (USB `0x0B4D:0x1137`) · **For:** C4.2 and
-> C4.6 and every task marked "to confirm on the machine" · **Revised:** 2026-11-01 (C4.6: steps 1–3 run, results recorded, the origin adjustment); 2026-10-30 (C9.3: reordered safest
+> C4.6 and every task marked "to confirm on the machine" · **Revised:** 2026-11-01 (C4.6: steps 1–3 run, results recorded, the origin adjustment); 2026-11-03 (C4.6: the late-answer fix checked on the machine); 2026-10-30 (C9.3: reordered safest
 > first, the controls named as the panels show them since C9.1, what to note at each step)
 
 The steps to confirm on a real Cameo 4 what the encoder takes from the
@@ -131,8 +131,9 @@ sometimes not read, and "load the mat" said with the mat loaded when Send was pr
 found: the tools were asked while the machine was still finishing, their answer (an AutoBlade in holder 1 is
 `2,0`) came late, and the next send's status check took its leading `2` for "no mat". Since then a status
 answer must be a single `0`, `1` or `2`, a tools answer must have its comma, and a Windows read that completes
-as it times out keeps its bytes. To check: Send straight after a cut goes ahead; if the holders still read as
-nothing after a cut, press Check Tools once the head has stopped.
+as it times out keeps its bytes. Checked 2026-11-03: Send straight after a cut goes ahead, several times
+running, the AutoBlade read each time. If the holders ever read as nothing after a cut, press Check Tools once
+the head has stopped.
 
 ## Step 5: speed (for the speed mapping)
 
