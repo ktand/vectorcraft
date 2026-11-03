@@ -30,6 +30,13 @@ fn a_design_is_made_into_a_pop_up_card() {
     s.execute("select.set", &json!({"ids": [r["id"]]})).unwrap();
     let again = s.execute("cutting.popup", &json!({"strutWidthMm": 5})).unwrap();
     assert_eq!((again["id"].clone(), again["replaced"].clone(), again["struts"].clone()), (r["id"].clone(), json!(true), json!(2)));
+    assert_eq!(r["warnings"], json!([]), "on the mat");
+    // C16.3: a card larger than the mat is said to go off it.
+    let big = s.execute("shape.rectangle", &json!({"x": 20, "y": 20, "width": 560, "height": 120})).unwrap()["id"].clone();
+    let w = s.execute("cutting.popup", &json!({"ids": [big], "marginMm": 100})).unwrap();
+    assert!(w["warnings"][0].as_str().unwrap().contains("goes off the mat"), "{w}");
+    s.execute("edit.undo", &json!({})).unwrap();
+    s.execute("edit.undo", &json!({})).unwrap();
     // C16.2: designs whose struts would run into each other are refused.
     let c = s.execute("shape.rectangle", &json!({"x": 100, "y": 400, "width": 120, "height": 100})).unwrap()["id"].clone();
     let d = s.execute("shape.rectangle", &json!({"x": 120, "y": 520, "width": 120, "height": 60})).unwrap()["id"].clone();

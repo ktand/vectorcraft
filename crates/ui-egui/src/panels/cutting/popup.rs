@@ -58,7 +58,14 @@ fn popup_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         let o = c.opt;
         let p = json!({ "baseWidthPct": o.base_pct, "strutWidthMm": o.strut_mm, "dashPitchMm": o.dash_mm, "marginMm": o.margin_mm });
         c.note = Some(match app.run("cutting.popup", p) {
-            Ok(r) => (false, format!("{} {} · {} {}", r["layers"], tl!("layers"), r["struts"], tl!("struts"))),
+            Ok(r) => {
+                let said = format!("{} {} · {} {}", r["layers"], tl!("layers"), r["struts"], tl!("struts"));
+                // C16.3: why it won't cut as it is.
+                match r["warnings"].as_array().and_then(|w| w.first()).and_then(|w| w.as_str()) {
+                    Some(w) => (true, format!("{said}. {w}")),
+                    None => (false, said),
+                }
+            }
             Err(e) => (true, e),
         });
     }
