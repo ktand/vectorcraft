@@ -11,6 +11,8 @@ use vectorcraft_geom::{Anchor, PathData, Point, SubPath};
 
 mod boxes;
 mod cards;
+pub mod mesh;
+pub mod papercraft;
 mod solids;
 mod tuck;
 mod unfold;

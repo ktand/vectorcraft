@@ -22,6 +22,8 @@ struct TemplateChoice {
     outside: bool,
     /// The folds perforated instead of scored.
     perforate: bool,
+    /// Papercraft: the model's longest side, mm (0: not set yet, 150).
+    craft_mm: f64,
     note: Option<(bool, String)>,
 }
 
@@ -182,7 +184,49 @@ fn template_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     if let Some((bad, note)) = &c.note {
         ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
     }
+    papercraft_rows(app, ui, &mut c);
     crate::panels::set_pstate(&ctx, "cutting-templates", c);
+}
+
+/// Papercraft from a 3D model (C15.6): the size, and the button that picks the model.
+fn papercraft_rows(app: &mut VectorcraftApp, ui: &mut Ui, c: &mut TemplateChoice) {
+    ui.separator();
+    if c.craft_mm <= 0.0 {
+        c.craft_mm = 150.0;
+    }
+    widgets::label_row(ui, tl!("Model Size"), LABEL_W, |ui| {
+        if let Some(n) = widgets::spin_plain(ui, ("cutting", "papercraft-size"), c.craft_mm, " mm", 0, 80.0, 10.0, 20.0, &[]) {
+            c.craft_mm = n.clamp(20.0, 2000.0);
+        }
+    });
+    // The web opens a dropped or picked file as a document; a path is read on the desktop only.
+    let can = app.services.open_async.is_none();
+    let hint = if can {
+        tl!("Unfolds an .obj or .stl model into pieces to cut, fold and glue: its longest side the Model Size, each cut edge numbered on both sides.")
+    } else {
+        tl!("Papercraft reads a model from a file on the desktop app.")
+    };
+    if ui.add_enabled(can, egui::Button::new(tl!("Papercraft from 3D Model…"))).on_hover_text(hint).on_disabled_hover_text(hint).clicked() {
+        let size = c.craft_mm;
+        crate::picks::button(app, move |app| match papercraft_pick(app, size) {
+            Ok(said) => app.status(said),
+            Err(e) if e == "cancelled" => {}
+            Err(e) => app.status(e),
+        });
+    }
+}
+
+/// The picked model unfolded (`cutting.papercraft`) → what to say.
+fn papercraft_pick(app: &mut VectorcraftApp, size: f64) -> Result<String, String> {
+    let pick = crate::FilePick { filters: vec![crate::FilePick::filter("3D models", &["obj", "stl"])], ..Default::default() };
+    let path = crate::picks::open(app, &pick).ok_or("cancelled")?;
+    let r = app.run("cutting.papercraft", json!({ "path": path, "sizeMm": size }))?;
+    let mut said =
+        format!("{} {} · {:.0} × {:.0} mm", r["pieces"], tl!("pieces"), r["widthMm"].as_f64().unwrap_or(0.0), r["heightMm"].as_f64().unwrap_or(0.0));
+    if let Some(w) = r["warnings"].as_array().and_then(|w| w.first()).and_then(Value::as_str) {
+        said = format!("{said}. {w}");
+    }
+    Ok(said)
 }
 
 /// The Templates panel.
@@ -217,9 +261,21 @@ mod tests {
         assert!(texts(&mut app, &ctx).iter().any(|t| t == "Open a document to cut it."));
         app.run("file.new", json!({"width": 800, "height": 800})).unwrap();
         let t = texts(&mut app, &ctx);
-        for label in
-            ["Template", "Tuck End Box", "Length", "Width", "Height", "Thickness", "Outside Sizes", "Folds", "Score", "Perforate", "Add Template"]
-        {
+        for label in [
+            "Template",
+            "Tuck End Box",
+            "Length",
+            "Width",
+            "Height",
+            "Thickness",
+            "Outside Sizes",
+            "Folds",
+            "Score",
+            "Perforate",
+            "Add Template",
+            "Model Size",
+            "Papercraft from 3D Model…",
+        ] {
             assert!(t.iter().any(|x| x == label), "{label}: {t:?}");
         }
         // The first template, a card-deck tuck box: 17.84 + 2 × 63.3 + 2 × 22.3 across.

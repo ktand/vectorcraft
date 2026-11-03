@@ -320,6 +320,14 @@ is cut, the ends of a cylinder or a cone as pieces of their own.
 
 Fold up along the scored lines, then glue each tab inside the wall next to it.
 
+**Papercraft from a 3D model.** Under the templates, set the **Model Size** (the model's longest side) and click
+**Papercraft from 3D Model…** to choose an `.obj` or `.stl` file. The model is unfolded into flat pieces laid out
+in rows the mat's width: the outlines are cut, the **Mountain Folds** (blue) and **Valley Folds** (green) scored,
+and the glue tabs shaded. Every edge that's cut has a small number printed on both sides: glue the tab on one to
+the matching number. Fold mountains away from you and valleys toward you, with the printed side out. Large
+models with many faces come out in many small pieces; simplify a model to a few hundred faces first (in a 3D
+program) for something you'd want to build. Models of more than 2,000 faces are refused.
+
 ### Sketch fill: shading for the pen
 
 A pen draws lines, not areas. The **Sketch Fill** panel fills the selected shapes with lines for the pen to draw:

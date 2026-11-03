@@ -39,6 +39,8 @@ mod popup;
 mod puzzle;
 // Templates made to size (C15.1).
 mod template;
+// Papercraft from a 3D model (C15.6).
+mod papercraft;
 // Tiles larger than the mat (C14.7).
 mod tile;
 // The machine's origin adjustment (C4.6).
@@ -62,6 +64,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(puzzle::specs());
     v.extend(popup::specs());
     v.extend(template::specs());
+    v.extend(papercraft::specs());
     v.extend(tile::specs());
     v.extend(machine::specs());
     v.extend(vec![

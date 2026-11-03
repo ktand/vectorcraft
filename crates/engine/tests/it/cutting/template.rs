@@ -134,3 +134,48 @@ fn switches_take_true_or_false() {
         assert!(s.execute("cutting.template", &json!({"kind": "earringCard", "hangSlot": bad})).is_err(), "{bad}");
     }
 }
+
+/// C15.6: a model given as bytes unfolds into a group: the outline cut, the folds scored, the
+/// edges numbered; a broken model or a bad size is refused.
+#[test]
+fn a_model_becomes_papercraft() {
+    let cube = "v 0 0 0
+v 1 0 0
+v 1 1 0
+v 0 1 0
+v 0 0 1
+v 1 0 1
+v 1 1 1
+v 0 1 1
+        f 1 4 3 2
+f 5 6 7 8
+f 1 2 6 5
+f 2 3 7 6
+f 3 4 8 7
+f 4 1 5 8
+";
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 800, "height": 800})).unwrap();
+    let data = vectorcraft_format::base64_encode(cube.as_bytes());
+    for bad in [
+        json!({}),
+        json!({"name": "c.obj", "dataBase64": "@@"}),
+        json!({"name": "c.ply", "dataBase64": data}),
+        json!({"name": "c.obj", "dataBase64": data, "sizeMm": 5}),
+        json!({"name": "c.obj", "dataBase64": vectorcraft_format::base64_encode(b"v 0 0 0
+f 1 2 3
+")}),
+    ] {
+        assert!(s.execute("cutting.papercraft", &bad).is_err(), "{bad}");
+    }
+    let r = s.execute("cutting.papercraft", &json!({"name": "cube.obj", "dataBase64": data, "sizeMm": 60})).unwrap();
+    assert_eq!((r["pieces"].clone(), r["faces"].clone()), (json!(1), json!(12)));
+    let k = kinds(&mut s);
+    assert_eq!((k.iter().filter(|k| *k == "cut").count(), k.iter().filter(|k| *k == "score").count()), (1, 5), "{k:?}");
+    let doc = &s.active().unwrap().doc;
+    let g = doc.node(vectorcraft_doc::NodeId(r["id"].as_u64().unwrap())).unwrap();
+    let vectorcraft_doc::NodeKind::Group { children, .. } = &g.kind else { panic!("a group") };
+    let numbers = children.iter().find(|c| c.name.as_deref() == Some("Edge Numbers")).unwrap();
+    let vectorcraft_doc::NodeKind::Group { children: n, .. } = &numbers.kind else { panic!("numbers") };
+    assert_eq!(n.len(), 14, "seven cut edges, numbered on both sides");
+}
