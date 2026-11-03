@@ -1,6 +1,6 @@
 //! C16.1: pop-up cards: the selected design made into a card that stands up when opened, one
 //! undo step: the card, the face's cut and the folds, each cut; the design no longer cut itself;
-//! a pop-up alone selected made again in place.
+//! a pop-up alone selected made again in place; each object a layer (C16.2).
 
 use serde_json::json;
 use vectorcraft_engine::Session;
@@ -16,7 +16,8 @@ fn a_design_is_made_into_a_pop_up_card() {
         assert!(s.execute("cutting.popup", &bad).is_err(), "{bad}");
     }
     let r = s.execute("cutting.popup", &json!({"ids": [a, b]})).unwrap();
-    assert_eq!((r["struts"].clone(), r["replaced"].clone()), (json!(2), json!(false)));
+    // C16.2: two objects, two layers.
+    assert_eq!((r["layers"].clone(), r["struts"].clone(), r["replaced"].clone()), (json!(2), json!(2), json!(false)));
     let job = s.execute("cutting.job", &json!({})).unwrap();
     let paths = job["job"]["paths"].as_array().unwrap();
     assert!(!paths.is_empty());
@@ -29,4 +30,9 @@ fn a_design_is_made_into_a_pop_up_card() {
     s.execute("select.set", &json!({"ids": [r["id"]]})).unwrap();
     let again = s.execute("cutting.popup", &json!({"strutWidthMm": 5})).unwrap();
     assert_eq!((again["id"].clone(), again["replaced"].clone(), again["struts"].clone()), (r["id"].clone(), json!(true), json!(2)));
+    // C16.2: designs whose struts would run into each other are refused.
+    let c = s.execute("shape.rectangle", &json!({"x": 100, "y": 400, "width": 120, "height": 100})).unwrap()["id"].clone();
+    let d = s.execute("shape.rectangle", &json!({"x": 120, "y": 520, "width": 120, "height": 60})).unwrap()["id"].clone();
+    let e = s.execute("cutting.popup", &json!({"ids": [c, d]})).unwrap_err().to_string();
+    assert!(e.contains("overlap"), "{e}");
 }
