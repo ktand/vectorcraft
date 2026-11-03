@@ -80,6 +80,23 @@ pub const ROLL: &str = "roll";
 /// 12 and 24 inches in millimetres, exactly (written out: `12.0 * 25.4` is 304.79999999999995).
 const IN_12: f64 = 304.8;
 const IN_24: f64 = 609.6;
+/// 8, 8.5 and 15 inches in millimetres, exactly.
+const IN_8: f64 = 203.2;
+const IN_8_5: f64 = 215.9;
+const IN_15: f64 = 381.0;
+
+/// A mat of `w` × `h` mm cut all over, its cut area not from the maker's specifications (C17.5).
+const fn approximate(id: &'static str, label: &'static str, w: f64, h: f64) -> MatGeometry {
+    MatGeometry {
+        id,
+        label,
+        size_mm: [w, h],
+        cut_area_mm: RectMm { x0: 0.0, y0: 0.0, x1: w, y1: h },
+        approximate: true,
+        inch_grid: true,
+        plate_margin_mm: PLATE_MARGIN,
+    }
+}
 /// Half an inch each side, three quarters top and bottom (see [`MAT_PRESETS`]).
 const PLATE_MARGIN: [f64; 4] = [12.7, 19.05, 12.7, 19.05];
 
@@ -94,7 +111,12 @@ const PLATE_MARGIN: [f64; 4] = [12.7, 19.05, 12.7, 19.05];
 /// The plate's margin is from one retailer's overall size of the 12 × 12 in mat, 13 × 13.5 in
 /// (<https://www.swingdesign.com/products/silhouette-12-cutting-mat>): half an inch each side and
 /// three quarters top and bottom, taken for the 12 × 24 in mat too.
-pub static MAT_PRESETS: [MatGeometry; 2] = [
+///
+/// The other sizes (C17.5) are the mats the protocol notes give the machine's codes for (Mat codes
+/// for `TG`, [IS]): the Portrait's 8 × 12 in, 8.5 × 12, 15 × 15 and 24 × 24 in, for the wider
+/// models; each cut all over, approximate (no maker's cut area at hand), the plastic taken as the
+/// 12-inch mat's. A mat wider than the machine is refused at Send.
+pub static MAT_PRESETS: [MatGeometry; 6] = [
     MatGeometry {
         id: "silhouette.12x12",
         label: "Silhouette 12 × 12 in",
@@ -112,6 +134,14 @@ pub static MAT_PRESETS: [MatGeometry; 2] = [
         approximate: false,
         inch_grid: true,
         plate_margin_mm: PLATE_MARGIN,
+    },
+    approximate("silhouette.8x12", "Silhouette 8 × 12 in (Portrait)", IN_8, IN_12),
+    approximate("silhouette.8.5x12", "Silhouette 8.5 × 12 in", IN_8_5, IN_12),
+    approximate("silhouette.15x15", "Silhouette 15 × 15 in", IN_15, IN_15),
+    // Cut 600 mm across: the widest model, the Cameo 4 Pro, cuts that (protocol notes › Sizes).
+    MatGeometry {
+        cut_area_mm: RectMm { x0: 0.0, y0: 0.0, x1: 600.0, y1: IN_24 },
+        ..approximate("silhouette.24x24", "Silhouette 24 × 24 in", IN_24, IN_24)
     },
 ];
 
