@@ -43,6 +43,10 @@ In the **Cutting Mat** panel:
 
 - **Mat:** Silhouette 12 × 12 in, 12 × 24 in, or Custom (type its size). A **≈** beside it means the cut area
   was measured rather than taken from the maker's specifications: hover it, and check the area on your own mat.
+- **Roll (no mat):** for vinyl fed straight into the machine from the roll. Set the roll's **Width** and the
+  **Length** to cut (up to 3,000 mm); the canvas shows a strip instead of a mat, and the machine is told there
+  is no mat. What the machine does at the end (feeding the material out, cutting it off) is still to be checked
+  on the machine.
 - **Orientation:** Portrait or Landscape, as the mat goes into the machine.
 - **Artboard:** with more than one artboard, which one goes on the mat.
 - **Offset:** moves the artboard on the mat, in mm from the cut area's top-left corner.

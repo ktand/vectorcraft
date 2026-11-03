@@ -32,6 +32,7 @@ control is and what it does: the [user guide](user-guide.md).
 | 14 | Job history, Send Again | | |
 | 15 | A real cut | | |
 | 16 | Tools and holders | | |
+| 17 | Cutting from the roll | | |
 
 ## Before you start
 
@@ -271,3 +272,16 @@ Result:
 Note: what the window showed for each tool and holder; the pen's corners; which holder the holder 2 cut used.
 
 Result:
+
+## Step 17: cutting from the roll (C17.1)
+
+With vinyl loaded straight into the Cameo 4, no mat (the machine's own roll feeder or a roll held behind it).
+
+- Cutting Mat › **Mat** Roll (no mat); **Width, Length** 304.8 and 500 mm. The canvas shows a strip, no mat.
+- Draw squares of 20 mm at the top, the middle (250 mm down) and the bottom (470 mm down); Send.
+- The machine should take the material in without asking for a mat, cut all three, and go home at the end.
+- Measure the three squares and their distances from the top: they should be as drawn, the last as square as
+  the first (the rollers don't slip over a long cut). Note what the machine does at the end: whether it feeds
+  the material out, and whether its cross-cutter (if fitted) cuts it off; we send nothing for either yet.
+
+Note: the distances, whether the material stayed straight, what the machine did at the end.

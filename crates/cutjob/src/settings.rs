@@ -3,7 +3,7 @@
 
 use serde_json::{Map, Value, json};
 
-use crate::mat::{CUSTOM, MAT_PRESETS, MatGeometry};
+use crate::mat::{CUSTOM, MAT_PRESETS, MatGeometry, ROLL};
 use crate::read::{choice, flag, num, object, pair, quad, unknown, whole};
 
 /// `Document::unknown` key the settings live under.
@@ -364,7 +364,8 @@ pub struct CuttingSettings {
     /// The mat: a [`MAT_PRESETS`] id or `"custom"`. An id this version doesn't know is kept, and laid
     /// out on the default mat ([`CuttingSettings::mat_geometry`]).
     pub mat: String,
-    /// The custom mat's size, mm (used when `mat` is `"custom"`).
+    /// The custom mat's size, mm (used when `mat` is `"custom"`), or the roll's width and the
+    /// length cut from it (when `mat` is `"roll"`, C17.1).
     pub custom_mat_mm: [f64; 2],
     pub orientation: Orientation,
     /// Index of the artboard laid on the mat.
@@ -641,6 +642,9 @@ impl CuttingSettings {
     pub fn mat_geometry(&self) -> MatGeometry {
         if self.mat == CUSTOM {
             return MatGeometry::custom(self.custom_mat_mm);
+        }
+        if self.mat == ROLL {
+            return MatGeometry::roll(self.custom_mat_mm);
         }
         MatGeometry::preset(&self.mat).unwrap_or_else(default_mat).clone()
     }

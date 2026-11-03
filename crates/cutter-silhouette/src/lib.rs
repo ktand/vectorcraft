@@ -179,11 +179,17 @@ pub fn speed_from_step(step: u32) -> f64 {
     f64::from(step.clamp(SPEED.0, SPEED.1)) * MM_S_PER_SPEED_STEP
 }
 
+/// The longest a job may be, mm: every model the protocol notes list (Sizes) cuts up to 3,000 mm
+/// from the roll (C17.1).
+const MAX_LENGTH_MM: f64 = 3_000.0;
+
 /// The machine's code for a mat (0: none, the art taped down or on a carrier the machine doesn't know).
 fn mat_code(id: &str) -> Option<u32> {
     match id {
         "silhouette.12x12" => Some(1),
         "silhouette.12x24" => Some(2),
+        // C17.1: fed from the roll, no mat.
+        vectorcraft_cutjob::ROLL => Some(0),
         _ => None,
     }
 }
@@ -321,6 +327,9 @@ impl Silhouette {
         let area = job.mat.cut_area_mm;
         if area.x1 > width_mm + 1e-6 {
             return Err(format!("the job is {:.1} mm wide; this cutter cuts {width_mm:.1} mm", area.x1));
+        }
+        if area.y1 > MAX_LENGTH_MM + 1e-6 {
+            return Err(format!("the job is {:.1} mm long; this cutter cuts at most {MAX_LENGTH_MM:.0} mm", area.y1));
         }
         if !adjust_mm.iter().all(|a| a.is_finite() && a.abs() <= ORIGIN_ADJUST_MM) {
             return Err(format!("the origin adjustment is at most {ORIGIN_ADJUST_MM} mm each way"));

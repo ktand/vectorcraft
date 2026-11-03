@@ -123,6 +123,21 @@ fn a_mat_the_cutter_doesnt_know_is_no_mat() {
     assert!(e.warnings.iter().any(|w| w.contains("isn't one the cutter knows")));
 }
 
+/// C17.1: material fed from the roll is no mat, said without a warning, up to 3 m long.
+#[test]
+fn the_roll_is_cut_with_no_mat() {
+    let mut j = job(vec![], vec![], vectorcraft_cutjob::ROLL);
+    j.mat.size_mm = [304.8, 1500.0];
+    j.mat.cut_area_mm.y1 = 1500.0;
+    let e = Silhouette.encode(&j, &cameo4()).unwrap();
+    assert!(String::from_utf8_lossy(&e.chunks.concat()).contains("TG0\u{3}"));
+    assert!(e.warnings.is_empty(), "{:?}", e.warnings);
+    j.mat.size_mm = [304.8, 3_200.0];
+    j.mat.cut_area_mm.y1 = 3_200.0;
+    let e = Silhouette.encode(&j, &cameo4()).unwrap_err();
+    assert!(e.contains("3000 mm"), "{e}");
+}
+
 #[test]
 fn a_job_wider_than_the_cutter_is_refused() {
     let mut j = job(vec![], vec![], "custom");
