@@ -7,7 +7,10 @@
 //! the plan names (`docs/cutting/IMPLEMENTATION_PLAN.md` › Phase 15); none is traced from or
 //! compared against another tool's output.
 
-use vectorcraft_geom::{PathData, Point, SubPath};
+use vectorcraft_geom::{Anchor, PathData, Point, SubPath};
+
+mod boxes;
+mod tuck;
 
 /// What a parameter measures, for its field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,7 +128,7 @@ impl Kind {
 }
 
 /// Every template, in the order the panel lists them.
-pub const KINDS: &[Kind] = &[TRAY];
+pub const KINDS: &[Kind] = &[tuck::STRAIGHT, tuck::REVERSE, TRAY, boxes::TRAY_LID, boxes::PILLOW];
 
 /// The template `id`.
 pub fn kind(id: &str) -> Option<&'static Kind> {
@@ -140,6 +143,116 @@ fn polygon(points: &[(f64, f64)]) -> SubPath {
 /// A straight line.
 fn line(a: (f64, f64), b: (f64, f64)) -> SubPath {
     SubPath::polyline(&[Point::new(a.0, a.1), Point::new(b.0, b.1)], false)
+}
+
+/// A point, mm.
+type P = (f64, f64);
+
+/// A run of curves drawn from a start point: lines, quadratic and circular-arc pieces, each kept as
+/// a cubic (`(c1, c2, end)`), so it can be mirrored and walked backwards before it becomes a path.
+#[derive(Clone, Debug, PartialEq)]
+struct Edge {
+    start: P,
+    segs: Vec<(P, P, P)>,
+}
+
+impl Edge {
+    fn from(start: P) -> Edge {
+        Edge { start, segs: vec![] }
+    }
+
+    fn end(&self) -> P {
+        self.segs.last().map_or(self.start, |s| s.2)
+    }
+
+    /// A straight line to `p` (none if it is already there).
+    fn to(&mut self, p: P) -> &mut Edge {
+        let e = self.end();
+        if (e.0 - p.0).abs() > 1e-9 || (e.1 - p.1).abs() > 1e-9 {
+            self.segs.push((e, p, p));
+        }
+        self
+    }
+
+    /// A quadratic curve to `p` pulled toward `ctrl`.
+    fn quad(&mut self, ctrl: P, p: P) -> &mut Edge {
+        let e = self.end();
+        let third = |a: P, b: P| (a.0 + 2.0 / 3.0 * (b.0 - a.0), a.1 + 2.0 / 3.0 * (b.1 - a.1));
+        self.segs.push((third(e, ctrl), third(p, ctrl), p));
+        self
+    }
+
+    /// A circular arc round `c` of radius `r` from angle `a0` to `a1` (radians, y down: positive
+    /// turns clockwise on the page), a straight line first to its start if it isn't there.
+    fn arc(&mut self, c: P, r: f64, a0: f64, a1: f64) -> &mut Edge {
+        let at = |a: f64| (c.0 + r * a.cos(), c.1 + r * a.sin());
+        self.to(at(a0));
+        // Pieces of at most a quarter turn, each a cubic with the usual handle length.
+        let n = ((a1 - a0).abs() / std::f64::consts::FRAC_PI_2).ceil().clamp(1.0, 8.0);
+        let step = (a1 - a0) / n;
+        let k = 4.0 / 3.0 * (step / 4.0).tan() * r;
+        let mut a = a0;
+        for _ in 0..n as usize {
+            let (p0, p1) = (at(a), at(a + step));
+            let c1 = (p0.0 - k * a.sin(), p0.1 + k * a.cos());
+            let c2 = (p1.0 + k * (a + step).sin(), p1.1 - k * (a + step).cos());
+            self.segs.push((c1, c2, p1));
+            a += step;
+        }
+        self
+    }
+
+    /// The edge mirrored by `f` (applied to every point and handle).
+    fn map(&self, f: impl Fn(P) -> P) -> Edge {
+        Edge { start: f(self.start), segs: self.segs.iter().map(|&(a, b, c)| (f(a), f(b), f(c))).collect() }
+    }
+
+    /// The same edge walked from its end back to its start.
+    fn reversed(&self) -> Edge {
+        let mut starts: Vec<P> = vec![self.start];
+        starts.extend(self.segs.iter().map(|s| s.2));
+        let segs = self.segs.iter().zip(starts.iter()).rev().map(|(&(c1, c2, _), &from)| (c2, c1, from)).collect();
+        Edge { start: self.end(), segs }
+    }
+
+    /// `next` joined on, a straight line between them if they don't meet.
+    fn then(&mut self, next: &Edge) -> &mut Edge {
+        self.to(next.start);
+        self.segs.extend(next.segs.iter().copied());
+        self
+    }
+
+    fn anchors(&self) -> Vec<Anchor> {
+        let pt = |p: P| Point::new(p.0, p.1);
+        let mut out = vec![Anchor::corner(pt(self.start))];
+        for &(c1, c2, p) in &self.segs {
+            if let Some(last) = out.last_mut() {
+                last.h_out = pt(c1);
+            }
+            out.push(Anchor::with_handles(pt(p), pt(c2), pt(p)));
+        }
+        out
+    }
+
+    /// An open path.
+    fn open(&self) -> SubPath {
+        SubPath::new(self.anchors(), false)
+    }
+
+    /// A closed path, back to the start (a line if it doesn't end there).
+    fn closed(&self) -> SubPath {
+        let mut e = self.clone();
+        e.to(self.start);
+        let mut a = e.anchors();
+        // The last anchor is the start again: its incoming handle goes to the first.
+        if a.len() > 1
+            && let Some(last) = a.pop()
+            && let Some(first) = a.first_mut()
+        {
+            first.h_in = last.h_in;
+        }
+        SubPath::new(a, true)
+    }
 }
 
 /// The material's thickness parameter, shared by every template that folds.
@@ -263,8 +376,46 @@ fn tray(v: &Values) -> Result<Net, String> {
 mod tests {
     use super::*;
 
-    fn values(k: &Kind, given: &[(&str, f64)], outside: bool) -> Result<Values, String> {
+    pub(super) fn values(k: &Kind, given: &[(&str, f64)], outside: bool) -> Result<Values, String> {
         k.values(&|key| given.iter().find(|(g, _)| *g == key).map(|(_, v)| *v), None, outside)
+    }
+
+    /// Whether `path`'s closed outlines don't cross themselves (each curve flattened finely).
+    pub(super) fn simple(path: &PathData) -> bool {
+        use vectorcraft_geom::ParamCurve;
+        path.subpaths.iter().all(|s| {
+            let mut pts: Vec<Point> = vec![];
+            for i in 0..s.segment_count() {
+                let c = s.segment(i);
+                pts.extend((0..8).map(|k| c.eval(f64::from(k) / 8.0)));
+            }
+            let n = pts.len();
+            let cross = |a: Point, b: Point, c: Point, d: Point| {
+                let o = |p: Point, q: Point, r: Point| (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+                let (d1, d2, d3, d4) = (o(a, b, c), o(a, b, d), o(c, d, a), o(c, d, b));
+                d1 * d2 < -1e-9 && d3 * d4 < -1e-9
+            };
+            (0..n).all(|i| (i + 2..n).all(|j| (i == 0 && j == n - 1) || !cross(pts[i], pts[(i + 1) % n], pts[j], pts[(j + 1) % n])))
+        })
+    }
+
+    /// The edge builder's arcs are circles: their points lie at the radius.
+    #[test]
+    fn arcs_are_round() {
+        use vectorcraft_geom::ParamCurve;
+        let mut e = Edge::from((10.0, 0.0));
+        e.arc((0.0, 0.0), 10.0, 0.0, std::f64::consts::PI);
+        let s = e.open();
+        for i in 0..s.segment_count() {
+            for k in 0..=10 {
+                let p = s.segment(i).eval(f64::from(k) / 10.0);
+                assert!((p.to_vec2().hypot() - 10.0).abs() < 0.01, "{p:?}");
+            }
+        }
+        // Walked back and mirrored, it is the same circle.
+        let back = e.reversed().map(|p| (p.0, -p.1)).open();
+        assert_eq!(back.anchors.len(), s.anchors.len());
+        assert!((back.anchors[0].p.x + 10.0).abs() < 1e-9);
     }
 
     fn len(s: &SubPath) -> f64 {

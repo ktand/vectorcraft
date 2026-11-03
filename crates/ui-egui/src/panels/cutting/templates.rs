@@ -68,6 +68,16 @@ fn picture(ui: &mut Ui, net: &Net, size: Vec2) {
     let scale = ((f64::from(rect.width() - 2.0 * pad) / w).min(f64::from(rect.height() - 2.0 * pad) / h)) as f32;
     let origin = rect.center() - Vec2::new(w as f32 * scale, h as f32 * scale) / 2.0;
     let at = |p: vectorcraft_geom::Point| Pos2::new(origin.x + p.x as f32 * scale, origin.y + p.y as f32 * scale);
+    // Each subpath's curves as points (8 to a segment), the closing segment included.
+    let points = |sp: &vectorcraft_geom::SubPath| -> Vec<Pos2> {
+        use vectorcraft_geom::ParamCurve;
+        let mut pts: Vec<Pos2> = sp.anchors.first().map(|a| at(a.p)).into_iter().collect();
+        for i in 0..sp.segment_count() {
+            let c = sp.segment(i);
+            pts.extend((1..=8).map(|k| at(c.eval(f64::from(k) / 8.0))));
+        }
+        pts
+    };
     let painter = ui.painter_at(rect);
     let glue = Color32::from_gray(128).gamma_multiply(0.35);
     for s in &net.glue.subpaths {
@@ -75,18 +85,11 @@ fn picture(ui: &mut Ui, net: &Net, size: Vec2) {
         painter.add(egui::Shape::convex_polygon(pts, glue, Stroke::NONE));
     }
     for s in &net.cut.subpaths {
-        let mut pts: Vec<Pos2> = s.anchors.iter().map(|a| at(a.p)).collect();
-        if s.closed
-            && let Some(first) = pts.first().copied()
-        {
-            pts.push(first);
-        }
-        painter.add(egui::Shape::line(pts, Stroke::new(1.0, t.text)));
+        painter.add(egui::Shape::line(points(s), Stroke::new(1.0, t.text)));
     }
     let fold = Color32::from_rgb(0, 115, 255);
     for s in &net.folds.subpaths {
-        let pts: Vec<Pos2> = s.anchors.iter().map(|a| at(a.p)).collect();
-        painter.extend(egui::Shape::dashed_line(&pts, Stroke::new(1.0, fold), 3.0, 2.0));
+        painter.extend(egui::Shape::dashed_line(&points(s), Stroke::new(1.0, fold), 3.0, 2.0));
     }
 }
 
@@ -207,24 +210,13 @@ mod tests {
         assert!(texts(&mut app, &ctx).iter().any(|t| t == "Open a document to cut it."));
         app.run("file.new", json!({"width": 800, "height": 800})).unwrap();
         let t = texts(&mut app, &ctx);
-        for label in [
-            "Template",
-            "Open Tray",
-            "Length",
-            "Width",
-            "Height",
-            "Thickness",
-            "Glue Tab",
-            "Outside Sizes",
-            "Folds",
-            "Score",
-            "Perforate",
-            "Add Template",
-        ] {
+        for label in
+            ["Template", "Tuck End Box", "Length", "Width", "Height", "Thickness", "Outside Sizes", "Folds", "Score", "Perforate", "Add Template"]
+        {
             assert!(t.iter().any(|x| x == label), "{label}: {t:?}");
         }
-        // The default tray: 100.3 + 2 × 30.15 across.
-        assert!(t.iter().any(|x| x == "161 × 131 mm"), "{t:?}");
+        // The first template, a card-deck tuck box: 17.84 + 2 × 63.3 + 2 × 22.3 across.
+        assert!(t.iter().any(|x| x == "189 × 162 mm"), "{t:?}");
         let r = app.run("cutting.template", json!({"kind": "tray"})).unwrap();
         app.run("select.set", json!({"ids": [r["id"]]})).unwrap();
         assert!(template_selected(&app));
