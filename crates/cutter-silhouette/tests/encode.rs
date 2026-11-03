@@ -214,7 +214,7 @@ fn depth_acceleration_and_track_enhancing() {
     let mut j = job(vec![Operation { kind: OpKind::Cut, tool: t }], vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]])], "silhouette.12x12");
     j.track_enhancing = true;
     let text = String::from_utf8_lossy(&Silhouette.encode(&j, &cameo4()).unwrap().chunks.concat()).to_string();
-    assert!(text.contains("TB50,0\u{3}FY1\u{3}J1\u{3}"), "{text:?}");
+    assert!(text.contains("TB50,0\u{3}FY0\u{3}J1\u{3}"), "{text:?}");
     assert!(text.contains("FC18,1,1\u{3}TF3,1\u{3}TJ2\u{3}M"), "{text:?}");
     // Left unset: not sent.
     let plain = job(

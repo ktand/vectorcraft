@@ -381,8 +381,9 @@ impl Silhouette {
         c.cmd("FN0");
         c.cmd("TB50,0");
         if job.track_enhancing {
-            // Which of FY0 and FY1 turns it on is to confirm on the machine (protocol notes).
-            c.cmd("FY1");
+            // FY0 turns it on; off, the Cameo 3 and later are sent nothing (protocol notes; to
+            // confirm on the machine).
+            c.cmd("FY0");
         }
         if let Some(r) = job.registration {
             // Print & Cut (protocol notes): the portrait marks, then the search, which the machine

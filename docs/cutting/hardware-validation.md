@@ -152,8 +152,10 @@ head probably spends most of the line speeding up and slowing down. To tell the 
   more. (`TF` n)
 - Open the Send window's **Advanced**. **Accel.** 1 and then 3 in the Score column on the same square: 1 should move more gently.
   (`TJ` n)
-- **Track Enhancing** on: the rollers should grip differently, or the machine reports it. Which of `FY0`/`FY1`
-  turns it on is a guess (`FY1` now): if on and off behave the other way round, note it.
+- **Track Enhancing** on: before cutting, the rollers should run the mat forward and back about three times
+  (`FY0`, as the protocol notes read the reference since 2026-11-03). Off: no such run. Try it at a low force
+  (say 10) as well as one of 19 or more: the reference says the machine runs it on its own from 19. If on and
+  off behave the other way round, note it.
 - **Corners** 0.5 mm in the Score column, on a scored square: each corner gets a small spur past it.
 
 Note: for each, yes / no / the other way round.

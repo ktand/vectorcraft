@@ -88,7 +88,7 @@ In the order the encoder sends them. "n" is a whole number.
 | Speed | `!` n`,`h | 1–30 on the Cameo 4 family (1–10 on older models); the units of a step aren't given; then the holder | [IS] |
 | Depth | `TF` n`,`h | AutoBlade depth 0–10, holder 1 only (not sent for holder 2) | [IS] |
 | Acceleration | `TJ` n | 1–3; no holder | [IS] |
-| Track enhancing | `FY0` / `FY1` | one turns it on, the other off; which is which isn't stated (**to confirm**; the encoder sends `FY1` for on) | [IS] |
+| Track enhancing | `FY0` | `FY0` turns it on; `FY1` turns it off on older models, and the Cameo 3 and later are sent nothing when it is off. On, the rollers run the mat three times forward and back before cutting; the reference adds that the machine does it on its own at a force of 19 or more, and that below that it may do nothing (**to confirm**). Until 2026-11-03 the encoder sent `FY1` for on, from a misreading | [IS] (`setup`, the track-enhancing part) |
 | Blade offset | `FC` n`,1,`h | the blade's offset in machine units (0.9 mm, 18 units, by default; 0 for a pen), then a second value that is always 1 unit (0.05 mm), then the holder. The machine turns the blade round corners by it, so the paths sent are where the tip cuts (we send each operation's `bladeOffsetMm`, C5.4) | [IS] |
 | Corners, lift | `FF` …, `FE` … | corner handling and lift between strokes, each ending in the holder; the reference sends them for every tool (lift off, corners off for a pen), we send neither and leave the machine's own (**to confirm** that it needs none) | [IS] |
 | Move | `M` y,x | travel with the blade up | [IS] |
