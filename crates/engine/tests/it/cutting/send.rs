@@ -301,9 +301,14 @@ fn tools_fitted(s: &mut Session) {
     s.execute("cutting.settings.set", &json!({"operations": {"cut": {"tool": "rotary"}}})).unwrap();
     let t = s.execute("cutting.tools", &json!({})).unwrap();
     assert_eq!(t["warnings"], json!(["The cut uses the Rotary blade in holder 2, but holder 2 is empty"]), "{t}");
-    for (answer, states) in
-        [(&b"4,4\x03"[..], vec!["tool", "tool"]), (b"6,255\x03", vec!["unknown", "error"]), (b"\x03", vec![]), (b"junk,,", vec!["unknown"; 4])]
-    {
+    for (answer, states) in [
+        (&b"4,4\x03"[..], vec!["tool", "tool"]),
+        (b"6,255\x03", vec!["unknown", "error"]),
+        (b"\x03", vec![]),
+        (b"junk,,\x03", vec!["unknown"; 3]),
+        (b"a,b,c,d,e\x03", vec!["unknown"; 4]),
+        (b"junk,,", vec![]),
+    ] {
         registry::install(Some(Arc::new(FakeCameo(MemoryTransport::answering(answer)))));
         let t = s.execute("cutting.tools", &json!({})).unwrap();
         let got: Vec<&str> = t["holders"].as_array().unwrap().iter().map(|h| h["state"].as_str().unwrap()).collect();
