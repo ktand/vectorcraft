@@ -38,6 +38,7 @@ pub mod ops;
 pub mod order;
 pub mod perforate;
 pub mod placement;
+pub mod popup;
 pub mod prepare;
 pub mod preview;
 pub mod puzzle;

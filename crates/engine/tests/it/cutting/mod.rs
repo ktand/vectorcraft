@@ -11,6 +11,7 @@ mod materials;
 mod nest;
 mod ops;
 mod placement;
+mod popup;
 mod puzzle;
 mod send;
 mod sketch;

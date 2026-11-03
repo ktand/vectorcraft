@@ -35,6 +35,7 @@ mod sketch;
 // Rhinestone templates (C13.4).
 mod stones;
 // Puzzles (C13.5).
+mod popup;
 mod puzzle;
 // Tiles larger than the mat (C14.7).
 mod tile;
@@ -57,6 +58,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(sketch::specs());
     v.extend(stones::specs());
     v.extend(puzzle::specs());
+    v.extend(popup::specs());
     v.extend(tile::specs());
     v.extend(machine::specs());
     v.extend(vec![

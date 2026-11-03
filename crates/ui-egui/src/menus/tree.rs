@@ -646,7 +646,7 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
                 panel("CSS Properties", crate::panels::css_properties::ID),
                 // Fork: the cutting panels, one for each feature (C14.9).
                 sub("Cutting", {
-                    use crate::panels::cutting::{ID, lines, mat, patterns, print};
+                    use crate::panels::cutting::{ID, lines, mat, patterns, popup, print};
                     let mut cutting = vec![
                         panel("Cut Settings", ID),
                         panel("Contour", lines::ID),
@@ -655,6 +655,7 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
                         panel("Sketch Fill", patterns::ID),
                         panel("Rhinestones", patterns::RHINESTONES_ID),
                         panel("Puzzle", patterns::PUZZLE_ID),
+                        panel("Pop Up", popup::ID),
                         panel("Cutting Mat", mat::ID),
                         panel("Tiles", mat::TILES_ID),
                         panel("Nesting", mat::NESTING_ID),
