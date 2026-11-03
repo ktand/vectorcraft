@@ -188,6 +188,11 @@ fn mat_code(id: &str) -> Option<u32> {
     match id {
         "silhouette.12x12" => Some(1),
         "silhouette.12x24" => Some(2),
+        // C17.5: the other mats the protocol notes give a code for.
+        "silhouette.8x12" => Some(3),
+        "silhouette.15x15" => Some(8),
+        "silhouette.24x24" => Some(9),
+        "silhouette.8.5x12" => Some(11),
         // C17.1: fed from the roll, no mat.
         vectorcraft_cutjob::ROLL => Some(0),
         _ => None,

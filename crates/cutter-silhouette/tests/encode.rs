@@ -138,6 +138,29 @@ fn the_roll_is_cut_with_no_mat() {
     assert!(e.contains("3000 mm"), "{e}");
 }
 
+/// C17.5: each built-in mat is sent as its code; one wider than the machine is refused.
+#[test]
+fn each_mat_has_its_code() {
+    for (id, code) in [
+        ("silhouette.12x12", 1),
+        ("silhouette.12x24", 2),
+        ("silhouette.8x12", 3),
+        ("silhouette.15x15", 8),
+        ("silhouette.24x24", 9),
+        ("silhouette.8.5x12", 11),
+    ] {
+        let m = vectorcraft_cutjob::MatGeometry::preset(id).unwrap();
+        let mut j = job(vec![], vec![], id);
+        j.mat.size_mm = m.size_mm;
+        j.mat.cut_area_mm = m.cut_area_mm;
+        let pro = DeviceInfo { product_id: 0x1139, ..cameo4() };
+        let e = Silhouette.encode(&j, &pro).unwrap();
+        assert!(String::from_utf8_lossy(&e.chunks.concat()).contains(&format!("TG{code}\u{3}")), "{id}");
+        assert!(e.warnings.is_empty(), "{id}: {:?}", e.warnings);
+        assert_eq!(Silhouette.encode(&j, &cameo4()).is_ok(), m.cut_area_mm.x1 <= 304.8 + 1e-6, "{id} on a Cameo 4");
+    }
+}
+
 #[test]
 fn a_job_wider_than_the_cutter_is_refused() {
     let mut j = job(vec![], vec![], "custom");
