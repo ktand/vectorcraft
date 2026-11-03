@@ -1,6 +1,6 @@
 # Cutting on the machine: first checks
 
-> **Status:** steps 1–3 passed 2026-11-01 (a 2 mm origin adjustment on a Nicapa mat), the rest not yet run · **Machine:** the owner's Silhouette Cameo 4 (USB `0x0B4D:0x1137`) · **For:** C4.2 and
+> **Status:** steps 1–3 passed 2026-11-01 (a 2 mm origin adjustment on a Nicapa mat), step 4 in part 2026-11-03, the rest not yet run · **Machine:** the owner's Silhouette Cameo 4 (USB `0x0B4D:0x1137`) · **For:** C4.2 and
 > C4.6 and every task marked "to confirm on the machine" · **Revised:** 2026-11-01 (C4.6: steps 1–3 run, results recorded, the origin adjustment); 2026-10-30 (C9.3: reordered safest
 > first, the controls named as the panels show them since C9.1, what to note at each step)
 
@@ -19,7 +19,7 @@ control is and what it does: the [user guide](user-guide.md).
 | 1 | The machine answers | Pass | Found, answered, moved; holders read right |
 | 2 | Which way the axes go | Pass | As the preview: nothing mirrored or swapped |
 | 3 | Size | Pass | 10.0 × 10.0 mm; 2 mm left of where sent on a Nicapa mat: Origin Adjustment Across +2 |
-| 4 | Test cut at each corner | | |
+| 4 | Test cut at each corner | Pass (part) | All four 2 mm left of where sent (Across 0), none off down: the step 3 shift; the design warning shows; force not yet noted |
 | 5 | Speed | | |
 | 6 | Blade depth, acceleration, track enhancing, corners | | |
 | 7 | Blade offset | | |
@@ -120,7 +120,14 @@ and the head goes home at the end. On a genuine Silhouette mat, measure again.
 
 Note: did each corner land where the preview showed? The force that cut the paper cleanly.
 
-Result:
+Result: **pass, in part** (2026-11-03, Origin Adjustment 0 across and down, Nicapa mat, measured from the grid):
+top left 1 mm from the left and 3 mm from the top, top right 5 mm from the right and 3 mm from the top, bottom
+left 1 mm and 3 mm from the bottom, bottom right 5 mm and 3 mm from the bottom. Each is 3 mm in down and 2 mm
+left across: the same 2 mm shift as step 3 at both sides, so the cut area's width is right and only the origin
+is off; Across +2 takes it. With the design at the top left, Test at Top Left showed "the test cut lands on the
+design: choose another corner or move the artboard" before anything was cut. Still to note: a corner cut with
+Across +2 (expected 3 mm in), and the force that cut the paper cleanly. Seen along the way, to look at later:
+the tools in the holders sometimes not read, and "load the mat" said now and then with the mat loaded.
 
 ## Step 5: speed (for the speed mapping)
 
