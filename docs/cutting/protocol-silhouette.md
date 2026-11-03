@@ -8,6 +8,8 @@ These are facts about how a computer talks to a Silhouette cutter: what it sends
 which units. They are written in our own words, with the source of each. Encoders are written from this page,
 not from the sources.
 
+**Silhouette Studio.** Never capture or watch what Silhouette Studio sends to or gets from a machine: its licence forbids it, and no fact here comes from such a capture. Studio's interface is a source (**[ST]**) only where public documentation doesn't cover the fact; see [ARCHITECTURE.md › R2](ARCHITECTURE.md) (owner decision, 2026-11-03).
+
 **Sources.**
 
 - **[IS]** inkscape-silhouette, `silhouette/Graphtec.py` at commit
