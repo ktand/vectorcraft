@@ -438,6 +438,11 @@ fn pixel_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
 }
 
+/// Whether the document is cut on a roll (C17.1), where a material keeps what's left of it.
+fn info_settings_roll(app: &VectorcraftApp) -> bool {
+    app.session.active().is_some_and(|st| vectorcraft_cutting::settings(&st.doc).mat == vectorcraft_cutjob::ROLL)
+}
+
 /// The material the tool settings come from (C5.1): built-in starting points and the user's own,
 /// whether they were changed by hand since, and saving them as a material of the user's.
 fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
@@ -521,6 +526,25 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             if r.is_some() || per.is_some() {
                 let p = json!({ "name": c, "amount": amount.max(0.0), "per": if per_metre { "metre" } else { "sheet" }, "wastePct": price["wastePct"].as_f64().unwrap_or(10.0) });
                 error = app.run("cutting.material.price", p).err();
+            }
+        });
+    }
+    // C18.11: what's left of the roll of a material of the user's, when the job is cut on a roll.
+    if info_settings_roll(app)
+        && let Some(c) = &current
+        && let Some(m) = info["materials"].as_array().into_iter().flatten().find(|m| m["name"] == *c && m["builtin"] == false)
+    {
+        let left = m["rollLeftMm"].as_f64();
+        widgets::label_row(ui, tl!("Roll Left"), LABEL_W, |ui| {
+            let mut keep = left.is_some();
+            if ui.checkbox(&mut keep, "").on_hover_text(tl!("Keep what's left of the roll: each send takes off what it cuts.")).changed() {
+                error = app.run("cutting.material.roll", json!({ "name": c, "leftMm": if keep { json!(5000.0) } else { Value::Null } })).err();
+            }
+            if let Some(l) = left
+                && let Some(v) = widgets::spin_plain(ui, ("cutting", "roll-left"), l / 1000.0, " m", 2, 80.0, 0.1, 0.0, &[])
+            {
+                error =
+                    app.run("cutting.material.roll", json!({ "name": c, "leftMm": (v * 1000.0).clamp(0.0, vectorcraft_cutjob::MAX_ROLL_MM) })).err();
             }
         });
     }

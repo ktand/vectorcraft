@@ -37,6 +37,19 @@ fn prices(s: &mut Session) {
     assert_eq!(m["price"]["amount"], json!(1.25), "kept when saved again");
     let q = s.execute("cutting.job", &json!({})).unwrap()["quote"].clone();
     assert_eq!((q["groups"][0]["sheets"].clone(), q["cost"].clone()), (json!(1.0), json!(1.25)));
+    // C18.11: on a roll, a job longer than what's left of it is warned about.
+    for bad in [json!({"name": "My card"}), json!({"name": "My card", "leftMm": -5}), json!({"name": "Vinyl", "leftMm": 5})] {
+        assert!(s.execute("cutting.material.roll", &bad).is_err(), "{bad}");
+    }
+    s.execute("cutting.material.roll", &json!({"name": "My card", "leftMm": 20})).unwrap();
+    s.execute("cutting.settings.set", &json!({"mat": "roll", "customMatMm": [300, 1000]})).unwrap();
+    let w = s.execute("cutting.job", &json!({})).unwrap()["job"]["warnings"].clone();
+    assert!(w.as_array().unwrap().iter().any(|w| w["message"].as_str().unwrap_or_default().contains("of the roll is left")), "{w}");
+    s.execute("cutting.material.save", &json!({"name": "My card"})).unwrap();
+    let m = materials(s)["materials"].as_array().unwrap().iter().find(|m| m["name"] == "My card").unwrap().clone();
+    assert_eq!(m["rollLeftMm"], json!(20.0), "kept when saved again");
+    s.execute("cutting.material.roll", &json!({"name": "My card", "leftMm": null})).unwrap();
+    s.execute("cutting.settings.set", &json!({"mat": "silhouette.12x12"})).unwrap();
 }
 
 #[test]

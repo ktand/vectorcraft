@@ -446,6 +446,12 @@ Give one of your own materials a **Price** in Cut Settings, per sheet or per met
 added for waste). A built-in material can't be priced: save it as your own first. Each group of a job cut in
 groups counts its own material.
 
+### What's left of a roll
+
+Cutting from a roll (mat **Roll**), tick **Roll Left** under one of your own materials in Cut Settings and give
+the length left on the roll. Each send takes off what it cuts (when it starts, so a cancelled send counts), and
+the Send window warns when a job needs more than is left.
+
 ### Checks before cutting
 
 The job is looked over for what usually spoils a cut, and the Send window says so (click a warning to select

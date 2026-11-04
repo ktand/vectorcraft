@@ -305,6 +305,21 @@ fn job(s: &mut Session, _: &Value) -> Result<Value> {
     let job = vectorcraft_cutting::build_job(d).map_err(|e| bad("cutting.job", e.to_string()))?;
     let price_of = |name: &str| materials::find(name).and_then(|m| m.price);
     let quote = vectorcraft_cutting::quote::quote(&vectorcraft_cutting::settings(d), &job, &price_of);
+    let mut job = job;
+    // C18.11: a group needing more of a roll than is left of it.
+    if vectorcraft_cutting::settings(d).mat == vectorcraft_cutjob::ROLL {
+        for g in &quote.shares {
+            let left = g.material.as_deref().and_then(materials::find).and_then(|m| m.roll_left_mm.map(|l| (m.name, l)));
+            if let Some((name, left)) = left
+                && g.metres * 1000.0 > left
+            {
+                job.warnings.push(vectorcraft_cutjob::JobWarning {
+                    source: None,
+                    message: format!("the job needs {:.0} mm of {name}, and {left:.0} mm of the roll is left", g.metres * 1000.0),
+                });
+            }
+        }
+    }
     Ok(json!({"job": job.to_value(), "stats": job.stats().to_value(), "quote": quote.to_value()}))
 }
 

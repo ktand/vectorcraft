@@ -201,6 +201,18 @@ pub(super) fn start(s: &Session, job: &vectorcraft_cutjob::CutJob, p: &Value, cm
     let running = vectorcraft_cutter::send::spawn(transport, driver, encoded, Patience::default()).map_err(|e| bad(cmd, e))?;
     registry::start(device.clone(), running.clone()).map_err(|e| bad(cmd, e))?;
     super::history::begin(super::history::entry(s, job, &model, test.then_some(p)), running);
+    // C18.11: a send cut on a roll takes its length off each group's material's roll.
+    if let Ok(d) = s.doc() {
+        let settings = vectorcraft_cutting::settings(&d.doc);
+        if settings.mat == vectorcraft_cutjob::ROLL {
+            let q = vectorcraft_cutting::quote::quote(&settings, job, &|_: &str| None);
+            for g in q.shares {
+                if let Some(name) = &g.material {
+                    super::materials::use_roll(name, g.metres * 1000.0);
+                }
+            }
+        }
+    }
     Ok(json!({"device": device.id, "model": model, "chunks": chunks, "warnings": warnings}))
 }
 

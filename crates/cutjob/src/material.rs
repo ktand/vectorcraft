@@ -27,7 +27,13 @@ pub struct Material {
     pub mirror: bool,
     /// What it costs (C18.3), for the job's quote; none: not given.
     pub price: Option<Price>,
+    /// What's left of its roll, mm (C18.11): each send cut from it on a roll takes off its length;
+    /// none: not kept.
+    pub roll_left_mm: Option<f64>,
 }
+
+/// The longest roll kept, mm.
+pub const MAX_ROLL_MM: f64 = 1_000_000.0;
 
 /// What a material costs (C18.3), in whatever currency the user keeps their prices in.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -70,7 +76,7 @@ fn tool(force: f64, speed_mm_s: f64, passes: u8) -> ToolSettings {
 
 /// The starting points built in: light settings to test from, not tested values.
 pub fn builtin_materials() -> Vec<Material> {
-    let m = |name: &str, cut, score| Material { name: name.into(), cut, score, builtin: true, mirror: false, price: None };
+    let m = |name: &str, cut, score| Material { name: name.into(), cut, score, builtin: true, mirror: false, price: None, roll_left_mm: None };
     vec![
         m("Paper (light)", tool(0.2, 100.0, 1), tool(0.08, 100.0, 1)),
         m("Cardstock", tool(0.45, 80.0, 2), tool(0.15, 100.0, 1)),
@@ -95,6 +101,9 @@ impl Material {
         if let (Some(p), Some(m)) = (self.price, v.as_object_mut()) {
             m.insert("price".into(), p.to_value());
         }
+        if let (Some(l), Some(m)) = (self.roll_left_mm, v.as_object_mut()) {
+            m.insert("rollLeftMm".into(), json!(l));
+        }
         v
     }
 
@@ -111,6 +120,7 @@ impl Material {
             builtin: false,
             mirror: m.get("mirror").and_then(Value::as_bool) == Some(true),
             price: m.get("price").and_then(Price::from_value),
+            roll_left_mm: m.get("rollLeftMm").and_then(Value::as_f64).filter(|l| l.is_finite()).map(|l| l.clamp(0.0, MAX_ROLL_MM)),
         })
     }
 }
@@ -194,8 +204,15 @@ mod tests {
 
     #[test]
     fn materials_round_trip_through_their_file() {
-        let user =
-            Material { name: "My vinyl".into(), cut: tool(0.3, 90.0, 1), score: tool(0.1, 100.0, 1), builtin: false, mirror: false, price: None };
+        let user = Material {
+            name: "My vinyl".into(),
+            cut: tool(0.3, 90.0, 1),
+            score: tool(0.1, 100.0, 1),
+            builtin: false,
+            mirror: false,
+            price: None,
+            roll_left_mm: None,
+        };
         let file = json!([user.to_value()]);
         assert_eq!(read_materials(&file), std::slice::from_ref(&user));
         assert!(file[0].get("mirror").is_none(), "only a mark is written");
@@ -209,7 +226,8 @@ mod tests {
     #[test]
     fn the_blade_setup_is_kept() {
         let cut = ToolSettings { depth: Some(4), accel: Some(2), corner_overcut_mm: 0.3, blade_offset_mm: Some(0.25), ..tool(0.3, 90.0, 1) };
-        let user = Material { name: "Thick card".into(), cut, score: tool(0.1, 100.0, 1), builtin: false, mirror: false, price: None };
+        let user =
+            Material { name: "Thick card".into(), cut, score: tool(0.1, 100.0, 1), builtin: false, mirror: false, price: None, roll_left_mm: None };
         let back = read_materials(&json!([user.to_value()]));
         assert_eq!(back, std::slice::from_ref(&user));
         assert!(back[0].cut.same_setup(&user.cut));
