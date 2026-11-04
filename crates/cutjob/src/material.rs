@@ -30,6 +30,79 @@ pub struct Material {
     /// What's left of its roll, mm (C18.11): each send cut from it on a roll takes off its length;
     /// none: not kept.
     pub roll_left_mm: Option<f64>,
+    /// How it is pressed onto what it decorates (C18.8), for the job sheet; none: not given.
+    pub press: Option<Press>,
+}
+
+/// How hard a heat press is closed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pressure {
+    Light,
+    Medium,
+    Firm,
+}
+
+/// When the carrier sheet comes off after pressing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Peel {
+    Hot,
+    Warm,
+    Cold,
+}
+
+impl Pressure {
+    pub const ALL: [Pressure; 3] = [Pressure::Light, Pressure::Medium, Pressure::Firm];
+    pub fn id(self) -> &'static str {
+        match self {
+            Pressure::Light => "light",
+            Pressure::Medium => "medium",
+            Pressure::Firm => "firm",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Pressure> {
+        Self::ALL.into_iter().find(|p| p.id() == s)
+    }
+}
+
+impl Peel {
+    pub const ALL: [Peel; 3] = [Peel::Hot, Peel::Warm, Peel::Cold];
+    pub fn id(self) -> &'static str {
+        match self {
+            Peel::Hot => "hot",
+            Peel::Warm => "warm",
+            Peel::Cold => "cold",
+        }
+    }
+    pub fn parse(s: &str) -> Option<Peel> {
+        Self::ALL.into_iter().find(|p| p.id() == s)
+    }
+}
+
+/// A heat-transfer material's pressing (C18.8).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Press {
+    pub temp_c: f64,
+    pub seconds: f64,
+    pub pressure: Pressure,
+    pub peel: Peel,
+}
+
+impl Press {
+    pub const TEMP_C: (f64, f64) = (50.0, 250.0);
+    pub const SECONDS: (f64, f64) = (1.0, 300.0);
+
+    pub fn to_value(&self) -> Value {
+        json!({"tempC": self.temp_c, "seconds": self.seconds, "pressure": self.pressure.id(), "peel": self.peel.id()})
+    }
+
+    /// Read leniently: none unless the temperature is a number in range.
+    pub fn from_value(v: &Value) -> Option<Press> {
+        let temp_c = v.get("tempC")?.as_f64().filter(|t| t.is_finite() && (Self::TEMP_C.0..=Self::TEMP_C.1).contains(t))?;
+        let seconds = v.get("seconds").and_then(Value::as_f64).filter(|s| s.is_finite()).map_or(15.0, |s| s.clamp(Self::SECONDS.0, Self::SECONDS.1));
+        let pressure = v.get("pressure").and_then(Value::as_str).and_then(Pressure::parse).unwrap_or(Pressure::Medium);
+        let peel = v.get("peel").and_then(Value::as_str).and_then(Peel::parse).unwrap_or(Peel::Warm);
+        Some(Press { temp_c, seconds, pressure, peel })
+    }
 }
 
 /// The longest roll kept, mm.
@@ -76,7 +149,16 @@ fn tool(force: f64, speed_mm_s: f64, passes: u8) -> ToolSettings {
 
 /// The starting points built in: light settings to test from, not tested values.
 pub fn builtin_materials() -> Vec<Material> {
-    let m = |name: &str, cut, score| Material { name: name.into(), cut, score, builtin: true, mirror: false, price: None, roll_left_mm: None };
+    let m = |name: &str, cut, score| Material {
+        name: name.into(),
+        cut,
+        score,
+        builtin: true,
+        mirror: false,
+        price: None,
+        roll_left_mm: None,
+        press: None,
+    };
     vec![
         m("Paper (light)", tool(0.2, 100.0, 1), tool(0.08, 100.0, 1)),
         m("Cardstock", tool(0.45, 80.0, 2), tool(0.15, 100.0, 1)),
@@ -104,6 +186,9 @@ impl Material {
         if let (Some(l), Some(m)) = (self.roll_left_mm, v.as_object_mut()) {
             m.insert("rollLeftMm".into(), json!(l));
         }
+        if let (Some(p), Some(m)) = (self.press, v.as_object_mut()) {
+            m.insert("press".into(), p.to_value());
+        }
         v
     }
 
@@ -120,6 +205,7 @@ impl Material {
             builtin: false,
             mirror: m.get("mirror").and_then(Value::as_bool) == Some(true),
             price: m.get("price").and_then(Price::from_value),
+            press: m.get("press").and_then(Press::from_value),
             roll_left_mm: m.get("rollLeftMm").and_then(Value::as_f64).filter(|l| l.is_finite()).map(|l| l.clamp(0.0, MAX_ROLL_MM)),
         })
     }
@@ -212,6 +298,7 @@ mod tests {
             mirror: false,
             price: None,
             roll_left_mm: None,
+            press: None,
         };
         let file = json!([user.to_value()]);
         assert_eq!(read_materials(&file), std::slice::from_ref(&user));
@@ -226,8 +313,16 @@ mod tests {
     #[test]
     fn the_blade_setup_is_kept() {
         let cut = ToolSettings { depth: Some(4), accel: Some(2), corner_overcut_mm: 0.3, blade_offset_mm: Some(0.25), ..tool(0.3, 90.0, 1) };
-        let user =
-            Material { name: "Thick card".into(), cut, score: tool(0.1, 100.0, 1), builtin: false, mirror: false, price: None, roll_left_mm: None };
+        let user = Material {
+            name: "Thick card".into(),
+            cut,
+            score: tool(0.1, 100.0, 1),
+            builtin: false,
+            mirror: false,
+            price: None,
+            roll_left_mm: None,
+            press: None,
+        };
         let back = read_materials(&json!([user.to_value()]));
         assert_eq!(back, std::slice::from_ref(&user));
         assert!(back[0].cut.same_setup(&user.cut));

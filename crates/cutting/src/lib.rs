@@ -33,6 +33,7 @@ pub mod edge;
 pub mod geometry;
 pub mod group;
 pub mod hatch;
+pub mod jobsheet;
 pub mod knockout;
 pub mod live;
 pub mod marks;

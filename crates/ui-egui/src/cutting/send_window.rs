@@ -283,6 +283,7 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
     };
     // C18.2: a warning naming an object selects it on a click.
     let mut pick: Option<u64> = None;
+    let mut sheet = false;
     match &*job {
         Ok(made) => {
             let (j, s) = (&made.job, &made.stats);
@@ -311,6 +312,14 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
                         ui.label(format!("{}: {used}", tl!("Material"))).on_hover_text(tl!("Give the material a price in Cut Settings for the cost."))
                     }
                 };
+                // C18.8: a page to print for the machine and the press.
+                if ui
+                    .small_button(tl!("Job Sheet…"))
+                    .on_hover_text(tl!("Save a page listing each group, its material, settings and pressing"))
+                    .clicked()
+                {
+                    sheet = true;
+                }
             }
             if !j.warnings.is_empty() {
                 egui::ScrollArea::vertical().max_height(110.0).id_salt("cutting-send-warnings").show(ui, |ui| {
@@ -344,6 +353,21 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
         && let Err(e) = app.run("select.set", serde_json::json!({ "ids": [node] }))
     {
         app.status(e);
+    }
+    if sheet {
+        crate::picks::button(app, |app| {
+            let name = app
+                .session
+                .execute("cutting.jobSheet", &json!({}))
+                .ok()
+                .and_then(|v| v["name"].as_str().map(str::to_string))
+                .unwrap_or_else(|| "job.svg".into());
+            if let Err(e) = crate::io::save_command_output_named(app, "cutting.jobSheet", &name, json!({}))
+                && e != "cancelled"
+            {
+                app.status(e);
+            }
+        });
     }
 }
 

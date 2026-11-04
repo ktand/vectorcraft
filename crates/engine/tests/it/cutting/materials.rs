@@ -49,6 +49,15 @@ fn prices(s: &mut Session) {
     let m = materials(s)["materials"].as_array().unwrap().iter().find(|m| m["name"] == "My card").unwrap().clone();
     assert_eq!(m["rollLeftMm"], json!(20.0), "kept when saved again");
     s.execute("cutting.material.roll", &json!({"name": "My card", "leftMm": null})).unwrap();
+    // C18.8: pressing, on the job sheet.
+    for bad in [json!({"name": "My card"}), json!({"name": "My card", "tempC": 20}), json!({"name": "My card", "tempC": 150, "peel": "lukewarm"})] {
+        assert!(s.execute("cutting.material.press", &bad).is_err(), "{bad}");
+    }
+    s.execute("cutting.material.press", &json!({"name": "My card", "tempC": 160, "seconds": 12, "peel": "cold"})).unwrap();
+    s.execute("cutting.settings.set", &json!({"mat": "silhouette.12x12"})).unwrap();
+    let sheet = s.execute("cutting.jobSheet", &json!({})).unwrap();
+    assert!(sheet["data"].as_str().unwrap().contains("Press: 160 °C, 12 s, medium pressure, peel cold"), "{sheet}");
+    assert!(sheet["name"].as_str().unwrap().ends_with("-job.svg"));
     s.execute("cutting.settings.set", &json!({"mat": "silhouette.12x12"})).unwrap();
 }
 

@@ -27,7 +27,9 @@ pub use job::{
 };
 pub use marks::{Mark, MarkLayout};
 pub use mat::{MAT_PRESETS, MatGeometry, ROLL, RectMm};
-pub use material::{GroupSetup, MAX_MATERIALS, MAX_NAME, MAX_ROLL_MM, Material, Price, builtin_materials, read_materials, valid_name};
+pub use material::{
+    GroupSetup, MAX_MATERIALS, MAX_NAME, MAX_ROLL_MM, Material, Peel, Press, Pressure, Price, builtin_materials, read_materials, valid_name,
+};
 pub use settings::{
     CuttingSettings, DOCUMENT_KEY, GroupOptions, Grouping, MAX_GROUP_NAME, MAX_GROUP_SETUPS, Op, Operations, Ordering, Orientation, SETTINGS_VERSION,
     ToolSettings,

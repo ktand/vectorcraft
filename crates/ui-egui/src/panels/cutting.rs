@@ -529,6 +529,39 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             }
         });
     }
+    // C18.8: how a material of the user's is pressed, for the job sheet.
+    if let Some(c) = &current
+        && let Some(m) = info["materials"].as_array().into_iter().flatten().find(|m| m["name"] == *c && m["builtin"] == false)
+    {
+        let press = &m["press"];
+        widgets::label_row(ui, tl!("Pressing"), LABEL_W, |ui| {
+            let mut on = press.is_object();
+            if ui.checkbox(&mut on, "").on_hover_text(tl!("Heat-press settings for the job sheet")).changed() {
+                let p = if on { json!({ "name": c, "tempC": 150, "seconds": 15 }) } else { json!({ "name": c, "tempC": null }) };
+                error = app.run("cutting.material.press", p).err();
+            }
+            if on {
+                let (t, sec) = (press["tempC"].as_f64().unwrap_or(150.0), press["seconds"].as_f64().unwrap_or(15.0));
+                let nt = widgets::spin_plain(ui, ("cutting", "press-temp"), t, " °C", 0, 70.0, 5.0, 50.0, &[]);
+                let ns = widgets::spin_plain(ui, ("cutting", "press-seconds"), sec, " s", 0, 60.0, 1.0, 1.0, &[]);
+                let peels = ["hot", "warm", "cold"];
+                let peel = press["peel"].as_str().unwrap_or("warm");
+                let shown = [tl!("peel hot"), tl!("peel warm"), tl!("peel cold")];
+                let i = peels.iter().position(|p| *p == peel).unwrap_or(1);
+                let np = widgets::dropdown(ui, ("cutting", "press-peel"), shown[i], &shown, 90.0);
+                if nt.is_some() || ns.is_some() || np.is_some() {
+                    let p = json!({
+                        "name": c,
+                        "tempC": nt.unwrap_or(t).clamp(50.0, 250.0),
+                        "seconds": ns.unwrap_or(sec).clamp(1.0, 300.0),
+                        "pressure": press["pressure"].as_str().unwrap_or("medium"),
+                        "peel": peels[np.unwrap_or(i).min(2)],
+                    });
+                    error = app.run("cutting.material.press", p).err();
+                }
+            }
+        });
+    }
     // C18.11: what's left of the roll of a material of the user's, when the job is cut on a roll.
     if info_settings_roll(app)
         && let Some(c) = &current

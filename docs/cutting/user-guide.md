@@ -452,6 +452,12 @@ Cutting from a roll (mat **Roll**), tick **Roll Left** under one of your own mat
 the length left on the roll. Each send takes off what it cuts (when it starts, so a cancelled send counts), and
 the Send window warns when a job needs more than is left.
 
+### Pressing and the job sheet
+
+For heat transfer vinyl, tick **Pressing** under one of your own materials in Cut Settings and give the
+heat press's temperature and time and when to peel the carrier. **Job Sheet…** in the Send window saves a page
+(SVG, to print) listing each group in cutting order with its material, cut settings and pressing.
+
 ### Checks before cutting
 
 The job is looked over for what usually spoils a cut, and the Send window says so (click a warning to select

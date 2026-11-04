@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use serde_json::{Value, json};
-use vectorcraft_cutjob::{CuttingSettings, Material, Price, ToolSettings, builtin_materials, read_materials, valid_name};
+use vectorcraft_cutjob::{CuttingSettings, Material, Peel, Press, Pressure, Price, ToolSettings, builtin_materials, read_materials, valid_name};
 
 use super::{CommandSpec, Result, Session, bad, cmd, has_doc, str_param};
 
@@ -81,7 +81,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Materials",
             [],
             None,
-            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, mirror: cut from the back (Send asks whether to cut mirrored), price: {amount, per: sheet|metre, wastePct} or null (C18.3), rollLeftMm: what's left of its roll, mm, or null (C18.11), cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since}",
+            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, mirror: cut from the back (Send asks whether to cut mirrored), price: {amount, per: sheet|metre, wastePct} or null (C18.3), rollLeftMm: what's left of its roll, mm, or null (C18.11), press: {tempC, seconds, pressure, peel} or null (C18.8), cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since}",
             has_doc,
             list
         ),
@@ -122,6 +122,15 @@ pub fn specs() -> Vec<CommandSpec> {
             roll_cmd
         ),
         cmd!(
+            "cutting.material.press",
+            "Set Cutting Material Pressing",
+            [],
+            None,
+            "{name, tempC: 50–250 or null (none), seconds?: 1–300 (default 15), pressure?: light|medium|firm (default medium), peel?: hot|warm|cold (default warm)} how the user's material `name` is pressed (heat transfer vinyl), for the job sheet (C18.8) → as cutting.materials",
+            has_doc,
+            press_cmd
+        ),
+        cmd!(
             "cutting.material.delete",
             "Delete Cutting Material",
             [],
@@ -137,7 +146,7 @@ fn listing(s: &Session) -> Result<Value> {
     let settings = vectorcraft_cutting::settings(&s.doc()?.doc);
     let materials: Vec<Value> = all()
         .iter()
-        .map(|m| json!({"name": m.name, "builtin": m.builtin, "mirror": m.mirror, "price": m.price.map(|p| p.to_value()), "rollLeftMm": m.roll_left_mm, "cut": m.cut.to_value(), "score": m.score.to_value()}))
+        .map(|m| json!({"name": m.name, "builtin": m.builtin, "mirror": m.mirror, "price": m.price.map(|p| p.to_value()), "rollLeftMm": m.roll_left_mm, "press": m.press.map(|p| p.to_value()), "cut": m.cut.to_value(), "score": m.score.to_value()}))
         .collect();
     Ok(json!({"materials": materials, "current": settings.material, "changed": changed(&settings)}))
 }
@@ -220,6 +229,44 @@ fn price_cmd(s: &mut Session, p: &Value) -> Result<Value> {
     listing(s)
 }
 
+fn press_cmd(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "cutting.material.press";
+    let name = name_param(p, CMD)?;
+    super::check_numbers(p, &["seconds"], CMD)?;
+    let press = match p.get("tempC") {
+        Some(Value::Null) => None,
+        Some(v) => {
+            let temp_c = v
+                .as_f64()
+                .filter(|t| t.is_finite() && (Press::TEMP_C.0..=Press::TEMP_C.1).contains(t))
+                .ok_or_else(|| bad(CMD, "tempC is 50–250, or null"))?;
+            let seconds = p.get("seconds").and_then(Value::as_f64).unwrap_or(15.0);
+            if !(Press::SECONDS.0..=Press::SECONDS.1).contains(&seconds) {
+                return Err(bad(CMD, "seconds is 1–300"));
+            }
+            let pick = |key: &str, default: &'static str| p.get(key).map_or(Some(default), Value::as_str);
+            let pressure = pick("pressure", "medium").and_then(Pressure::parse).ok_or_else(|| bad(CMD, "pressure is light, medium or firm"))?;
+            let peel = pick("peel", "warm").and_then(Peel::parse).ok_or_else(|| bad(CMD, "peel is hot, warm or cold"))?;
+            Some(Press { temp_c, seconds, pressure, peel })
+        }
+        None => return Err(bad(CMD, "tempC is required (null: no pressing)")),
+    };
+    if builtin_materials().iter().any(|m| m.name.eq_ignore_ascii_case(&name)) {
+        return Err(bad(CMD, format!("{name:?} is a built-in material: save it as your own to give it its pressing")));
+    }
+    {
+        let mut st = store().lock().map_err(|_| bad(CMD, "the materials are damaged"))?;
+        let m = st
+            .user
+            .iter_mut()
+            .find(|u| u.name.eq_ignore_ascii_case(&name))
+            .ok_or_else(|| bad(CMD, format!("no material of yours named {name:?}")))?;
+        m.press = press;
+        save(&st).map_err(|e| bad(CMD, format!("the pressing is kept until VectorCraft closes, but couldn't be saved: {e}")))?;
+    }
+    listing(s)
+}
+
 fn roll_cmd(s: &mut Session, p: &Value) -> Result<Value> {
     const CMD: &str = "cutting.material.roll";
     let name = name_param(p, CMD)?;
@@ -276,6 +323,7 @@ fn save_cmd(s: &mut Session, p: &Value) -> Result<Value> {
         // Saved again under its name, it keeps its price (C18.3) and what's left of its roll (C18.11).
         price: find(&name).and_then(|old| old.price),
         roll_left_mm: find(&name).and_then(|old| old.roll_left_mm),
+        press: find(&name).and_then(|old| old.press),
     };
     {
         let mut st = store().lock().map_err(|_| bad(CMD, "the materials are damaged"))?;

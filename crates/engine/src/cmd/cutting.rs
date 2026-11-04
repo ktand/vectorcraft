@@ -168,6 +168,15 @@ pub fn specs() -> Vec<CommandSpec> {
             marks_remove
         ),
         cmd!(
+            query "cutting.jobSheet",
+            "Cutting Job Sheet",
+            [],
+            None,
+            "{} the job sheet (C18.8): an A4 SVG page of the document's job, each group in cutting order with its material, cut settings and pressing → {data: the SVG, name: <document>-job.svg}",
+            has_doc,
+            job_sheet
+        ),
+        cmd!(
             query "cutting.preview.export",
             "Export Cutting Preview",
             [],
@@ -275,6 +284,15 @@ fn preview_export(s: &mut Session, p: &Value) -> Result<Value> {
         }
         None => Ok(json!({"text": text, "name": name})),
     }
+}
+
+fn job_sheet(s: &mut Session, _: &Value) -> Result<Value> {
+    const CMD: &str = "cutting.jobSheet";
+    let st = s.doc()?;
+    let job = vectorcraft_cutting::build_job(&st.doc).map_err(|e| bad(CMD, e.to_string()))?;
+    let svg = vectorcraft_cutting::jobsheet::to_svg(&st.title(), &vectorcraft_cutting::settings(&st.doc), &job, &materials::find);
+    let name = super::fileio::default_name(&st.doc, "svg").replacen(".svg", "-job.svg", 1);
+    Ok(json!({"data": svg, "name": name}))
 }
 
 fn simulate(s: &mut Session, p: &Value) -> Result<Value> {
