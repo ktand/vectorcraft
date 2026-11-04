@@ -33,6 +33,7 @@ control is and what it does: the [user guide](user-guide.md).
 | 15 | A real cut | | |
 | 16 | Tools and holders | | |
 | 17 | Cutting from the roll | | |
+| 18 | Curves sent to the machine | | |
 
 ## Before you start
 
@@ -303,3 +304,35 @@ With vinyl loaded straight into the Cameo 4, no mat (the machine's own roll feed
   the material out, and whether its cross-cutter (if fitted) cuts it off; we send nothing for either yet.
 
 Note: the distances, whether the material stayed straight, what the machine did at the end.
+
+## Step 18: curves sent to the machine (C4.9)
+
+Whether the Cameo takes GP-GL's own curve commands, and whether they cut better than the short straight moves we
+send today ([protocol notes › Curves](protocol-silhouette.md#curves)). On a scrap of paper or card on the mat, with
+the AutoBlade at a light force (it only has to cut through, cleanly).
+
+- Run `cutting.testCurves` (through MCP or the control channel: `{"command": "cutting.testCurves", "params":
+  {}}`). It cuts three rows from the cut area's top-left, 3 mm in, each a 10 mm circle and then a 50 mm S-curve
+  beside it:
+  1. **Top row, as today:** both shapes as short straight moves (0.025 mm tolerance).
+  2. **Middle row, as Béziers (`BZ`):** the circle as four Bézier pieces, the S-curve as two.
+  3. **Bottom row, as a circle (`W`):** the circle as one circle command; the S-curve as straight moves again,
+     for a second look at the top row's.
+
+  Every row is cut once with no overcut, with the force and speed set in the Send window, so the rows differ
+  only in how the curves are sent. The test isn't kept in the job history.
+  `{"only": "bezier"}` (or `segments`, `circle`) cuts one row only, in its own place, if a row stops the machine
+  or cuts wrong.
+- Watch and listen while each row cuts: does the head move smoothly round the curves, or stutter? Does the
+  machine stop or report an error on a row (it may ignore a command it doesn't know)?
+- Then compare the rows, with a magnifier if you have one:
+  - Is each circle round, or a polygon with visible flats? Does it close where it started?
+  - Is the cut the same width all round (the blade turned right), or ragged at places?
+  - Are the circles 10.0 mm across (calipers or the mat grid), the same in every row?
+  - Do the S-curves run smoothly through their middle?
+
+Note: for each row whether it cut at all, how it looked and sounded, and the circle's diameter. If the middle or
+bottom row is as good as the top or better, curves can be offered as a setting; if either cuts wrong or not at
+all, the notes say so and the encoder keeps sending straight moves.
+
+Result:

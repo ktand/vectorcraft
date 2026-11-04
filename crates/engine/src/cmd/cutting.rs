@@ -16,6 +16,8 @@ use super::{CommandSpec, NodeId, Result, Session, always, bad, check_numbers, ch
 
 // Sending the job to a machine (C4.5).
 mod devices;
+// The curve test (C4.9).
+mod curves;
 // Materials: named tool settings (C5.1).
 pub mod materials;
 // Each group's own setup when cut in groups (C7.4).
@@ -56,6 +58,7 @@ const EDGE_SET: &str = "cutting.edge.set";
 
 pub fn specs() -> Vec<CommandSpec> {
     let mut v = devices::specs();
+    v.extend(curves::specs());
     v.extend(materials::specs());
     v.extend(groups::specs());
     v.extend(history::specs());

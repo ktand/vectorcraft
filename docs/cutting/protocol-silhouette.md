@@ -2,7 +2,8 @@
 
 > **Status:** facts gathered for the encoder (C4.3); framing, units, axes, the origin, status and the tools query
 > checked on the owner's Cameo 4 (2026-11-01, [HW]); Print & Cut facts from Silhouette Studio's interface replaced
-> by public tutorials where they cover them (2026-11-03, R2) · **Written:** 2026-10-28 ·
+> by public tutorials where they cover them (2026-11-03, R2); curve commands from Graphtec's GP-GL manual
+> (2026-11-04, to confirm) · **Written:** 2026-10-28 ·
 > **Scope:** Cameo 4 first; other models noted where the source gives them
 
 These are facts about how a computer talks to a Silhouette cutter: what it sends, what it gets back, and in
@@ -29,6 +30,15 @@ not from the sources.
 - **[ISC]** inkscape-silhouette's command list, `Commands.md`, and its pull request
   [#369](https://github.com/fablabnbg/inkscape-silhouette/pull/369) (merged as `f166edc`, 2026-10-08), read
   2026-11-01 for facts only, as [IS].
+- **[GM]** Graphtec's GP-GL manual for its MiPlot MP4100–MP4400 pen plotters (Part 1, "GP-GL commands"), a scan
+  of the printed manual published at <https://github.com/Snow4DV/graphtec-gp-gl-manual> (no licence stated),
+  read 2026-11-04 for facts only: section 1-4, "Circle and curve commands", pages 1-17 to 1-23. Graphtec's own
+  description of the language Silhouette machines speak, from before any Silhouette existed; what a Cameo does
+  with a command is still **to confirm** on the machine.
+- **[GS]** Graphtec's GP-GL command summary for the Craft Robo Pro and CE5000, which Graphtec support sent "as
+  is" to the author of <https://www.ohthehugemanatee.net/2011/07/gpgl-reference-courtesy-of-graphtec/> (2011),
+  who published it; the PDF survives only in the Wayback Machine. Its curve commands are known here through
+  [ISC], which lists them from it; not yet read directly.
 - **[HW]** Checked on the owner's Cameo 4 (USB `0x0B4D:0x1137`) on 2026-11-01, steps 1–3 of
   [hardware-validation.md](hardware-validation.md): 10 mm squares scored at 20 and 280 mm across, 20 mm down,
   measured against the 12 × 12 in mat's grid.
@@ -107,12 +117,23 @@ own presets [IS]; the encoder sends settings directly and needs none.
 
 ### Curves
 
+The machine is sent straight moves today; GP-GL also has curve commands, which the machine breaks into straight
+segments itself. Whether a Cameo 4 or 5 takes them, and how finely it divides them, is **to confirm** with the
+curve test (C4.8, [hardware-validation.md](hardware-validation.md)).
+
 | Fact | Source |
 |---|---|
 | The driver sends only straight moves: `M` (blade up) and `D` (blade down) to each point of a path already flattened; it never sends a curve or circle. Ours does the same, to the document's tolerance (0.025 mm at first). | [IS] |
-| GP-GL also has curve commands: `BZ` (a cubic Bézier through four control points, with a leading number and an optional trailing one whose meanings the list calls unclear), `Y` (a curve through points, open or closed), `W` and `WP` (circles), `)` (an ellipse). All are listed from Graphtec's reference, not seen from a Silhouette. | [ISC], **to confirm** |
-| `BZ` with its leading number 1 (a cubic) was reported working on a CAMEO Pro Mark II, firmware V1.09; the Cameo 4 and 5 are expected to take it, untested. The driver doesn't use it. | [ISC] (#369), **to confirm** |
-| Not planned: the machine's 0.05 mm step is coarser than the tolerance already, and the blade offset, overcut and clipping to the mat work on straight segments. Worth trying only if long jobs stutter or the job is too large to send. | our decision, 2026-11-01 |
+| **Circle** `W`x,y,r1,r2,θ1,θ2[,d]: a circle, arc or spiral round the centre x,y, from radius r1 at angle θ1 to radius r2 at θ2 (angles in tenths of a degree from the x axis, counterclockwise when θ1 < θ2; a full circle is r1 = r2, 0 to 3600). `d` divides it: above 0 it is the angle of each segment in tenths of a degree, below 0 the number of segments, 0 or left out lets the plotter choose an angle that gives "a smooth circle". | [GM] 1-17, 1-18 |
+| **Relative circle** `]`r1,r2,θ1,θ2[,d]: the same, starting from where the tool is (its centre found from the start angle and radius). | [GM] 1-19, 1-20 |
+| **Curve** `Y`a,x1,y1,…,xn,yn and **relative curve** `_`a,Δx1,Δy1,…: a smooth cubic curve *through* the points (it interpolates them; it is not a Bézier), `a` 0 open, 1 closed; at least three points, none repeated in a row, best evenly spaced; a terminator after the last. A closed curve starts and ends at its second point. | [GM] 1-21, 1-22 |
+| **Ellipse** `)`a,x,y,r1,r2,θ1,θ2,θ3[,d]: `a` 0 goes to the start with the tool up, 1 with it down; centre x,y; the major and minor radii; start and end angles; θ3 the major axis's angle to the x axis; `d` as for `W`. | [GM] 1-23 |
+| On the plotter, "during the cutter mode" curves are processed differently according to a DIP switch (S2-8); the manual doesn't say how. A cutter may treat curves otherwise than a pen plotter does (for instance in how it turns the blade round them). | [GM] 1-20 |
+| **Bézier** `BZ`a,x1,y1,x2,y2,x3,y3,x4,y4[,d]: a cubic Bézier through four control points (start, two handles, end), listed in Graphtec's Craft Robo Pro / CE5000 summary; also a three-point circle `WP`x1,y1,x2,y2,x3,y3[,d]. The list leaves the meaning of `a` and `d` open. | [ISC] from [GS], **to confirm** |
+| `BZ` with `a` = 1 (a cubic) and a trailing 0 was reported "physically tested" on a CAMEO Pro Mark II, firmware V1.09; the Cameo 4 and 5 are expected to take it, untested. The report doesn't say how smooth the result was. Claimed benefits, unmeasured: a smaller USB payload and no stalls from the machine's input buffer running dry. | [ISC] (#369), **to confirm** |
+| Silhouette publishes no protocol documentation: asked in 2018, it considered an SDK and in January 2019 decided against it, with no documentation planned. | inkscape-silhouette [issue #72](https://github.com/fablabnbg/inkscape-silhouette/issues/72) |
+| Open questions for the machine: whether it takes each command at all; how finely it divides a curve when `d` is left out (coarser than our 0.025 mm would be worse than today); whether its blade offset (`FC`) is applied along native curves as along straight moves; whether motion along a `BZ` is smoother or quicker than along our segments. | our questions, 2026-11-04 |
+| Using them would be a choice for paths the job leaves whole: our overcut, clipping to the mat, perforation and dashes work on straight segments, so a path with any of those stays flattened. Our decision of 2026-11-01 ("not planned") is replaced by: decide after the curve test. | our decision, 2026-11-04 |
 
 ## Sizes
 

@@ -47,6 +47,7 @@ fn the_job_goes_to_the_cutter_in_the_background() {
     sends_and_says_why(&mut s);
     pauses_between_groups(&mut s);
     let sent = print_and_cut(&mut s);
+    curve_test(&mut s, &sent);
     test_cut(&mut s, &sent);
     let entries = history(&mut s, &dir);
     send_again(&mut s, &entries);
@@ -191,6 +192,28 @@ fn print_and_cut(s: &mut Session) -> Sent {
     assert_eq!(finished(s)["outcome"], json!("done"));
     assert!(sent.bytes().ends_with(b"SO0"));
     sent
+}
+
+/// C4.9: the curve test on the simulated machine: three rows, the middle one's curves as `BZ`, the
+/// bottom one's circle as `W`, the rest as straight moves; not kept in the history. One row asked
+/// for keeps its place.
+fn curve_test(s: &mut Session, sent: &Sent) {
+    s.execute("file.new", &json!({"width": 300, "height": 300})).unwrap();
+    let kept = s.execute("cutting.history", &json!({})).unwrap()["entries"].as_array().unwrap().len();
+    let before = sent.bytes().len();
+    let r = s.execute("cutting.testCurves", &json!({})).unwrap();
+    assert_eq!(r["rows"], json!(["segments", "bezier", "circle"]));
+    assert_eq!(finished(s)["outcome"], json!("done"));
+    let cut = String::from_utf8_lossy(&sent.bytes()[before..]).to_string();
+    let cmds: Vec<&str> = cut.split('\u{3}').collect();
+    assert_eq!(cmds.iter().filter(|c| c.starts_with("BZ1,")).count(), 4 + 2, "the circle's quarters and the S-curve's halves");
+    assert_eq!(cmds.iter().filter(|c| c.starts_with('W')).count(), 1);
+    assert!(cmds.iter().filter(|c| c.starts_with('D')).count() > 100, "the top row and the bottom S-curve as straight moves");
+    assert_eq!(s.execute("cutting.history", &json!({})).unwrap()["entries"].as_array().unwrap().len(), kept, "not in the history");
+    let j = s.execute("cutting.testCurves.job", &json!({"only": "circle"})).unwrap();
+    assert_eq!((j["native"].clone(), j["rows"].clone()), (json!(["circle", null]), json!(["circle"])));
+    assert!(j["job"]["paths"][0]["points"][0][1].as_f64().unwrap() > 50.0, "the bottom row's place: {}", j["job"]["paths"][0]["points"][0]);
+    assert!(s.execute("cutting.testCurves", &json!({"only": "wavy"})).is_err());
 }
 
 /// C8.1: the test cut, on the simulated machine: the two shapes at the corner asked for, the

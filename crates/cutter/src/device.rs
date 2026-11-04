@@ -101,6 +101,18 @@ pub struct Check {
 /// The largest origin adjustment, mm, either way on each axis (C4.6).
 pub const ORIGIN_ADJUST_MM: f64 = 10.0;
 
+/// Fork (C4.9): a path as the machine's own curve, for a driver that can send one in place of
+/// the path's points (which stay in the job for the preview, the simulator and the history).
+/// Mat millimetres, as the job's points.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Native {
+    /// Cubic Bézier pieces end to end, each `[start, handle, handle, end]`, each starting where
+    /// the one before ends.
+    Bezier(Vec<[[f64; 2]; 4]>),
+    /// A whole circle.
+    Circle { centre: [f64; 2], radius_mm: f64 },
+}
+
 /// One family of machines: what it accepts and how it answers. No I/O: the sender does that.
 pub trait Driver: Send + Sync {
     /// Its name, for messages ("Silhouette").
@@ -116,6 +128,13 @@ pub trait Driver: Send + Sync {
     /// `job` as what `device` takes, not adjusted.
     fn encode(&self, job: &CutJob, device: &DeviceInfo) -> Result<Encoded, String> {
         self.encode_adjusted(job, device, [0.0, 0.0])
+    }
+    /// Fork (C4.9): as [`Driver::encode_adjusted`], with `native[i]`, where there is one, sent
+    /// as the machine's own curve in place of path `i`'s points. A family that has no curves
+    /// sends the points.
+    fn encode_native(&self, job: &CutJob, native: &[Option<Native>], device: &DeviceInfo, adjust_mm: [f64; 2]) -> Result<Encoded, String> {
+        let _ = native;
+        self.encode_adjusted(job, device, adjust_mm)
     }
     /// What asks the machine how it is.
     fn status_query(&self) -> &[u8];

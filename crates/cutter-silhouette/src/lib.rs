@@ -15,7 +15,7 @@
 use vectorcraft_cutjob::{CutJob, ToolSettings};
 /// What a holder has in it (C10.3), for those that read [`tool_warnings`]' holders.
 pub use vectorcraft_cutter::tools::Fitted;
-use vectorcraft_cutter::{Check, DeviceInfo, DeviceStatus, Driver, Encoded, ORIGIN_ADJUST_MM};
+use vectorcraft_cutter::{Check, DeviceInfo, DeviceStatus, Driver, Encoded, Native, ORIGIN_ADJUST_MM};
 
 /// Graphtec's USB vendor id, which Silhouette's machines use.
 pub const VENDOR_ID: u16 = 0x0B4D;
@@ -269,8 +269,43 @@ impl Commands {
 
     /// A move (blade up) or a cut (blade down) to mat point `p`, mm: vertical first.
     fn to(&mut self, down: bool, p: [f64; 2]) {
-        let [x, y] = [p[0] - self.origin[0], p[1] - self.origin[1]];
-        self.cmd(&format!("{}{},{}", if down { 'D' } else { 'M' }, units(y), units(x)));
+        let (a, b) = self.at(p);
+        self.cmd(&format!("{}{a},{b}", if down { 'D' } else { 'M' }));
+    }
+
+    /// Mat point `p`, mm, as the machine's pair: down, then across, in units from the origin.
+    fn at(&self, p: [f64; 2]) -> (i64, i64) {
+        (units(p[1] - self.origin[1]), units(p[0] - self.origin[0]))
+    }
+
+    /// C4.9: `native` as the machine's own curve (protocol notes › Curves; to confirm on the
+    /// machine), from a blade-up move to its start. Bézier pieces as `BZ1`, the four points
+    /// each and a trailing 0; a circle as `W` round its centre from angle 0 to 360° (tenths of
+    /// a degree), its radius the same at both ends, the division left to the machine.
+    fn native(&mut self, native: &Native) {
+        match native {
+            Native::Bezier(pieces) => {
+                let Some(first) = pieces.first() else { return };
+                self.to(false, first[0]);
+                for piece in pieces {
+                    let pts: Vec<String> = piece
+                        .iter()
+                        .map(|&q| {
+                            let (a, b) = self.at(q);
+                            format!("{a},{b}")
+                        })
+                        .collect();
+                    self.cmd(&format!("BZ1,{},0", pts.join(",")));
+                }
+            }
+            Native::Circle { centre, radius_mm } => {
+                // Angle 0 is along the machine's first axis (down the mat).
+                self.to(false, [centre[0], centre[1] + radius_mm]);
+                let (a, b) = self.at(*centre);
+                let r = units(*radius_mm);
+                self.cmd(&format!("W{a},{b},{r},{r},0,3600"));
+            }
+        }
     }
 
     /// Packed into chunks of at most [`CHUNK_BYTES`], split only between commands, at each
@@ -338,6 +373,37 @@ fn overcut(points: &[[f64; 2]], mm: f64) -> Vec<[f64; 2]> {
     out
 }
 
+/// The most Bézier pieces one native path may have (C4.9).
+const MAX_NATIVE_PIECES: usize = 10_000;
+
+/// `native` fits `job`: no more than one per path, every point finite and on the job's cut area
+/// (the points it stands for already are), a circle's radius above zero.
+fn check_native(job: &CutJob, native: &[Option<Native>]) -> Result<(), String> {
+    if native.len() > job.paths.len() {
+        return Err(format!("{} native curves for {} paths", native.len(), job.paths.len()));
+    }
+    let area = job.mat.cut_area_mm;
+    let on = |q: &[f64; 2]| {
+        q.iter().all(|v| v.is_finite()) && q[0] >= area.x0 - 1e-6 && q[0] <= area.x1 + 1e-6 && q[1] >= area.y0 - 1e-6 && q[1] <= area.y1 + 1e-6
+    };
+    for (i, n) in native.iter().enumerate() {
+        let ok = match n {
+            None => true,
+            Some(Native::Bezier(pieces)) => !pieces.is_empty() && pieces.len() <= MAX_NATIVE_PIECES && pieces.iter().flatten().all(on),
+            Some(Native::Circle { centre, radius_mm }) => {
+                radius_mm.is_finite()
+                    && *radius_mm > 0.0
+                    && on(&[centre[0] - radius_mm, centre[1] - radius_mm])
+                    && on(&[centre[0] + radius_mm, centre[1] + radius_mm])
+            }
+        };
+        if !ok {
+            return Err(format!("path {i}'s curve is empty, too long or off the cut area"));
+        }
+    }
+    Ok(())
+}
+
 /// The Silhouette driver.
 #[derive(Debug, Default)]
 pub struct Silhouette;
@@ -346,13 +412,20 @@ impl Silhouette {
     /// `job` as commands for a machine of `width_mm` cut width, every position moved `adjust_mm`
     /// (across, down) on the mat: the user's origin adjustment (C4.6).
     pub fn encode_for(&self, job: &CutJob, width_mm: f64, adjust_mm: [f64; 2]) -> Result<Encoded, String> {
-        self.encode_holders(job, width_mm, adjust_mm, 2)
+        self.encode_holders(job, width_mm, adjust_mm, 2, &[])
+    }
+
+    /// As [`Silhouette::encode_for`], `native[i]`, where there is one, sent in place of path
+    /// `i`'s points (C4.9).
+    pub fn encode_native_for(&self, job: &CutJob, native: &[Option<Native>], width_mm: f64, adjust_mm: [f64; 2]) -> Result<Encoded, String> {
+        self.encode_holders(job, width_mm, adjust_mm, 2, native)
     }
 
     /// As [`Silhouette::encode_for`], for a machine with `holders` tool holders: with one, no
     /// tool is chosen (the reference sends `J` to two-holder machines only).
-    fn encode_holders(&self, job: &CutJob, width_mm: f64, adjust_mm: [f64; 2], holders: u8) -> Result<Encoded, String> {
+    fn encode_holders(&self, job: &CutJob, width_mm: f64, adjust_mm: [f64; 2], holders: u8, native: &[Option<Native>]) -> Result<Encoded, String> {
         job.validate().map_err(|e| e.to_string())?;
+        check_native(job, native)?;
         let area = job.mat.cut_area_mm;
         if area.x1 > width_mm + 1e-6 {
             return Err(format!("the job is {:.1} mm wide; this cutter cuts {width_mm:.1} mm", area.x1));
@@ -461,7 +534,12 @@ impl Silhouette {
                 if let Some(accel) = op.tool.accel {
                     c.cmd(&format!("TJ{accel}"));
                 }
-                for p in in_group.iter().filter(|p| p.op == op_index) {
+                for (k, p) in in_group.iter().enumerate().filter(|(_, p)| p.op == op_index) {
+                    // C4.9: the machine's own curve, once, without overcut.
+                    if let Some(Some(n)) = native.get(start + k) {
+                        c.native(n);
+                        continue;
+                    }
                     let Some(&first) = p.points.first() else { continue };
                     for _ in 0..op.tool.passes.max(1) {
                         c.to(false, first);
@@ -517,7 +595,15 @@ impl Driver for Silhouette {
         {
             return Err(format!("the {} goes in holder 2, and the {} has one holder: choose a holder 1 tool", t.label, self.model(device)));
         }
-        self.encode_holders(job, width, adjust_mm, holders)
+        self.encode_holders(job, width, adjust_mm, holders, &[])
+    }
+
+    fn encode_native(&self, job: &CutJob, native: &[Option<Native>], device: &DeviceInfo, adjust_mm: [f64; 2]) -> Result<Encoded, String> {
+        // The same machine checks as a job of points, then the curves sent as curves.
+        self.encode_adjusted(job, device, adjust_mm)?;
+        let width = model(device).map_or(304.8, |m| m.2);
+        let holders = if ONE_HOLDER.contains(&device.product_id) { 1 } else { 2 };
+        self.encode_holders(job, width, adjust_mm, holders, native)
     }
 
     fn status_query(&self) -> &[u8] {

@@ -475,3 +475,45 @@ fn the_tools_answer_is_read() {
         proptest::prop_assert!(Silhouette.parse_tools(&bytes).len() <= 4);
     });
 }
+
+/// C4.9: a path's native curve sent in its place, once and without overcut: Bézier pieces as
+/// `BZ1` (down, across in units, a trailing 0) from a blade-up move to the start, a circle as
+/// `W` from angle 0 (down the mat) round to 3600; the other paths as points, as before.
+#[test]
+fn native_curves_as_bytes() {
+    use vectorcraft_cutter::Native;
+    let j = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 2, 1.0) }],
+        vec![
+            path(0, false, &[[10.0, 20.0], [12.0, 20.0], [14.0, 22.0], [20.0, 30.0]]),
+            path(0, true, &[[45.0, 50.0], [50.0, 45.0], [55.0, 50.0], [50.0, 55.0]]),
+            path(0, false, &[[100.0, 100.0], [110.0, 100.0]]),
+        ],
+        "silhouette.12x12",
+    );
+    let native = [
+        Some(Native::Bezier(vec![[[10.0, 20.0], [15.0, 20.0], [20.0, 25.0], [20.0, 30.0]]])),
+        Some(Native::Circle { centre: [50.0, 50.0], radius_mm: 5.0 }),
+    ];
+    let e = Silhouette.encode_native(&j, &native, &cameo4(), [0.0, 0.0]).unwrap();
+    let text = String::from_utf8_lossy(&e.chunks.concat()).replace('\u{3}', " ");
+    let cuts = text.split_once("FC18,1,1 ").unwrap().1;
+    assert_eq!(
+        cuts,
+        "M400,200 BZ1,400,200,400,300,500,400,600,400,0 M1100,1000 W1000,1000,100,100,0,3600 \
+         M2000,2000 D2000,2200 M2000,2000 D2000,2200 M0,0 SO0 ",
+        "the curves once each; the line twice (two passes)"
+    );
+    // Without native curves, nothing changes.
+    assert_eq!(Silhouette.encode_native(&j, &[], &cameo4(), [0.0, 0.0]).unwrap().chunks, Silhouette.encode(&j, &cameo4()).unwrap().chunks);
+    // A curve off the cut area, a circle of no size, more curves than paths: refused.
+    for bad in [
+        vec![Some(Native::Circle { centre: [2.0, 50.0], radius_mm: 5.0 })],
+        vec![Some(Native::Circle { centre: [50.0, 50.0], radius_mm: 0.0 })],
+        vec![Some(Native::Bezier(vec![[[f64::NAN, 0.0]; 4]]))],
+        vec![Some(Native::Bezier(vec![]))],
+        vec![None, None, None, None],
+    ] {
+        assert!(Silhouette.encode_native(&j, &bad, &cameo4(), [0.0, 0.0]).is_err(), "{bad:?}");
+    }
+}
