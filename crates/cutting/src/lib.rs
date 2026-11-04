@@ -54,6 +54,7 @@ pub mod template;
 pub mod test_cut;
 pub mod tile;
 pub mod weed;
+pub mod weedmap;
 pub mod weld;
 
 use vectorcraft_cutjob::{CutJob, CuttingSettings, DOCUMENT_KEY, JOB_VERSION, JobError, JobMat, OpKind, Operation, Toolpath};

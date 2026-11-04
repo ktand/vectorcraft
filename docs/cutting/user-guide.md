@@ -458,6 +458,12 @@ For heat transfer vinyl, tick **Pressing** under one of your own materials in Cu
 heat press's temperature and time and when to peel the carrier. **Job Sheet…** in the Send window saves a page
 (SVG, to print) listing each group in cutting order with its material, cut settings and pressing.
 
+### Weeding map
+
+**Weeding Map…** in the Send window saves a page of the cut sheet: grey is what to pull away, white what stays.
+It is drawn as the job is cut, so for a mirrored job (heat transfer vinyl) it matches the material as it lies
+on the mat.
+
 ### Checks before cutting
 
 The job is looked over for what usually spoils a cut, and the Send window says so (click a warning to select

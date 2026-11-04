@@ -189,3 +189,13 @@ fn the_checks_name_what_spoils_a_cut() {
     assert_eq!(w.last().unwrap()["source"]["node"], tiny);
     assert!(w.last().unwrap()["message"].as_str().unwrap().contains("smaller than 2 mm"));
 }
+
+/// C18.9: the weeding map is an SVG of the cut sheet, filled even-odd.
+#[test]
+fn the_weeding_map_is_an_svg() {
+    let mut s = new_doc();
+    square(&mut s, 10.0, 10.0, 10.0);
+    let r = s.execute("cutting.weedingMap", &json!({})).unwrap();
+    assert!(r["data"].as_str().unwrap().contains("fill-rule=\"evenodd\""));
+    assert!(r["name"].as_str().unwrap().ends_with("-weeding.svg"));
+}

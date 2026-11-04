@@ -177,6 +177,15 @@ pub fn specs() -> Vec<CommandSpec> {
             job_sheet
         ),
         cmd!(
+            query "cutting.weedingMap",
+            "Cutting Weeding Map",
+            [],
+            None,
+            "{} the weeding map (C18.9): an SVG of the cut sheet as it is cut (mirrored when the job is), what's pulled away shaded and the pieces that stay white, round the design with a 5 mm margin, mm units → {data: the SVG, name: <document>-weeding.svg}",
+            has_doc,
+            weeding_map
+        ),
+        cmd!(
             query "cutting.preview.export",
             "Export Cutting Preview",
             [],
@@ -284,6 +293,14 @@ fn preview_export(s: &mut Session, p: &Value) -> Result<Value> {
         }
         None => Ok(json!({"text": text, "name": name})),
     }
+}
+
+fn weeding_map(s: &mut Session, _: &Value) -> Result<Value> {
+    const CMD: &str = "cutting.weedingMap";
+    let st = s.doc()?;
+    let job = vectorcraft_cutting::build_job(&st.doc).map_err(|e| bad(CMD, e.to_string()))?;
+    let name = super::fileio::default_name(&st.doc, "svg").replacen(".svg", "-weeding.svg", 1);
+    Ok(json!({"data": vectorcraft_cutting::weedmap::to_svg(&job), "name": name}))
 }
 
 fn job_sheet(s: &mut Session, _: &Value) -> Result<Value> {
