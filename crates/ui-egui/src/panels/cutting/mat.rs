@@ -207,6 +207,19 @@ fn nest_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             Err(e) => (true, e),
         });
     }
+    // C18.13: the selected pieces moved to another sheet by hand.
+    let sheets: Vec<String> = app.session.active().map(|st| st.doc.artboards.iter().map(|a| a.name.clone()).collect()).unwrap_or_default();
+    if selected && sheets.len() > 1 {
+        let names: Vec<&str> = sheets.iter().map(String::as_str).collect();
+        widgets::label_row(ui, tl!("Move to"), LABEL_W, |ui| {
+            if let Some(i) = widgets::dropdown_names(ui, ("cutting", "sheet-move"), tl!("Sheet…"), &names, 120.0) {
+                c.note = Some(match app.run("cutting.sheet.move", json!({ "sheet": i })) {
+                    Ok(r) => (false, format!("{} {}", r["moved"].as_array().map_or(0, Vec::len), tl!("moved"))),
+                    Err(e) => (true, e),
+                });
+            }
+        });
+    }
     if let Some((bad, note)) = &c.note {
         ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
     }

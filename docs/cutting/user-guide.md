@@ -283,8 +283,8 @@ when nothing is selected:
 
 ### Sticker sheets
 
-`cutting.stickers` (through MCP or the control channel for now) makes the selected designs into a sticker sheet
-in one step: Print & Cut on, a cut contour round each design (the kiss cut, through the sticker but not its
+**Make Sticker Sheet** in the Contour panel makes the selected designs into a sticker sheet in one step (the
+kiss cut at the panel's **Offset**): Print & Cut on, a cut contour round each design (the kiss cut, through the sticker but not its
 backing), a print bleed, and if asked a cut round the whole sheet on a **Sheet Cut** layer that is cut last with
 a stronger setup of its own, through the backing.
 
@@ -394,8 +394,8 @@ so a small piece can sit in a larger one's hole:
 With more than one sheet, the Send window shows "Sheet 1 of 3", with **Previous Sheet** and **Next Sheet**. Cut a
 sheet, load the next, go to the next sheet, Send.
 
-**Moving a piece to another sheet.** `cutting.sheet.move` (MCP or the control channel for now) moves the selected
-pieces to another sheet (artboard), each keeping its place relative to its sheet.
+**Moving a piece to another sheet.** With pieces selected and more than one sheet, the Nesting panel's
+**Move to** moves them to another sheet (artboard), each keeping its place relative to its sheet.
 
 ## 7. Print & Cut
 
