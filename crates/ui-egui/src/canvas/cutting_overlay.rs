@@ -85,6 +85,17 @@ fn placed(app: &VectorcraftApp) -> Option<Placement> {
     placement::place(&vectorcraft_cutting::settings(&st.doc), &st.doc)
 }
 
+/// Where the canvas draws the job's toolpaths: mat mm back to the document over the art they cut.
+/// A mirrored job (C14.7: Print & Cut never is) goes back through the mirrored placement it was
+/// laid on the mat with, so its lines lie on the art rather than flipped across the artboard.
+pub(crate) fn toolpaths_to_doc(app: &VectorcraftApp, pl: &Placement) -> vectorcraft_geom::Affine {
+    let mirrored = app.session.active().is_some_and(|st| {
+        let s = vectorcraft_cutting::settings(&st.doc);
+        s.mirror && !s.print_and_cut
+    });
+    if mirrored { pl.mirrored().mat_to_doc() } else { pl.mat_to_doc() }
+}
+
 /// `n` mm in the mat's own unit, as printed on it.
 fn printed(n: f64, inch: bool) -> String {
     let v = if inch { n / 25.4 } else { n };
@@ -200,9 +211,14 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
         && let Some(job) = crate::cutting::job(app, p.ctx())
         && let Ok(made) = &*job
     {
-        toolpaths(p, &made.job, &screen, &t);
+        // Over the art they cut: a mirrored job (C14.7) is mapped back through the mirrored
+        // placement, so the canvas shows the toolpaths where the art is, not flipped. The Send
+        // window's preview shows them as the material lies.
+        let art_to_doc = toolpaths_to_doc(app, &pl);
+        let on_art = |x: f64, y: f64| xf.to_screen(art_to_doc * Point::new(x, y));
+        toolpaths(p, &made.job, &on_art, &t);
         if let Some(mm) = crate::cutting::tick(p.ctx(), &made.sim).mm {
-            playback(p, &made.sim, mm, &screen, &t);
+            playback(p, &made.sim, mm, &on_art, &t);
         }
     }
     // The origin: a corner mark, and the unit the mat is numbered in off the corner's diagonal.

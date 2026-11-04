@@ -155,7 +155,8 @@ they belong to what is on the mat today: test, adjust, test again, then send, wi
 | **Blade depth** | The AutoBlade's depth (1–10; 0 leaves the machine's own). Other tools show "—". |
 
 **Cut Mirrored** cuts the design flipped left to right, for material cut from the back such as heat transfer
-vinyl (iron-on). Your art stays as you drew it; Show Toolpaths shows the mirrored lines. Print & Cut is never
+vinyl (iron-on). Your art stays as you drew it, and the canvas's toolpaths stay on it; the Send window's mat
+shows the cut mirrored, as the material lies. Print & Cut is never
 cut mirrored (the marks are read as printed): print the art mirrored instead.
 
 The Send window's **Advanced** (closed at first, under the table) holds what most cuts leave alone: **Accel.**
