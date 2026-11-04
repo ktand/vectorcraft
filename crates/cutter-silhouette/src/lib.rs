@@ -486,12 +486,9 @@ impl Silhouette {
                 warnings.push(format!("the {} mat isn't one the cutter knows: it is told there is no mat", job.mat.id));
             }
         }
-        // The head to the machine's origin first: `FN0` takes where the head is as the new origin
-        // when it is anywhere else ([HW] 2026-11-04), so a job sent after a cancelled one, or after
-        // the head was moved by hand, would be cut shifted by that much. Raw, before the origin
-        // adjustment: the machine's own 0,0.
-        c.cmd("M0,0");
-        c.cmd("FN0");
+        // Portrait is set by `TB50,0` below. `FN0` isn't sent: it sets the orientation too, but takes
+        // where the head is as the new origin when the head is elsewhere, so a job after a cancelled
+        // one, or after the head was moved, would be cut shifted ([HW] 2026-11-04, C4.17).
         c.cmd("TB50,0");
         if job.track_enhancing {
             // FY0 turns it on; off, the Cameo 3 and later are sent nothing (protocol notes; to

@@ -48,10 +48,7 @@ fn a_square_as_bytes() {
     let e = Silhouette.encode(&j, &cameo4()).unwrap();
     let got = e.chunks.concat();
     let mut want = vec![0x1B, 0x04];
-    for c in [
-        "TG1", "M0,0", "FN0", "TB50,0", "J1", "FX17,1", "!10,1", "FC18,1,1", "M400,200", "D400,400", "D600,400", "D600,200", "D400,200", "M0,0",
-        "SO0",
-    ] {
+    for c in ["TG1", "TB50,0", "J1", "FX17,1", "!10,1", "FC18,1,1", "M400,200", "D400,400", "D600,400", "D600,200", "D400,200", "M0,0", "SO0"] {
         want.extend(c.as_bytes());
         want.push(0x03);
     }
@@ -97,12 +94,9 @@ fn the_bytes_replay_the_simulation() {
             want.push((false, u(m.to[0]), u(m.to[1])));
         }
     }
-    // The bytes start with the head sent to the origin before the orientation (C4.17) and end
-    // with it sent home, neither of which the simulation has.
+    // The bytes end with the head sent home, which the simulation doesn't.
     let (end, body) = moves.split_last().unwrap();
     assert!(!end.0);
-    let (first, body) = body.split_first().unwrap();
-    assert_eq!(*first, (false, 0, 0));
     assert_eq!(body, want.as_slice());
 }
 

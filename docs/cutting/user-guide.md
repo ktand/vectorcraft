@@ -204,6 +204,10 @@ holder each column uses. The Cameo 3 can't use holder 2's tools.
 
 The tool belongs to the machine, not the material: choosing a material leaves your tool as it is.
 
+The machine tells which tool is fitted from a small piece of metal in the holder, not from the blade. A tool in an
+adapter, or a home-made holder built like the ratchet blade's, shows as the **Ratchet blade**: choose its settings
+for what is really in it.
+
 ### Materials
 
 **Material** picks a set of cut and score settings. The built-in ones (Paper (light), Cardstock, Vinyl, …) are

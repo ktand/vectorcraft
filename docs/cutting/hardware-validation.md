@@ -303,7 +303,11 @@ With vinyl loaded straight into the Cameo 4, no mat (the machine's own roll feed
   the first (the rollers don't slip over a long cut). Note what the machine does at the end: whether it feeds
   the material out, and whether its cross-cutter (if fitted) cuts it off; we send nothing for either yet.
 
-Note: the distances, whether the material stayed straight, what the machine did at the end.
+- With Track Enhancing on (Send window › Advanced): does the machine feed the material back and forth before
+  cutting? On a mat it never did (protocol notes › More of GP-GL).
+
+Note: the distances, whether the material stayed straight, what the machine did at the end, and whether Track
+Enhancing fed the material.
 
 ## Step 18: curves sent to the machine (C4.9)
 
