@@ -428,6 +428,12 @@ A contour (section 5) is the usual cut line for printed stickers.
 The summary at the top of Cut Settings gives the number of lines, the cut length and the estimated time.
 Warnings show there and in the Send window, such as lines off the mat.
 
+### Slow details
+
+Cut Settings › Advanced › **Slow Details**: paths no larger than the size given (default 10 mm) either way, the
+letters of small text, a star's points, are cut at the slower speed beside it (default 30 mm/s), the rest at
+full speed. Fine vinyl lifts and tears less in tight curves cut slowly.
+
 ### What it takes and costs
 
 Under the job's numbers the Send window says how much material the job takes (a sheet on a mat; on a roll,

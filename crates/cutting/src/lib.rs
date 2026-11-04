@@ -225,13 +225,22 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
         let slot = setup.map(|_| g);
         ordered.extend(these.into_iter().map(|p| (p, slot)));
     }
-    // One operation for each kind and setup the job uses, scored first.
-    let mut keys: Vec<(OpKind, Option<usize>)> = ordered.iter().map(|(p, slot)| (p.op, *slot)).collect();
+    // C18.7: a small detail is cut as an operation of its own, slower.
+    let detail = |p: &prepare::Polyline| {
+        s.detail_slow && {
+            let (lo, hi) = p.points.iter().fold(([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]), |(lo, hi), q| {
+                ([lo[0].min(q[0]), lo[1].min(q[1])], [hi[0].max(q[0]), hi[1].max(q[1])])
+            });
+            hi[0] - lo[0] <= s.detail_size_mm && hi[1] - lo[1] <= s.detail_size_mm
+        }
+    };
+    // One operation for each kind, setup and pace the job uses, scored first.
+    let mut keys: Vec<(OpKind, Option<usize>, bool)> = ordered.iter().map(|(p, slot)| (p.op, *slot, detail(p))).collect();
     keys.sort();
     keys.dedup();
     let operations: Vec<Operation> = keys
         .iter()
-        .map(|&(kind, slot)| {
+        .map(|&(kind, slot, small)| {
             let own = slot.and_then(|g| setups.get(g)).and_then(Option::as_ref);
             let tool = match (kind, own) {
                 // A group's setup is cut with the document's tool unless it names one (C10.2).
@@ -240,13 +249,14 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
                 (OpKind::Cut, None) => s.operations.cut.clone(),
                 (OpKind::Score, None) => s.operations.score.clone(),
             };
+            let tool = if small { vectorcraft_cutjob::ToolSettings { speed_mm_s: tool.speed_mm_s.min(s.detail_speed_mm_s), ..tool } } else { tool };
             Operation { kind, tool }
         })
         .collect();
     let paths = ordered
         .into_iter()
         .map(|(p, slot)| Toolpath {
-            op: keys.iter().position(|k| *k == (p.op, slot)).unwrap_or(0),
+            op: keys.iter().position(|k| *k == (p.op, slot, detail(&p))).unwrap_or(0),
             source: p.source,
             closed: p.closed,
             points: p.points,
@@ -284,6 +294,30 @@ mod tests {
         assert_eq!(d.unknown[DOCUMENT_KEY]["orientation"], json!("landscape"));
         d.unknown.insert(DOCUMENT_KEY.into(), json!("damaged"));
         assert_eq!(settings(&d), CuttingSettings::default());
+    }
+
+    /// C18.7: a small square is cut as an operation of its own at the detail speed; a large one at
+    /// the full speed; off, one operation.
+    #[test]
+    fn small_details_are_cut_slower() {
+        use vectorcraft_doc::{Appearance, Node};
+        use vectorcraft_geom::{Rect, shapes};
+        let mut d = Document::new(500.0, 500.0);
+        let layer = d.layers[0].id;
+        for r in [Rect::new(10.0, 10.0, 200.0, 200.0), Rect::new(250.0, 10.0, 265.0, 25.0)] {
+            let sq = Node::path(d.alloc_id(), shapes::rectangle(r), Appearance::default());
+            d.insert(Some(layer), usize::MAX, sq).unwrap();
+        }
+        assert_eq!(build_job(&d).unwrap().operations.len(), 1);
+        let s = CuttingSettings { detail_slow: true, detail_speed_mm_s: 25.0, detail_size_mm: 10.0, ..CuttingSettings::default() };
+        set_settings(&mut d, &s);
+        let job = build_job(&d).unwrap();
+        let speeds: Vec<f64> = job.operations.iter().map(|o| o.tool.speed_mm_s).collect();
+        assert_eq!(speeds, vec![100.0, 25.0], "{speeds:?}");
+        // The small square (15 pt, about 5.3 mm) is the slow operation's.
+        let small = job.paths.iter().find(|p| p.op == 1).unwrap();
+        let xs: Vec<f64> = small.points.iter().map(|q| q[0]).collect();
+        assert!(xs.iter().copied().fold(f64::MIN, f64::max) - xs.iter().copied().fold(f64::MAX, f64::min) < 10.0);
     }
 
     #[test]

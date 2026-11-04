@@ -287,6 +287,29 @@ fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         }
         widgets::dim_label(ui, tl!("gap"));
     });
+    // C18.7: small details cut slower.
+    let mut slow = s["detailSlow"].as_bool().unwrap_or(false);
+    widgets::label_row(ui, tl!("Slow Details"), LABEL_W, |ui| {
+        if ui
+            .checkbox(&mut slow, "")
+            .on_hover_text(tl!("Paths no larger than the size given are cut at the slower speed, so fine vinyl lifts less."))
+            .changed()
+        {
+            set(app, json!({ "detailSlow": slow }));
+        }
+        if slow {
+            let (lo, hi) = vectorcraft_cutjob::CuttingSettings::DETAIL_SIZE_MM;
+            if let Some(v) = mm_field(ui, "detail-size", s["detailSizeMm"].as_f64().unwrap_or(10.0), lo) {
+                set(app, json!({ "detailSizeMm": v.clamp(lo, hi) }));
+            }
+            let (slo, shi) = vectorcraft_cutjob::ToolSettings::SPEED_MM_S;
+            if let Some(v) =
+                widgets::spin_plain(ui, ("cutting", "detail-speed"), s["detailSpeedMmS"].as_f64().unwrap_or(30.0), " mm/s", 0, 80.0, 5.0, slo, &[])
+            {
+                set(app, json!({ "detailSpeedMmS": v.clamp(slo, shi) }));
+            }
+        }
+    });
     // C14.6: the order paths are cut in (each inside another first, unless as in the document).
     let orders = vectorcraft_cutjob::Ordering::ALL;
     let labels = ["Shortest Travel", "Fewest Roller Moves", "As in the Document"];

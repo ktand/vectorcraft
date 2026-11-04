@@ -425,6 +425,11 @@ pub struct CuttingSettings {
     /// of it under the other groups painted above, running this far under their edges, mm.
     pub knockout: bool,
     pub knockout_overlap_mm: f64,
+    /// Slower for small details (C18.7): paths no larger than `detail_size_mm` either way are cut
+    /// at no more than `detail_speed_mm_s`, so fine vinyl lifts less; the rest at full speed.
+    pub detail_slow: bool,
+    pub detail_speed_mm_s: f64,
+    pub detail_size_mm: f64,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -463,6 +468,9 @@ impl Default for CuttingSettings {
             weed_line_spacing_mm: 0.0,
             knockout: false,
             knockout_overlap_mm: 0.5,
+            detail_slow: false,
+            detail_speed_mm_s: 30.0,
+            detail_size_mm: 10.0,
             extra: Map::new(),
         }
     }
@@ -474,7 +482,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 31] = [
+    const KEYS: [&'static str; 34] = [
         "version",
         "mat",
         "customMatMm",
@@ -506,6 +514,9 @@ impl CuttingSettings {
         "weedLineSpacingMm",
         "knockout",
         "knockoutOverlapMm",
+        "detailSlow",
+        "detailSpeedMmS",
+        "detailSizeMm",
     ];
 
     /// The weed box's margin and the weed lines' spacing (0: one from each side's middle), mm.
@@ -515,6 +526,8 @@ impl CuttingSettings {
     pub const BLEED_MM: (f64, f64) = (0.1, 5.0);
     /// How far a lower colour runs under the one above it, mm (C18.1).
     pub const KNOCKOUT_MM: (f64, f64) = (0.0, 3.0);
+    /// What counts as a small detail, mm across at most (C18.7).
+    pub const DETAIL_SIZE_MM: (f64, f64) = (1.0, 100.0);
     pub const DEFAULT_BLEED_MM: f64 = 1.27;
     /// A perforation's cut and gap lengths, mm: the range (C14.4).
     pub const PERFORATE_MM: (f64, f64) = (0.2, 50.0);
@@ -583,6 +596,9 @@ impl CuttingSettings {
             weed_line_spacing_mm: num(m, "weedLineSpacingMm", Self::WEED_LINE_SPACING_MM.0, Self::WEED_LINE_SPACING_MM.1, d.weed_line_spacing_mm),
             knockout: flag(m, "knockout", d.knockout),
             knockout_overlap_mm: num(m, "knockoutOverlapMm", Self::KNOCKOUT_MM.0, Self::KNOCKOUT_MM.1, d.knockout_overlap_mm),
+            detail_slow: flag(m, "detailSlow", d.detail_slow),
+            detail_speed_mm_s: num(m, "detailSpeedMmS", ToolSettings::SPEED_MM_S.0, ToolSettings::SPEED_MM_S.1, d.detail_speed_mm_s),
+            detail_size_mm: num(m, "detailSizeMm", Self::DETAIL_SIZE_MM.0, Self::DETAIL_SIZE_MM.1, d.detail_size_mm),
             extra: unknown(m, &Self::KEYS),
         }
     }
@@ -626,6 +642,9 @@ impl CuttingSettings {
         m.insert("weedLineSpacingMm".into(), json!(self.weed_line_spacing_mm));
         m.insert("knockout".into(), json!(self.knockout));
         m.insert("knockoutOverlapMm".into(), json!(self.knockout_overlap_mm));
+        m.insert("detailSlow".into(), json!(self.detail_slow));
+        m.insert("detailSpeedMmS".into(), json!(self.detail_speed_mm_s));
+        m.insert("detailSizeMm".into(), json!(self.detail_size_mm));
         if !self.group_options.is_empty() {
             let g: Map<String, Value> = self.group_options.iter().map(|(k, o)| (k.clone(), json!({"off": o.off, "pause": o.pause}))).collect();
             m.insert("groupOptions".into(), Value::Object(g));

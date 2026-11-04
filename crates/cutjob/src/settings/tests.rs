@@ -45,6 +45,9 @@ fn the_defaults_round_trip_as_documented() {
             "weedMarginMm": 3.0,
             "knockout": false,
             "knockoutOverlapMm": 0.5,
+            "detailSlow": false,
+            "detailSpeedMmS": 30.0,
+            "detailSizeMm": 10.0,
             "weedLines": false,
             "weedLineSpacingMm": 0.0
         })
@@ -98,6 +101,9 @@ fn every_setting_round_trips() {
         weed_line_spacing_mm: 25.0,
         knockout: true,
         knockout_overlap_mm: 1.5,
+        detail_slow: true,
+        detail_speed_mm_s: 20.0,
+        detail_size_mm: 8.0,
         extra: Map::new(),
     };
     assert_eq!(read(s.to_value()), s);
