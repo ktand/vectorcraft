@@ -170,7 +170,7 @@ cut mirrored (the marks are read as printed): print the art mirrored instead.
 The Send window's **Advanced** (closed at first, under the table) holds what most cuts leave alone: **Accel.**
 (gentler or faster moves), **Corners** (the blade runs a little past each sharp corner), **Blade offset** (how far
 the blade's tip trails its axis; the machine turns the blade round corners with it; a pen shows "—") and **Track
-Enhancing**. Cut Settings' own **Advanced** holds the design's: **Perforate** (the cut and gap lengths for
+Enhancing** (on a Cameo 4 with a mat it made no visible difference in our tests; it may matter from the roll). Cut Settings' own **Advanced** holds the design's: **Perforate** (the cut and gap lengths for
 objects set to Perforate), **Slow Details**, **Send Curves** and **Cut Order**.
 
 **Send Curves** (on at first) sends the curves of your design to the machine as curves, which it cuts smoother
