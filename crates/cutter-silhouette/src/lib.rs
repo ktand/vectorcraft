@@ -451,6 +451,11 @@ impl Silhouette {
                 warnings.push(format!("the {} mat isn't one the cutter knows: it is told there is no mat", job.mat.id));
             }
         }
+        // The head to the machine's origin first: `FN0` takes where the head is as the new origin
+        // when it is anywhere else ([HW] 2026-11-04), so a job sent after a cancelled one, or after
+        // the head was moved by hand, would be cut shifted by that much. Raw, before the origin
+        // adjustment: the machine's own 0,0.
+        c.cmd("M0,0");
         c.cmd("FN0");
         c.cmd("TB50,0");
         if job.track_enhancing {
