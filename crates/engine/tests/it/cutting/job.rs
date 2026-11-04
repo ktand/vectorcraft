@@ -106,7 +106,10 @@ fn the_preview_exports_as_svg_and_json() {
     s.execute("document.activate", &json!({"index": 0})).unwrap();
     let as_json = s.execute("cutting.preview.export", &json!({"format": "json"})).unwrap();
     let v: Value = serde_json::from_str(as_json["text"].as_str().unwrap()).unwrap();
-    assert_eq!(v, job(&mut s));
+    // The export is the job and its numbers; cutting.job also answers with the quote (C18.3).
+    let mut want = job(&mut s);
+    want.as_object_mut().unwrap().remove("quote");
+    assert_eq!(v, want);
     assert!(s.execute("cutting.preview.export", &json!({"format": "pdf"})).is_err());
 }
 
