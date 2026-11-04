@@ -36,10 +36,18 @@ const PARAMS: &[Param] = &[
     THICKNESS,
 ];
 
-pub(super) const STRAIGHT: Kind = Kind { id: "tuckEnd", name: "Tuck End Box", family: "Boxes", params: PARAMS, sized: true, make: straight };
+pub(super) const STRAIGHT: Kind =
+    Kind { id: "tuckEnd", name: "Tuck End Box", family: "Boxes", params: PARAMS, sized: true, fit: Some(("lengthMm", "heightMm")), make: straight };
 
-pub(super) const REVERSE: Kind =
-    Kind { id: "reverseTuckEnd", name: "Reverse Tuck End Box", family: "Boxes", params: PARAMS, sized: true, make: reverse };
+pub(super) const REVERSE: Kind = Kind {
+    id: "reverseTuckEnd",
+    name: "Reverse Tuck End Box",
+    family: "Boxes",
+    params: PARAMS,
+    sized: true,
+    fit: Some(("lengthMm", "heightMm")),
+    make: reverse,
+};
 
 fn straight(v: &Values) -> Result<Net, String> {
     tuck_end(v, false)
@@ -171,7 +179,12 @@ fn tuck_end(v: &Values, reverse: bool) -> Result<Net, String> {
         }
     }
     let glue_area = polygon(&[(0.0, top + taper), (taper, top), (xb0, top), (xb0, s.bottom), (taper, s.bottom), (0.0, s.bottom - taper)]);
-    Ok(Net { cut: PathData::single(outline.closed()), folds: PathData::new(folds), glue: PathData::single(glue_area) })
+    Ok(Net {
+        cut: PathData::single(outline.closed()),
+        folds: PathData::new(folds),
+        glue: PathData::single(glue_area),
+        face: Some([xs1, s.top, xf1, s.bottom]),
+    })
 }
 
 #[cfg(test)]

@@ -46,6 +46,7 @@ pub(super) const TRAY_LID: Kind = Kind {
         },
     ],
     sized: true,
+    fit: Some(("lengthMm", "widthMm")),
     make: tray_lid,
 };
 
@@ -69,7 +70,9 @@ fn tray_lid(v: &Values) -> Result<Net, String> {
     let lid = piece(l + fit, w + fit, v.get("lidHeightMm")).map_err(|e| format!("the lid: {e}"))?;
     let down = Affine::translate((0.0, base.size().1 + PIECE_GAP_MM));
     let join = |a: &PathData, b: &PathData| PathData::new(a.subpaths.iter().chain(b.transformed(down).subpaths.iter()).cloned().collect());
-    Ok(Net { cut: join(&base.cut, &lid.cut), folds: join(&base.folds, &lid.folds), glue: join(&base.glue, &lid.glue) })
+    // The art goes on the lid's top.
+    let face = lid.face.map(|f| [f[0], f[1] + base.size().1 + PIECE_GAP_MM, f[2], f[3] + base.size().1 + PIECE_GAP_MM]);
+    Ok(Net { cut: join(&base.cut, &lid.cut), folds: join(&base.folds, &lid.folds), glue: join(&base.glue, &lid.glue), face })
 }
 
 pub(super) const PILLOW: Kind = Kind {
@@ -99,6 +102,7 @@ pub(super) const PILLOW: Kind = Kind {
         Param { key: "glueMm", label: "Glue Flap", unit: Unit::Mm, default: 12.0, min: 5.0, max: 40.0, help: "the flap the seam is glued along" },
     ],
     sized: false,
+    fit: Some(("widthMm", "lengthMm")),
     make: pillow,
 };
 
@@ -158,7 +162,12 @@ fn pillow(v: &Values) -> Result<Net, String> {
         }
     }
     let glue = polygon(&[(0.0, top + taper), (taper, top), (xs[0], top), (xs[0], bottom), (taper, bottom), (0.0, bottom - taper)]);
-    Ok(Net { cut: PathData::single(outline.closed()), folds: PathData::new(folds), glue: PathData::single(glue) })
+    Ok(Net {
+        cut: PathData::single(outline.closed()),
+        folds: PathData::new(folds),
+        glue: PathData::single(glue),
+        face: Some([xs[0], top, xs[1], bottom]),
+    })
 }
 
 #[cfg(test)]

@@ -73,11 +73,25 @@ const ENVELOPE_PARAMS: &[Param] = &[
     Param { key: "easeMm", label: "Ease", unit: Unit::Mm, default: 3.0, min: 0.0, max: 20.0, help: "room round the card on each side" },
 ];
 
-pub(super) const ENVELOPE: Kind =
-    Kind { id: "envelope", name: "Envelope", family: FAMILY, params: ENVELOPE_PARAMS, sized: false, make: envelope_square };
+pub(super) const ENVELOPE: Kind = Kind {
+    id: "envelope",
+    name: "Envelope",
+    family: FAMILY,
+    params: ENVELOPE_PARAMS,
+    sized: false,
+    fit: Some(("cardWidthMm", "cardHeightMm")),
+    make: envelope_square,
+};
 
-pub(super) const POINTED_ENVELOPE: Kind =
-    Kind { id: "pointedEnvelope", name: "Pointed Envelope", family: FAMILY, params: ENVELOPE_PARAMS, sized: false, make: envelope_pointed };
+pub(super) const POINTED_ENVELOPE: Kind = Kind {
+    id: "pointedEnvelope",
+    name: "Pointed Envelope",
+    family: FAMILY,
+    params: ENVELOPE_PARAMS,
+    sized: false,
+    fit: Some(("cardWidthMm", "cardHeightMm")),
+    make: envelope_pointed,
+};
 
 fn envelope_square(v: &Values) -> Result<Net, String> {
     envelope(v, false)
@@ -133,7 +147,7 @@ fn envelope(v: &Values, pointed: bool) -> Result<Net, String> {
         polygon(&[(x0 + relief, y1), (x0 + bottom_in, y1 + bottom), (x0 + bottom_in + strip, y1 + bottom), (x0 + relief + strip, y1)]),
         polygon(&[(x1 - relief, y1), (x1 - relief - strip, y1), (x1 - bottom_in - strip, y1 + bottom), (x1 - bottom_in, y1 + bottom)]),
     ];
-    Ok(Net { cut: PathData::single(o.closed()), folds: PathData::new(folds), glue: PathData::new(glue) })
+    Ok(Net { cut: PathData::single(o.closed()), folds: PathData::new(folds), glue: PathData::new(glue), face: Some([x0, y0, x1, y1]) })
 }
 
 pub(super) const PLACE_CARD: Kind = Kind {
@@ -146,6 +160,7 @@ pub(super) const PLACE_CARD: Kind = Kind {
         Param { key: "cornerMm", label: "Corner Radius", unit: Unit::Mm, default: 3.0, min: 0.0, max: 30.0, help: "0: square corners" },
     ],
     sized: false,
+    fit: Some(("widthMm", "heightMm")),
     make: place_card,
 };
 
@@ -156,6 +171,8 @@ fn place_card(v: &Values) -> Result<Net, String> {
         cut: PathData::single(rounded_rect(0.0, 0.0, w, 2.0 * h, v.get("cornerMm"))),
         folds: PathData::single(line((0.0, h), (w, h))),
         glue: PathData::default(),
+        // The face toward the guest: the lower half, upright when the card stands.
+        face: Some([0.0, h, w, 2.0 * h]),
     })
 }
 
@@ -169,6 +186,7 @@ pub(super) const GIFT_TAG: Kind = Kind {
         Param { key: "holeMm", label: "Hole", unit: Unit::Mm, default: 5.0, min: 0.0, max: 20.0, help: "the string's hole, across (0: none)" },
     ],
     sized: false,
+    fit: Some(("widthMm", "heightMm")),
     make: gift_tag,
 };
 
@@ -183,7 +201,7 @@ fn gift_tag(v: &Values) -> Result<Net, String> {
         }
         cut.push(circle((w / 2.0, c.max(hole / 2.0 + 3.0)), hole / 2.0));
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::default(), glue: PathData::default() })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::default(), glue: PathData::default(), face: Some([0.0, 0.0, w, h]) })
 }
 
 pub(super) const EARRING_CARD: Kind = Kind {
@@ -214,6 +232,7 @@ pub(super) const EARRING_CARD: Kind = Kind {
         },
     ],
     sized: false,
+    fit: Some(("widthMm", "heightMm")),
     make: earring_card,
 };
 
@@ -234,7 +253,7 @@ fn earring_card(v: &Values) -> Result<Net, String> {
     for x in [w / 2.0 - gap / 2.0, w / 2.0 + gap / 2.0] {
         cut.push(circle((x, y), hole / 2.0));
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::default(), glue: PathData::default() })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::default(), glue: PathData::default(), face: Some([0.0, 0.0, w, h]) })
 }
 
 pub(super) const GIFT_CARD_HOLDER: Kind = Kind {
@@ -264,6 +283,7 @@ pub(super) const GIFT_CARD_HOLDER: Kind = Kind {
         },
     ],
     sized: false,
+    fit: Some(("widthMm", "heightMm")),
     make: gift_card_holder,
 };
 
@@ -283,7 +303,7 @@ fn gift_card_holder(v: &Values) -> Result<Net, String> {
         // From a point on one edge to one on the other, past the corner by 1.5 mm each way.
         cut.push(line((x + sx * d, y - sy * 1.5), (x - sx * 1.5, y + sy * d)));
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::single(line((w, 0.0), (w, h))), glue: PathData::default() })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::single(line((w, 0.0), (w, h))), glue: PathData::default(), face: Some([0.0, 0.0, w, h]) })
 }
 
 #[cfg(test)]

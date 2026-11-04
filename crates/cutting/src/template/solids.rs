@@ -114,7 +114,7 @@ macro_rules! platonic_kind {
         fn $f(v: &Values) -> Result<Net, String> {
             platonic(v, $faces)
         }
-        pub(super) const $name: Kind = Kind { id: $id, name: $label, family: FAMILY, params: &[EDGE, TAB], sized: false, make: $f };
+        pub(super) const $name: Kind = Kind { id: $id, name: $label, family: FAMILY, params: &[EDGE, TAB], sized: false, fit: None, make: $f };
     };
 }
 
@@ -138,6 +138,7 @@ pub(super) const PYRAMID: Kind = Kind {
         TAB,
     ],
     sized: false,
+    fit: None,
     make: pyramid,
 };
 
@@ -152,6 +153,7 @@ pub(super) const PRISM: Kind = Kind {
         TAB,
     ],
     sized: false,
+    fit: None,
     make: prism,
 };
 
@@ -222,6 +224,7 @@ pub(super) const CYLINDER: Kind = Kind {
         TAB,
     ],
     sized: false,
+    fit: None,
     make: cylinder,
 };
 
@@ -300,7 +303,7 @@ fn cylinder(v: &Values) -> Result<Net, String> {
         e.arc((cx, t + r), r, 0.0, TAU);
         cut.push(e.closed());
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue) })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face: None })
 }
 
 pub(super) const CONE: Kind = Kind {
@@ -322,6 +325,7 @@ pub(super) const CONE: Kind = Kind {
         TAB,
     ],
     sized: false,
+    fit: None,
     make: cone,
 };
 
@@ -382,7 +386,7 @@ fn cone(v: &Values) -> Result<Net, String> {
         glue.extend(gl);
         x += 2.0 * (r + tab) + 5.0;
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue) })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face: None })
 }
 
 #[cfg(test)]

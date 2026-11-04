@@ -179,3 +179,27 @@ f 1 2 3
     let vectorcraft_doc::NodeKind::Group { children: n, .. } = &numbers.kind else { panic!("numbers") };
     assert_eq!(n.len(), 14, "seven cut edges, numbered on both sides");
 }
+
+/// C15.7: a template sized to the selected art: its face the art's size plus the margin, centred
+/// under it; a solid, with no one face, is refused.
+#[test]
+fn a_box_is_sized_to_the_art() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 800, "height": 800})).unwrap();
+    let art = s.execute("shape.rectangle", &json!({"x": 300, "y": 300, "width": 72, "height": 144})).unwrap()["id"].clone();
+    s.execute("select.set", &json!({"ids": [art]})).unwrap();
+    assert!(s.execute("cutting.template", &json!({"kind": "cube", "fit": true})).is_err());
+    assert!(s.execute("cutting.template", &json!({"kind": "tuckEnd", "fit": "yes"})).is_err());
+    let r = s.execute("cutting.template", &json!({"kind": "tuckEnd", "fit": true, "fitMarginMm": 0, "thicknessMm": 0})).unwrap();
+    assert_eq!(r["fitted"], json!(true));
+    // The front panel's folds run either side of the art as it prints (its 1 pt stroke included).
+    let doc = &s.active().unwrap().doc;
+    let g = doc.node(vectorcraft_doc::NodeId(r["id"].as_u64().unwrap())).unwrap();
+    let vectorcraft_doc::NodeKind::Group { children, .. } = &g.kind else { panic!("a group") };
+    let folds = children.iter().find(|c| c.name.as_deref() == Some("Folds")).unwrap();
+    let vectorcraft_doc::NodeKind::Path { path, .. } = &folds.kind else { panic!("a path") };
+    let xs: Vec<f64> = path.subpaths.iter().filter(|s| (s.anchors[0].p.x - s.anchors[1].p.x).abs() < 1e-9).map(|s| s.anchors[0].p.x).collect();
+    assert!(xs.iter().any(|x| (x - 299.5).abs() < 1e-6) && xs.iter().any(|x| (x - 372.5).abs() < 1e-6), "{xs:?}");
+    let ys: Vec<f64> = path.subpaths.iter().filter(|s| (s.anchors[0].p.y - s.anchors[1].p.y).abs() < 1e-9).map(|s| s.anchors[0].p.y).collect();
+    assert!(ys.iter().any(|y| (y - 299.5).abs() < 1e-6) && ys.iter().any(|y| (y - 444.5).abs() < 1e-6), "{ys:?}");
+}

@@ -22,6 +22,8 @@ struct TemplateChoice {
     outside: bool,
     /// The folds perforated instead of scored.
     perforate: bool,
+    /// Sized to the selected art (C15.7).
+    fit: bool,
     /// Papercraft: the model's longest side, mm (0: not set yet, 150).
     craft_mm: f64,
     note: Option<(bool, String)>,
@@ -163,12 +165,22 @@ fn template_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         ui.selectable_value(&mut c.perforate, true, tl!("Perforate"));
     });
     let mut params: Map<String, Value> = kind.params.iter().map(|p| (p.key.to_string(), json!(c.value(kind, p.key)))).collect();
+    let has_art = app.session.active().is_some_and(|st| !st.selection.is_empty()) && !template_selected(app);
+    if kind.fit.is_some() {
+        ui.add_enabled(has_art, egui::Checkbox::new(&mut c.fit, tl!("Size to Selected Art")))
+            .on_hover_text(tl!("Its face as large as the selected art, with a 2 mm margin, and placed under it, ready to print and cut."))
+            .on_disabled_hover_text(tl!("Select the art to size it to."));
+    }
+    let fit = c.fit && has_art && kind.fit.is_some();
     let one = template_selected(app);
     let label = if one { tl!("Apply to Selected Template") } else { tl!("Add Template") };
     let hint = tl!("The net as one group: its outline set to Cut, its folds to Score or Perforate, its glue areas marked.");
     if ui.button(label).on_hover_text(hint).clicked() {
         params.insert("kind".to_string(), json!(kind.id));
         params.insert("outside".to_string(), json!(c.outside && kind.sized));
+        if fit {
+            params.insert("fit".to_string(), json!(true));
+        }
         params.insert("folds".to_string(), json!(if c.perforate { "perforate" } else { "score" }));
         c.note = Some(match app.run("cutting.template", Value::Object(params)) {
             Ok(r) => {
@@ -272,6 +284,7 @@ mod tests {
             "Folds",
             "Score",
             "Perforate",
+            "Size to Selected Art",
             "Add Template",
             "Model Size",
             "Papercraft from 3D Model…",

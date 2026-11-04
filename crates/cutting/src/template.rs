@@ -80,6 +80,9 @@ pub struct Net {
     pub folds: PathData,
     /// Where glue goes (closed areas), marked and not cut.
     pub glue: PathData,
+    /// The face art goes on (`x0, y0, x1, y1`, mm): the front of a box, a card's face. None: no
+    /// one face (a solid).
+    pub face: Option<[f64; 4]>,
 }
 
 impl Net {
@@ -100,6 +103,9 @@ pub struct Kind {
     pub params: &'static [Param],
     /// Whether it has inside and outside sizes (a box does; a tag doesn't).
     pub sized: bool,
+    /// The parameters that size the face art goes on (its width and its height), so a template can
+    /// be sized to the selected art; None: it has no such face.
+    pub fit: Option<(&'static str, &'static str)>,
     make: fn(&Values) -> Result<Net, String>,
 }
 
@@ -136,6 +142,9 @@ impl Kind {
             let to = vectorcraft_geom::Affine::translate((-b.x0, -b.y0));
             for p in [&mut net.cut, &mut net.folds, &mut net.glue] {
                 p.transform(to);
+            }
+            if let Some(f) = &mut net.face {
+                *f = [f[0] - b.x0, f[1] - b.y0, f[2] - b.x0, f[3] - b.y0];
             }
         }
         // A net that isn't finite or has no size is a template's bug: refused, not drawn.
@@ -339,6 +348,7 @@ const TRAY: Kind = Kind {
         },
     ],
     sized: true,
+    fit: Some(("lengthMm", "widthMm")),
     make: tray,
 };
 
@@ -411,7 +421,7 @@ fn tray(v: &Values) -> Result<Net, String> {
     ];
     let tab = |x: f64, dir: f64, top: f64| polygon(&[(x, top), (x + dir * g, top + taper), (x + dir * g, top + h - taper), (x, top + h)]);
     let glue = vec![tab(x1, 1.0, 0.0), tab(x1, 1.0, y1), tab(x0, -1.0, y1), tab(x0, -1.0, 0.0)];
-    Ok(Net { cut: PathData::single(polygon(&outline)), folds: PathData::new(folds), glue: PathData::new(glue) })
+    Ok(Net { cut: PathData::single(polygon(&outline)), folds: PathData::new(folds), glue: PathData::new(glue), face: Some([x0, y0, x1, y1]) })
 }
 
 #[cfg(test)]

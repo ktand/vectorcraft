@@ -311,6 +311,10 @@ is cut, the ends of a cylinder or a cone as pieces of their own.
 - **Thickness:** the material's. Each fold takes up some of it, so the panels are made slightly larger for what
   you put in to fit. Turn on **Outside Sizes** to give the finished size instead.
 - **Glue Tab:** how far each corner's tab reaches along the wall it is glued inside.
+- **Size to Selected Art:** with art selected (a label, a picture), the template's face (a box's front, a tray's
+  base, an envelope's or a card's face) is made as large as the art plus 2 mm all round, and the net is placed
+  so that face lies under the art: print it with Print & Cut, then cut, fold and glue. Solids have no one face to
+  size.
 - **Folds:** **Score** (the default) or **Perforate**, cut in dashes with the perforation settings, for card too
   stiff to score or a fold that should also tear.
 - **Add Template:** adds a group, centred on the artboard: the outline set to Cut, the folds set to Score or

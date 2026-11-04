@@ -30,7 +30,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Templates",
             [],
             None,
-            "{} the templates cutting.template makes, in the panel's order → {templates: [{id, name, family, sized: whether it has inside and outside sizes, params: [{key, label, unit: mm|deg|count|toggle (true or false, or 1 or 0), default, min, max, help}]}]}",
+            "{} the templates cutting.template makes, in the panel's order → {templates: [{id, name, family, sized: whether it has inside and outside sizes, fits: whether it can be sized to art (fit), params: [{key, label, unit: mm|deg|count|toggle (true or false, or 1 or 0), default, min, max, help}]}]}",
             always,
             list
         ),
@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Add Template",
             [],
             None,
-            "{kind?: a template's id (cutting.templates; required unless a template is selected), outside?: bool (default false: sizes are inside sizes, what goes in it; true: the finished net's), folds?: score|perforate (default score: the folds scored; perforate: cut in dashes with the perforation settings, to fold or tear along), x?, y?: the net's top left, pt (default: centred on the cutting artboard), …the template's params (each in its range; mm unless it says)} a template's net added as one group on top: the outline set to Cut, the folds to Score (or Perforate) in a colour of their own, the glue areas marked and set to No Cut; with a template alone selected, made again in place (its kind, and the values not given, kept); one undo step → {id, kind, folds, widthMm, heightMm, replaced, warnings: why it won't cut as it is (the net off the mat's cut area)}",
+            "{kind?: a template's id (cutting.templates; required unless a template is selected), outside?: bool (default false: sizes are inside sizes, what goes in it; true: the finished net's), fit?: bool (default false; true: sized to the selected art (ids, else the selection): the face art goes on (a box's front or base, a card's face) as large as the art's bounds plus fitMarginMm each way, and placed under it), fitMarginMm?: 0–50 (default 2), folds?: score|perforate (default score: the folds scored; perforate: cut in dashes with the perforation settings, to fold or tear along), x?, y?: the net's top left, pt (default: centred on the cutting artboard), …the template's params (each in its range; mm unless it says)} a template's net added as one group on top: the outline set to Cut, the folds to Score (or Perforate) in a colour of their own, the glue areas marked and set to No Cut; with a template alone selected, made again in place (its kind, and the values not given, kept); one undo step → {id, kind, fitted, folds, widthMm, heightMm, replaced, warnings: why it won't cut as it is (the net off the mat's cut area)}",
             has_doc,
             add
         ),
@@ -55,7 +55,7 @@ fn list(_: &mut Session, _: &Value) -> Result<Value> {
                 .iter()
                 .map(|p| json!({"key": p.key, "label": p.label, "unit": p.unit.id(), "default": p.default, "min": p.min, "max": p.max, "help": p.help}))
                 .collect();
-            json!({"id": k.id, "name": k.name, "family": k.family, "sized": k.sized, "params": params})
+            json!({"id": k.id, "name": k.name, "family": k.family, "sized": k.sized, "fits": k.fit.is_some(), "params": params})
         })
         .collect();
     Ok(json!({ "templates": templates }))
@@ -115,11 +115,16 @@ fn artboard_centre(d: &Document) -> Option<(f64, f64)> {
 
 fn add(s: &mut Session, p: &Value) -> Result<Value> {
     check_numbers(p, &["x", "y"], CMD)?;
+    check_numbers(p, &["fitMarginMm"], CMD)?;
     let ids = super::objects(s, p, CMD)?;
     let d = &s.doc()?.doc;
-    // A template alone selected: made again where it is.
+    let fit = match p.get("fit") {
+        None => false,
+        Some(v) => v.as_bool().ok_or_else(|| bad(CMD, "fit must be true or false"))?,
+    };
+    // A template alone selected: made again where it is (unless it is being fitted to art).
     let again = match ids.as_slice() {
-        [one] => d.node(*one).and_then(made_as).map(|m| (*one, m)),
+        [one] if !fit => d.node(*one).and_then(made_as).map(|m| (*one, m)),
         _ => None,
     };
     let kind = match (p.get("kind"), &again) {
@@ -142,8 +147,34 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
             _ => return Err(bad(CMD, "folds must be score or perforate")),
         },
     };
-    // A switch may come as true or false, or as 1 or 0.
-    let given = |key: &str| p.get(key).map(|v| v.as_bool().map_or_else(|| v.as_f64().unwrap_or(f64::NAN), |b| f64::from(u8::from(b))));
+    // C15.7: sized to the selected art: its face the art's bounds plus the margin each way.
+    let art = if fit {
+        let margin = p.get("fitMarginMm").and_then(Value::as_f64).unwrap_or(2.0);
+        if !(0.0..=50.0).contains(&margin) {
+            return Err(bad(CMD, "fitMarginMm is 0–50"));
+        }
+        let keys = kind.fit.ok_or_else(|| bad(CMD, format!("the {} has no one face to size to art", kind.name.to_lowercase())))?;
+        if ids.is_empty() {
+            return Err(bad(CMD, "select the art to size it to"));
+        }
+        let b = d.bounds_of(&ids, true).filter(|b| b.width() > 0.0 && b.height() > 0.0).ok_or_else(|| bad(CMD, "the selection has no size"))?;
+        let size = (b.width() * MM_PER_PT + 2.0 * margin, b.height() * MM_PER_PT + 2.0 * margin);
+        Some((keys, size, ((b.x0 + b.x1) / 2.0, (b.y0 + b.y1) / 2.0)))
+    } else {
+        None
+    };
+    // A switch may come as true or false, or as 1 or 0; a fitted face's sizes are the art's.
+    let given = |key: &str| {
+        if let Some(((kw, kh), (w, h), _)) = art {
+            if key == kw {
+                return Some(w);
+            }
+            if key == kh {
+                return Some(h);
+            }
+        }
+        p.get(key).map(|v| v.as_bool().map_or_else(|| v.as_f64().unwrap_or(f64::NAN), |b| f64::from(u8::from(b))))
+    };
     let keys: Vec<&str> = kind.params.iter().filter(|q| q.unit != template::Unit::Toggle).map(|q| q.key).collect();
     check_numbers(p, &keys, CMD)?;
     let fallback = again.as_ref().filter(|(_, m)| m.kind.id == kind.id).map(|(_, m)| &m.values);
@@ -151,8 +182,14 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
     let net = kind.make(&values).map_err(|e| bad(CMD, e))?;
     let (w, h) = net.size();
     let (wpt, hpt) = (w / MM_PER_PT, h / MM_PER_PT);
+    // Fitted: the face centred on the art.
+    let fitted_at = match (art, net.face) {
+        (Some((_, _, (cx, cy))), Some(f)) => Some((cx - (f[0] + f[2]) / 2.0 / MM_PER_PT, cy - (f[1] + f[3]) / 2.0 / MM_PER_PT)),
+        _ => None,
+    };
     let at = match (p.get("x").and_then(Value::as_f64), p.get("y").and_then(Value::as_f64), &again) {
         (Some(x), Some(y), _) => (x, y),
+        (None, None, None) if fitted_at.is_some() => fitted_at.unwrap_or_default(),
         // Where the template is now, if it was moved since it was made.
         (None, None, Some((old, m))) => d.bounds_of(&[*old], false).map_or(m.at, |b| (b.x0, b.y0)),
         (None, None, None) => {
@@ -200,6 +237,6 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
     })?;
     let id = id.ok_or_else(|| bad(CMD, "the template wasn't added"))?;
     Ok(
-        json!({ "id": id.0, "kind": kind.id, "folds": fold_id(perforate), "widthMm": w, "heightMm": h, "replaced": again.is_some(), "warnings": warnings }),
+        json!({ "id": id.0, "kind": kind.id, "fitted": art.is_some(), "folds": fold_id(perforate), "widthMm": w, "heightMm": h, "replaced": again.is_some(), "warnings": warnings }),
     )
 }
