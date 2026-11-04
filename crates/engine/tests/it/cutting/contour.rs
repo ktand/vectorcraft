@@ -34,3 +34,28 @@ fn a_contour_goes_round_the_art() {
     assert_eq!(job["job"]["paths"].as_array().unwrap().len(), 1);
     assert_eq!(job["job"]["paths"][0]["source"]["node"], rect);
 }
+
+/// C18.5: a sticker sheet in one step: Print & Cut on, the contour, the bleed, the sheet cut on its
+/// own layer cut last with its stronger setup; one undo step.
+#[test]
+fn a_sticker_sheet_in_one_step() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 500, "height": 600})).unwrap();
+    let a = s.execute("shape.ellipse", &json!({"x": 150, "y": 150, "width": 80, "height": 80})).unwrap()["id"].clone();
+    let b = s.execute("shape.rectangle", &json!({"x": 280, "y": 150, "width": 60, "height": 90})).unwrap()["id"].clone();
+    assert!(s.execute("cutting.stickers", &json!({"ids": [], "offsetMm": 1})).is_err());
+    assert!(s.execute("cutting.stickers", &json!({"ids": [a, b], "offsetMm": 30})).is_err());
+    let r = s.execute("cutting.stickers", &json!({"ids": [a, b], "sheetCut": true})).unwrap();
+    assert_eq!(r["pieces"], json!(2));
+    assert!(r["sheetCut"].is_u64());
+    let settings = s.execute("cutting.settings.get", &json!({})).unwrap()["settings"].clone();
+    assert_eq!((settings["printAndCut"].clone(), settings["grouping"].clone()), (json!(true), json!("layer")));
+    let job = s.execute("cutting.job", &json!({})).unwrap()["job"].clone();
+    let groups = job["groups"].as_array().unwrap();
+    assert_eq!(groups.last().unwrap()["name"], json!("Sheet Cut"), "cut last: {groups:?}");
+    let forces: Vec<f64> = job["operations"].as_array().unwrap().iter().map(|o| o["force"].as_f64().unwrap()).collect();
+    assert!(forces.windows(2).any(|w| w[1] > w[0]), "the sheet cut stronger: {forces:?}");
+    s.execute("edit.undo", &json!({})).unwrap();
+    let settings = s.execute("cutting.settings.get", &json!({})).unwrap()["settings"].clone();
+    assert_eq!(settings["printAndCut"], json!(false), "one undo step");
+}

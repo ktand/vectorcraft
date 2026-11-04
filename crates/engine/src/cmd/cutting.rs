@@ -41,6 +41,8 @@ mod puzzle;
 mod template;
 // Papercraft from a 3D model (C15.6).
 mod papercraft;
+// A sticker sheet in one step (C18.5).
+mod stickers;
 // Tiles larger than the mat (C14.7).
 mod tile;
 // The machine's origin adjustment (C4.6).
@@ -65,6 +67,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(popup::specs());
     v.extend(template::specs());
     v.extend(papercraft::specs());
+    v.extend(stickers::specs());
     v.extend(tile::specs());
     v.extend(machine::specs());
     v.extend(vec![

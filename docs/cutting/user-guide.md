@@ -281,6 +281,13 @@ when nothing is selected:
 - With the puzzle selected, **Apply to Selected Puzzle** makes it again with the settings, and **Randomize
   Selected Puzzle** with another layout.
 
+### Sticker sheets
+
+`cutting.stickers` (through MCP or the control channel for now) makes the selected designs into a sticker sheet
+in one step: Print & Cut on, a cut contour round each design (the kiss cut, through the sticker but not its
+backing), a print bleed, and if asked a cut round the whole sheet on a **Sheet Cut** layer that is cut last with
+a stronger setup of its own, through the backing.
+
 ### Pop-up cards
 
 The **Pop Up** panel makes the selected design (text converted to outlines, shapes, or several together) into a
