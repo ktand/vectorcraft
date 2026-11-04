@@ -35,6 +35,13 @@ impl std::error::Error for TransportError {}
 pub trait Transport: Send {
     /// Writes all of `bytes`.
     fn write(&mut self, bytes: &[u8]) -> Result<(), TransportError>;
+    /// Fork (C4.13): writes a job's chunk, which may wait as long as the machine takes to cut and
+    /// make room in its buffer (minutes); [`Transport::write`] is for queries, which mustn't wait
+    /// that long (some are written from the UI thread). The same as `write` unless a transport
+    /// times its writes out.
+    fn write_chunk(&mut self, bytes: &[u8]) -> Result<(), TransportError> {
+        self.write(bytes)
+    }
     /// Reads what the machine has sent into `buf`, waiting at most `timeout_ms`: how many bytes
     /// (0 when nothing came).
     fn read(&mut self, buf: &mut [u8], timeout_ms: u32) -> Result<usize, TransportError>;

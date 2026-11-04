@@ -170,7 +170,7 @@ pub fn send(
             if cancel.load(Ordering::Relaxed) {
                 return Err(SendError::Cancelled);
             }
-            t.write(chunk).map_err(SendError::Transport)?;
+            t.write_chunk(chunk).map_err(SendError::Transport)?;
             set(&|p| p.chunks_sent = i + 1);
             for check in job.checks.iter().filter(|c| c.after_chunk == i) {
                 expect(t, check, patience, cancel)?;

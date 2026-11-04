@@ -44,11 +44,14 @@ mod windows_usb {
 
     /// The USB printer device interface (GUID_DEVINTERFACE_USBPRINT).
     const USBPRINT: GUID = GUID::from_u128(0x28d78fad_5a12_11d1_ae5b_0000f803a8c2);
-    /// How long one write may take, ms. The sender doesn't wait for the machine to finish between
-    /// chunks (a stop at every chunk's end otherwise), so a write waits while the machine's buffer
-    /// is full and goes as it cuts and makes room: a chunk of long slow lines can take minutes.
-    /// Ten minutes, as long as the sender waits for a busy machine; one unplugged fails at once.
-    const WRITE_TIMEOUT_MS: u32 = 600_000;
+    /// How long one write of a job's chunk may take, ms. The sender doesn't wait for the machine to
+    /// finish between chunks (a stop at every chunk's end otherwise), so a write waits while the
+    /// machine's buffer is full and goes as it cuts and makes room: a chunk of long slow lines can
+    /// take minutes. Ten minutes, as long as the sender waits for a busy machine.
+    const CHUNK_WRITE_TIMEOUT_MS: u32 = 600_000;
+    /// How long any other write (a status or tools query) may take, ms: some are written from the UI
+    /// thread (the Send window asking what is fitted), which a long wait would freeze.
+    const QUERY_WRITE_TIMEOUT_MS: u32 = 10_000;
     /// The longest device path read.
     const MAX_PATH_BYTES: u32 = 4_096;
 
@@ -183,19 +186,30 @@ mod windows_usb {
 
     impl Transport for UsbFile {
         fn write(&mut self, bytes: &[u8]) -> Result<(), TransportError> {
+            self.write_within(bytes, QUERY_WRITE_TIMEOUT_MS)
+        }
+
+        fn write_chunk(&mut self, bytes: &[u8]) -> Result<(), TransportError> {
+            self.write_within(bytes, CHUNK_WRITE_TIMEOUT_MS)
+        }
+
+        fn read(&mut self, buf: &mut [u8], timeout_ms: u32) -> Result<usize, TransportError> {
+            self.io(buf, false, timeout_ms)
+        }
+    }
+
+    impl UsbFile {
+        /// All of `bytes`, each part of the write waiting at most `timeout`, ms.
+        fn write_within(&mut self, bytes: &[u8], timeout: u32) -> Result<(), TransportError> {
             let mut left = bytes.to_vec();
             while !left.is_empty() {
-                let n = self.io(&mut left, true, WRITE_TIMEOUT_MS)?;
+                let n = self.io(&mut left, true, timeout)?;
                 if n == 0 {
                     return Err(TransportError::Timeout);
                 }
                 left.drain(..n.min(left.len()));
             }
             Ok(())
-        }
-
-        fn read(&mut self, buf: &mut [u8], timeout_ms: u32) -> Result<usize, TransportError> {
-            self.io(buf, false, timeout_ms)
         }
     }
 
