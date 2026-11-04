@@ -430,6 +430,9 @@ pub struct CuttingSettings {
     pub detail_slow: bool,
     pub detail_speed_mm_s: f64,
     pub detail_size_mm: f64,
+    /// Alignment marks (C18.10): in a grouped job, a small cross cut at the same place in every
+    /// group, outside the design, to line the layers up by.
+    pub align_marks: bool,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -471,6 +474,7 @@ impl Default for CuttingSettings {
             detail_slow: false,
             detail_speed_mm_s: 30.0,
             detail_size_mm: 10.0,
+            align_marks: false,
             extra: Map::new(),
         }
     }
@@ -482,7 +486,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 34] = [
+    const KEYS: [&'static str; 35] = [
         "version",
         "mat",
         "customMatMm",
@@ -517,6 +521,7 @@ impl CuttingSettings {
         "detailSlow",
         "detailSpeedMmS",
         "detailSizeMm",
+        "alignMarks",
     ];
 
     /// The weed box's margin and the weed lines' spacing (0: one from each side's middle), mm.
@@ -599,6 +604,7 @@ impl CuttingSettings {
             detail_slow: flag(m, "detailSlow", d.detail_slow),
             detail_speed_mm_s: num(m, "detailSpeedMmS", ToolSettings::SPEED_MM_S.0, ToolSettings::SPEED_MM_S.1, d.detail_speed_mm_s),
             detail_size_mm: num(m, "detailSizeMm", Self::DETAIL_SIZE_MM.0, Self::DETAIL_SIZE_MM.1, d.detail_size_mm),
+            align_marks: flag(m, "alignMarks", d.align_marks),
             extra: unknown(m, &Self::KEYS),
         }
     }
@@ -645,6 +651,7 @@ impl CuttingSettings {
         m.insert("detailSlow".into(), json!(self.detail_slow));
         m.insert("detailSpeedMmS".into(), json!(self.detail_speed_mm_s));
         m.insert("detailSizeMm".into(), json!(self.detail_size_mm));
+        m.insert("alignMarks".into(), json!(self.align_marks));
         if !self.group_options.is_empty() {
             let g: Map<String, Value> = self.group_options.iter().map(|(k, o)| (k.clone(), json!({"off": o.off, "pause": o.pause}))).collect();
             m.insert("groupOptions".into(), Value::Object(g));

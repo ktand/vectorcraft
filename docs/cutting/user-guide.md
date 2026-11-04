@@ -133,6 +133,10 @@ is cut only where it shows, the colours painted above it taken out of it, so the
 gap shows when the layers are pressed a little off. The document doesn't change, only what's cut; a colour that
 is wholly hidden isn't cut, and the Send window says so.
 
+**Align Marks** (also shown once the job is cut in groups) cuts a small cross in the same place on every colour,
+just outside the design's corner. Weed the cross with the design; when pressing or applying, lay each colour's
+cross exactly over the one before, and the layers line up.
+
 ## 4. Tools and materials
 
 ### The tool table

@@ -22,6 +22,7 @@
 //!   the job is made from it each time.
 #![forbid(unsafe_code)]
 
+pub mod align;
 pub mod bleed;
 pub mod bridges;
 pub mod checks;
@@ -174,6 +175,17 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
         None
     };
     let area = placement.mat.cut_area_mm;
+    // C18.10: the cross each group is cut with, the same place in all of them.
+    let cross = if s.align_marks && s.grouping != vectorcraft_cutjob::Grouping::None {
+        let found = align::cross(&polylines, area);
+        if found.is_none() && !polylines.is_empty() {
+            warnings
+                .push(vectorcraft_cutjob::JobWarning { source: None, message: "no room on the mat for the alignment mark: it was left out".into() });
+        }
+        found.unwrap_or_default()
+    } else {
+        vec![]
+    };
     // Each group in the order its first object comes, ordered by itself, the blade going on from
     // where the group before left it (one group without grouping).
     let mut names: Vec<String> = vec![];
@@ -218,6 +230,7 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
         });
         let (weeding, said) = weed::weeding(&these, may_cut, &s);
         these.extend(weeding);
+        these.extend(cross.iter().cloned());
         warnings.extend(said);
         if let Some(last) = these.last().and_then(|p| if p.closed { p.points.first() } else { p.points.last() }) {
             at = *last;
@@ -318,6 +331,28 @@ mod tests {
         let small = job.paths.iter().find(|p| p.op == 1).unwrap();
         let xs: Vec<f64> = small.points.iter().map(|q| q[0]).collect();
         assert!(xs.iter().copied().fold(f64::MIN, f64::max) - xs.iter().copied().fold(f64::MAX, f64::min) < 10.0);
+    }
+
+    /// C18.10: with alignment marks, each group ends with the same cross.
+    #[test]
+    fn every_group_has_the_cross() {
+        use vectorcraft_doc::{Appearance, LayerColor, Node};
+        use vectorcraft_geom::{Rect, shapes};
+        let mut d = Document::new(500.0, 500.0);
+        let bottom = d.layers[0].id;
+        let top = Node::layer(d.alloc_id(), "Second", LayerColor::Preset(1));
+        let top = d.insert(None, usize::MAX, top).unwrap();
+        for (layer, x) in [(bottom, 100.0), (top, 150.0)] {
+            let sq = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(x, 100.0, x + 50.0, 150.0)), Appearance::default());
+            d.insert(Some(layer), usize::MAX, sq).unwrap();
+        }
+        let s = CuttingSettings { grouping: vectorcraft_cutjob::Grouping::Layer, align_marks: true, ..CuttingSettings::default() };
+        set_settings(&mut d, &s);
+        let job = build_job(&d).unwrap();
+        let crosses: Vec<_> = job.paths.iter().filter(|p| p.source == align::SOURCE).map(|p| p.points.clone()).collect();
+        assert_eq!(crosses.len(), 4, "two arms in each of two groups");
+        assert_eq!(crosses[0], crosses[2]);
+        assert_eq!(crosses[1], crosses[3]);
     }
 
     #[test]

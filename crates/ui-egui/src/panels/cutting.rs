@@ -104,6 +104,19 @@ fn job_settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
                 }
             }
         });
+        // C18.10: a cross cut in the same place in every group, to line the layers up by.
+        let mut marks = s["alignMarks"].as_bool().unwrap_or(false);
+        widgets::label_row(ui, tl!("Align Marks"), LABEL_W, |ui| {
+            if ui
+                .checkbox(&mut marks, "")
+                .on_hover_text(tl!(
+                    "A small cross cut in the same place on every colour, outside the design: lay each cross over the last and the layers line up."
+                ))
+                .changed()
+            {
+                set(app, json!({ "alignMarks": marks }));
+            }
+        });
     }
 }
 
