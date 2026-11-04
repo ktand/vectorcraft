@@ -38,7 +38,11 @@ The panels (each also on the Window › Cutting menu):
 
 The line above Cut Settings can be dragged to give it or Layers more room.
 
+<!-- shot: workspace -->
+
 ## 2. Setting up the mat
+
+<!-- shot: mat -->
 
 In the **Cutting Mat** panel:
 
@@ -231,6 +235,8 @@ Cut the machine measures from the marks, so the adjustment only moves where it s
 
 ### Contour: a cut line round your art
 
+<!-- shot: contour -->
+
 For stickers and shapes printed and cut out. Select the art, then open **Contour**:
 
 - **Offset:** how far out the line runs (default 2 mm). Corners are rounded.
@@ -311,6 +317,8 @@ up together. Designs whose struts would run into each other are refused: move th
 Fold the card along its middle fold first, then push each design forward along its folds.
 
 ### Templates: boxes made to size
+
+<!-- shot: templates -->
 
 The **Templates** panel makes a flat net you cut out and fold up, at the size you ask for. So far: the **Tuck End
 Box** (a card-deck box, both ends tucked in from the back), the **Reverse Tuck End Box** (the bottom tucked in
@@ -400,6 +408,8 @@ sheet, load the next, go to the next sheet, Send.
 
 ## 7. Print & Cut
 
+<!-- shot: print -->
+
 To print a design and then cut round the print:
 
 1. In the **Print & Cut** panel, tick **Print & Cut**, then **Add Marks**. Registration marks are added round the artboard on a
@@ -488,6 +498,8 @@ set it to Cut Outline to weld them). They are warnings: the job can still be sen
 **Send to Cutter…** (top of Cut Settings, or File › Send to Cutter…, **Ctrl+Alt+Shift+X**) opens the Send
 window. It doesn't block the rest of the app: you can keep it open beside your art, and drag its corner to make
 it larger.
+
+<!-- shot: send -->
 
 - **Left:** the mat as the machine takes it, with the job's lines on it.
 - **Right, from the top:**

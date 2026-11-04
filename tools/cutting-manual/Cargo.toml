@@ -1,0 +1,27 @@
+# Fork (cutting workspace): builds the cutting manual as a PDF from docs/cutting/user-guide.md, with
+# screenshots of the app taken over its control channel. Run on demand:
+#   cargo run --release --manifest-path tools/cutting-manual/Cargo.toml
+# Kept out of the workspace (its own [workspace] below), so its dependencies never reach the app,
+# the gate or the wasm build.
+[package]
+name = "cutting-manual"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace]
+
+[dependencies]
+typst-as-lib = { version = "0.17", features = ["typst-kit-fonts", "typst-kit-embed-fonts"] }
+typst-layout = "0.15"
+typst-pdf = "0.15"
+typst-render = "0.15"
+pulldown-cmark = { version = "0.13", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+png = "0.18"
+
+[lints.rust]
+unsafe_code = "forbid"

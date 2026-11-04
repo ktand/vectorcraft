@@ -1,0 +1,86 @@
+# Fork (cutting workspace): the screenshots in the cutting manual. Each [[shot]] is played on a
+# fresh copy of the app (throwaway preferences) after the `setup` steps, then the window is
+# captured and cropped. A `<!-- shot: name -->` line in docs/cutting/user-guide.md places it.
+#
+# A step is one of:
+#   { run = "command.id", params = { … } }     a command, as engine.execute runs it
+#   { method = "ui.click", params = { … } }     any control request (crates/ui-egui/src/control.rs)
+#   { wait = 500 }                              a pause, ms
+# with `may_fail = true` to go on when it fails.
+#
+# crop: "window" (default), "canvas", or [x, y, width, height] in window points (the window is
+# `window` points large). width: the picture's width in the PDF ("100%", "60%", "9cm").
+
+window = [1280, 800]
+
+setup = [
+  { run = "file.new", params = { width = 612, height = 792 } },
+  { run = "window.workspace", params = { name = "Cutting" } },
+  { wait = 400 },
+]
+
+[[shot]]
+name = "workspace"
+caption = "The Cutting workspace: Layers and Cut Settings on the right, the feature icons beside them, the mat behind the artboard."
+steps = [
+  { run = "shape.ellipse", params = { x = 150, y = 200, width = 200, height = 140 } },
+  { run = "shape.star", params = { cx = 400, cy = 500, radius1 = 90, radius2 = 40, points = 5 } },
+  { run = "select.none", may_fail = true },
+  { run = "view.fitArtboard", may_fail = true },
+]
+
+[[shot]]
+name = "mat"
+caption = "The Cutting Mat panel, and the artboard where it lies on the mat."
+crop = [0, 60, 970, 700]
+steps = [
+  { run = "shape.ellipse", params = { x = 150, y = 150, width = 250, height = 180 } },
+  { run = "select.none", may_fail = true },
+  { run = "view.fitArtboard", may_fail = true },
+  { run = "window.panel", params = { panel = "cuttingMat" } },
+]
+
+[[shot]]
+name = "contour"
+caption = "A contour round the art: the cut line on the Cut Contour layer, the art itself set to No Cut."
+steps = [
+  { run = "shape.star", params = { cx = 300, cy = 300, radius1 = 150, radius2 = 70, points = 5 } },
+  { run = "shape.ellipse", params = { x = 480, y = 480, width = 220, height = 160 } },
+  { run = "select.all" },
+  { run = "cutting.contour", params = { offsetMm = 4 } },
+  { run = "select.none" },
+  { run = "window.panel", params = { panel = "cuttingLines" } },
+  { run = "view.fitArtboard", may_fail = true },
+]
+
+[[shot]]
+name = "print"
+caption = "Print & Cut: the registration marks round the artboard and the areas they keep clear."
+steps = [
+  { run = "shape.ellipse", params = { x = 200, y = 200, width = 300, height = 260 } },
+  { run = "select.none", may_fail = true },
+  { run = "window.panel", params = { panel = "cuttingPrint" } },
+  { run = "cutting.settings.set", params = { printAndCut = true } },
+  { run = "cutting.marks.add", may_fail = true },
+  { run = "view.fitArtboard", may_fail = true },
+]
+
+[[shot]]
+name = "templates"
+caption = "The Templates panel: the preview at the top, then the template's sizes."
+crop = [230, 240, 710, 500]
+steps = [
+  { run = "window.panel", params = { panel = "cuttingTemplates" } },
+  { run = "cutting.template", params = { kind = "tuckEnd" }, may_fail = true },
+  { run = "view.fitArtboard", may_fail = true },
+]
+
+[[shot]]
+name = "send"
+caption = "The Send to Cutter window: the mat as it is cut, the tool table and the job's summary."
+crop = [218, 120, 844, 562]
+steps = [
+  { run = "shape.rectangle", params = { x = 100, y = 100, width = 200, height = 150 } },
+  { run = "cutting.sendWindow" },
+  { wait = 500 },
+]

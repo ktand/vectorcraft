@@ -333,6 +333,15 @@ are used every day), then C18.4–C18.5.
 | C18.12 | **Guided projects**: step-by-step flows that set up a whole job ("a shirt in heat-transfer vinyl": mirror, knockout, weed box; "a sticker sheet": C18.5), as Cricut's 2025 Design Space has (<https://cricut.com/blog/new-design-space-updates-and-guided-flows/>) | Frame tests per flow; the job each flow makes |
 | C18.13 | **Moving a piece to another sheet** — **done** (2026-11-04), as a command: `cutting.sheet.move {ids?, sheet}` moves the objects to artboard `sheet` (the sheets nesting makes, C8.6), each keeping its place relative to the artboard its middle is on, one undo step; the Nesting panel's Move to (with pieces selected and more than one sheet); dragging in the preview left for later. Planned as: in a job nested onto several sheets (C8.6), a piece moved to another one by hand, as Cricut's "Move to Another Mat" (<https://www.thatswhatchesaid.net/?p=43797>) | Unit: the piece moves and the job keeps it there; frame test |
 
+## Phase 19 — The manual
+
+Owner, 2026-11-04: a PDF manual for the cutting features, built on demand rather than with every change, with
+screenshots if possible.
+
+| ID | Task | Tests |
+|---|---|---|
+| C19.1 | **The PDF manual** — **done** (2026-11-04): `tools/cutting-manual`, a Rust program kept out of the workspace (its own `[workspace]`), run with `cargo run --release --manifest-path tools/cutting-manual/Cargo.toml`. The text is `user-guide.md`, turned into Typst (`src/typst_md.rs`: every inline call ended with `;`, every markup character escaped) and set with `template.typ` (cover, contents, a chapter per section), compiled with the Typst library (`typst-as-lib`, `typst-pdf`; system fonts, Typst's bundled ones behind them, none in the repo) into `target/cutting-manual/VectorCraft-Cutting-Manual.pdf`. A `<!-- shot: name -->` line in the guide places a screenshot made by the recipe `name` in `shots.toml`: the app started anew for each shot (a copy of the build, so a build can replace it meanwhile) with a throwaway `VECTORCRAFT_CONFIG_DIR`, driven over the control channel, captured with `ui.screenshot`, cropped. `--no-shots`, `--only`, `--app`, `--pages` (PNG per page). The cover doesn't carry the ArtCraft marks (`docs/brand/LICENSE-brand.txt`: a modified version must not) | Unit: the converter (escaping, the title left to the cover, inline calls, lists, tables, links, shot markers); run: the PDF built with the six shots and every page looked at |
+
 ## How agents should work on this
 
 - One task per branch (`cutting/C2.3-op-commands`) and per PR; the PR updates this file's status column (to be
