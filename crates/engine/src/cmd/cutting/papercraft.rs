@@ -32,7 +32,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Papercraft from 3D Model",
         [],
         None,
-        "{path?: an .obj or .stl file (desktop), or name + dataBase64: the file's name and bytes, sizeMm?: 20–2000 (default 150: the model's longest side), tabMm?: 2–30 (default 6), rowMm?: 50–3000 (default: the mat's cut width: how wide the rows of pieces are laid out)} the model unfolded into flat pieces, added as one group on top centred on the cutting artboard: the outlines set to Cut, the mountain folds (blue) and the valley folds (green) set to Score, the glue tabs marked and each cut edge's number printed on both its sides, so pieces go together in pairs; one undo step → {id, pieces, faces, widthMm, heightMm, warnings}",
+        "{path?: an .obj or .stl file (the desktop; else name and dataBase64), name?: the file's name (with dataBase64; its extension says what it is), dataBase64?: the file's bytes, sizeMm?: 20–2000 (default 150: the model's longest side), tabMm?: 2–30 (default 6), rowMm?: 50–3000 (default: the mat's cut width: how wide the rows of pieces are laid out)} the model unfolded into flat pieces, added as one group on top centred on the cutting artboard: the outlines set to Cut, the mountain folds (blue) and the valley folds (green) set to Score, the glue tabs marked and each cut edge's number printed on both its sides, so pieces go together in pairs; one undo step → {id, pieces, faces, widthMm, heightMm, warnings}",
         has_doc,
         add
     )]
