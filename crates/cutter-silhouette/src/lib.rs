@@ -331,10 +331,10 @@ impl Commands {
             Native::Path { start, pieces } => {
                 self.to(false, *start);
                 let end = self.pieces(*start, pieces);
-                if overcut > 0.0 {
-                    if let Some(again) = native.overcut(overcut) {
-                        self.pieces(end, &again);
-                    }
+                if overcut > 0.0
+                    && let Some(again) = native.overcut(overcut)
+                {
+                    self.pieces(end, &again);
                 }
             }
         }
