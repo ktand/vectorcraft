@@ -87,6 +87,10 @@ For such a document, Cut Settings says **Measured in pixels: cut at 72 per inch.
 - If 72 per inch is what you meant, change the document's units in File › Document Setup instead, and the warning
   goes.
 
+**Moving the head with the machine's arrows** makes where you leave it the place the next cut starts from: the
+job is cut from there instead of the mat's corner, and the preview doesn't show the difference. Switch the machine
+off and on to start from the corner again.
+
 ## 3. What gets cut, and how
 
 Every object is cut in one of these ways:
