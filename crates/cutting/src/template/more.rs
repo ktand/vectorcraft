@@ -184,6 +184,103 @@ fn drawer(v: &Values) -> Result<Net, String> {
     Ok(out)
 }
 
+pub(super) const HEART: Kind = Kind {
+    id: "heart",
+    name: "Heart Box",
+    family: "Boxes",
+    params: &[
+        Param { key: "widthMm", label: "Width", unit: Unit::Mm, default: 100.0, min: 40.0, max: 400.0, help: "across the heart" },
+        Param { key: "heightMm", label: "Height", unit: Unit::Mm, default: 40.0, min: 10.0, max: 300.0, help: "the box's wall" },
+        Param { key: "lidHeightMm", label: "Lid Height", unit: Unit::Mm, default: 20.0, min: 5.0, max: 300.0, help: "how far the lid comes down" },
+        Param {
+            key: "clearanceMm",
+            label: "Clearance",
+            unit: Unit::Mm,
+            default: 1.0,
+            min: 0.0,
+            max: 5.0,
+            help: "the play between the box and the lid",
+        },
+        THICKNESS,
+        Param { key: "tabMm", label: "Glue Tab", unit: Unit::Mm, default: 8.0, min: 3.0, max: 20.0, help: "the tabs that fold in under the floor" },
+    ],
+    sized: false,
+    fit: None,
+    make: heart_box,
+};
+
+/// The heart outline `w` wide, its top-left at the origin: the well-known parametric heart
+/// x = 16 sin³t, y = 13 cos t − 5 cos 2t − 2 cos 3t − cos 4t (32 across), `n` points.
+fn heart(w: f64, n: usize) -> Vec<P> {
+    let s = w / 32.0;
+    let raw: Vec<P> = (0..n)
+        .map(|i| {
+            let t = TAU * i as f64 / n as f64;
+            (16.0 * t.sin().powi(3), -(13.0 * t.cos() - 5.0 * (2.0 * t).cos() - 2.0 * (3.0 * t).cos() - (4.0 * t).cos()))
+        })
+        .collect();
+    let (x0, y0) = raw.iter().fold((f64::INFINITY, f64::INFINITY), |(a, b), p| (a.min(p.0), b.min(p.1)));
+    raw.iter().map(|p| ((p.0 - x0) * s, (p.1 - y0) * s)).collect()
+}
+
+/// A wall band `long` × `high` with a glue strip at its right end and tabs along its bottom that
+/// fold in under the floor, its top-left at `at`: the outline, the folds and the glue.
+fn band(at: P, long: f64, high: f64, tab: f64) -> (SubPath, Vec<SubPath>, Vec<SubPath>) {
+    let seam = 10.0_f64.min(long / 6.0);
+    let n = ((long / 12.0).round() as usize).max(8);
+    let cell = long / n as f64;
+    let width = cell * 0.66;
+    let d = tab.min(width * 0.6);
+    let (x, y) = at;
+    let mut o = Edge::from((x, y));
+    o.to((x + long + seam, y)).to((x + long + seam, y + high)).to((x + long, y + high));
+    let mut glue = vec![polygon(&[(x + long, y), (x + long + seam, y), (x + long + seam, y + high), (x + long, y + high)])];
+    for i in (0..n).rev() {
+        let (l, r) = (x + i as f64 * cell + (cell - width) / 2.0, x + i as f64 * cell + (cell + width) / 2.0);
+        let c = d * 0.5;
+        o.to((r, y + high)).to((r - c, y + high + d)).to((l + c, y + high + d)).to((l, y + high));
+        glue.push(polygon(&[(r, y + high), (r - c, y + high + d), (l + c, y + high + d), (l, y + high)]));
+    }
+    o.to((x, y + high));
+    let folds = vec![line((x, y + high), (x + long, y + high)), line((x + long, y), (x + long, y + high))];
+    (o.closed(), folds, glue)
+}
+
+/// A heart box made as a hat box is (a curved wall can't fold from a flat base): for the box and
+/// for its lid, a wall band as long as the heart's perimeter, rolled round and glued at its seam,
+/// its tabs folded in and glued under a heart-shaped floor; the lid's heart larger by the walls'
+/// thickness and the clearance each side. Our own geometry.
+fn heart_box(v: &Values) -> Result<Net, String> {
+    let (w, h, lh, c, t, tab) =
+        (v.get("widthMm"), v.get("heightMm"), v.get("lidHeightMm"), v.get("clearanceMm"), v.get("thicknessMm"), v.get("tabMm"));
+    let perimeter = |pts: &[P]| {
+        (0..pts.len())
+            .map(|i| {
+                let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+                (b.0 - a.0).hypot(b.1 - a.1)
+            })
+            .sum::<f64>()
+    };
+    let (mut cut, mut folds, mut glue) = (vec![], vec![], vec![]);
+    let mut y = 0.0;
+    let mut face = None;
+    for (width, high) in [(w, h), (w + 2.0 * (2.0 * t + c), lh)] {
+        let floor = heart(width, 120);
+        let fh = floor.iter().map(|p| p.1).fold(0.0, f64::max);
+        let (o, f, g) = band((0.0, y), perimeter(&floor) + t, high, tab);
+        cut.push(o);
+        folds.extend(f);
+        glue.extend(g);
+        y += high + tab + GAP_MM;
+        let shifted: Vec<P> = floor.iter().map(|p| (p.0, p.1 + y)).collect();
+        // The art goes on the lid's top.
+        face = Some([0.0, y, width, y + fh]);
+        cut.push(polygon(&shifted));
+        y += fh + GAP_MM;
+    }
+    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face })
+}
+
 pub(super) const BUNTING: Kind = Kind {
     id: "bunting",
     name: "Bunting",
@@ -362,6 +459,27 @@ mod tests {
         let mut xs = sleeve.clone();
         xs.sort_by(f64::total_cmp);
         assert!(((xs[1] - xs[0]) - 62.5).abs() < 1e-9 && ((xs[2] - xs[1]) - 32.0).abs() < 1e-9, "{xs:?}");
+    }
+
+    /// The heart box: two bands, two floors; each band as long as its floor's perimeter (plus a
+    /// thickness), the lid's floor wider by the walls and the clearance.
+    #[test]
+    fn the_heart_box_wraps_its_floors() {
+        let v = values(&HEART, &[("widthMm", 100.0), ("clearanceMm", 1.0), ("thicknessMm", 0.5)], false).unwrap();
+        let net = HEART.make(&v).unwrap();
+        assert_eq!(net.cut.subpaths.len(), 4, "band, floor, lid band, lid floor");
+        let width = |s: &SubPath| {
+            let xs: Vec<f64> = s.anchors.iter().map(|a| a.p.x).collect();
+            xs.iter().copied().fold(f64::MIN, f64::max) - xs.iter().copied().fold(f64::MAX, f64::min)
+        };
+        assert!((width(&net.cut.subpaths[1]) - 100.0).abs() < 0.5);
+        assert!((width(&net.cut.subpaths[3]) - 104.0).abs() < 0.5);
+        // A heart 100 wide is about 310 round; the band that long plus the seam.
+        let band = width(&net.cut.subpaths[0]);
+        assert!(band > 300.0 && band < 340.0, "{band}");
+        for s in &net.cut.subpaths {
+            assert!(simple(&PathData::single(s.clone())));
+        }
     }
 
     /// Bunting gives one pennant per flag, with a fold each; the lantern one slit per spacing;
