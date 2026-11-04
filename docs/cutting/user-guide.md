@@ -394,6 +394,9 @@ so a small piece can sit in a larger one's hole:
 With more than one sheet, the Send window shows "Sheet 1 of 3", with **Previous Sheet** and **Next Sheet**. Cut a
 sheet, load the next, go to the next sheet, Send.
 
+**Moving a piece to another sheet.** `cutting.sheet.move` (MCP or the control channel for now) moves the selected
+pieces to another sheet (artboard), each keeping its place relative to its sheet.
+
 ## 7. Print & Cut
 
 To print a design and then cut round the print:

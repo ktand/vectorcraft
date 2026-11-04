@@ -43,6 +43,8 @@ mod template;
 mod papercraft;
 // A sticker sheet in one step (C18.5).
 mod stickers;
+// Moving a piece to another sheet (C18.13).
+mod sheets;
 // Tiles larger than the mat (C14.7).
 mod tile;
 // The machine's origin adjustment (C4.6).
@@ -68,6 +70,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(template::specs());
     v.extend(papercraft::specs());
     v.extend(stickers::specs());
+    v.extend(sheets::specs());
     v.extend(tile::specs());
     v.extend(machine::specs());
     v.extend(vec![

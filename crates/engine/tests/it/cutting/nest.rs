@@ -92,3 +92,21 @@ fn the_turns_are_chosen() {
         s.execute("edit.undo", &json!({})).unwrap();
     }
 }
+
+/// C18.13: a piece moved to another sheet keeps its place relative to the sheet; one undo step.
+#[test]
+fn a_piece_moves_to_another_sheet() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 300, "height": 300})).unwrap();
+    s.execute("artboard.new", &json!({"x": 400, "y": 0, "width": 300, "height": 300})).unwrap();
+    let id = s.execute("shape.rectangle", &json!({"x": 20, "y": 30, "width": 40, "height": 40})).unwrap()["id"].clone();
+    assert!(s.execute("cutting.sheet.move", &json!({"ids": [id], "sheet": 7})).is_err());
+    assert!(s.execute("cutting.sheet.move", &json!({"ids": [id]})).is_err());
+    let r = s.execute("cutting.sheet.move", &json!({"ids": [id], "sheet": 1})).unwrap();
+    assert_eq!(r["moved"], json!([id]));
+    let b = s.active().unwrap().doc.bounds_of(&[vectorcraft_doc::NodeId(id.as_u64().unwrap())], false).unwrap();
+    assert!((b.x0 - 420.0).abs() < 1e-9 && (b.y0 - 30.0).abs() < 1e-9, "{b:?}");
+    s.execute("edit.undo", &json!({})).unwrap();
+    let b = s.active().unwrap().doc.bounds_of(&[vectorcraft_doc::NodeId(id.as_u64().unwrap())], false).unwrap();
+    assert!((b.x0 - 20.0).abs() < 1e-9);
+}
