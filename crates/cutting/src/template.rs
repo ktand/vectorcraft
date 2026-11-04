@@ -12,6 +12,7 @@ use vectorcraft_geom::{Anchor, PathData, Point, SubPath};
 mod boxes;
 mod cards;
 pub mod mesh;
+mod more;
 pub mod papercraft;
 mod solids;
 mod tuck;
@@ -164,6 +165,8 @@ pub const KINDS: &[Kind] = &[
     TRAY,
     boxes::TRAY_LID,
     boxes::PILLOW,
+    more::CARTON,
+    more::DRAWER,
     cards::ENVELOPE,
     cards::POINTED_ENVELOPE,
     cards::PLACE_CARD,
@@ -179,6 +182,9 @@ pub const KINDS: &[Kind] = &[
     solids::PRISM,
     solids::CYLINDER,
     solids::CONE,
+    more::BUNTING,
+    more::LANTERN,
+    more::PARTY_HAT,
 ];
 
 /// The template `id`.
