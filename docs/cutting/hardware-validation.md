@@ -311,9 +311,9 @@ Whether the Cameo takes GP-GL's own curve commands, and whether they cut better 
 send today ([protocol notes › Curves](protocol-silhouette.md#curves)). On a scrap of paper or card on the mat, with
 the AutoBlade at a light force (it only has to cut through, cleanly).
 
-- Run `cutting.testCurves` (through MCP or the control channel: `{"command": "cutting.testCurves", "params":
-  {}}`). It cuts three rows from the cut area's top-left, 3 mm in, each a 10 mm circle and then a 50 mm S-curve
-  beside it:
+- In the Send window, under the test cut, open **Curve Test** and press **Cut Curve Test** (or run
+  `cutting.testCurves` through MCP or the control channel). It cuts three rows from the cut area's top-left, 3 mm
+  in, each a 10 mm circle and then a 50 mm S-curve beside it, in a space of about 75 × 80 mm:
   1. **Top row, as today:** both shapes as short straight moves (0.025 mm tolerance).
   2. **Middle row, as Béziers (`BZ`):** the circle as four Bézier pieces, the S-curve as two.
   3. **Bottom row, as a circle (`W`):** the circle as one circle command; the S-curve as straight moves again,
@@ -321,8 +321,8 @@ the AutoBlade at a light force (it only has to cut through, cleanly).
 
   Every row is cut once with no overcut, with the force and speed set in the Send window, so the rows differ
   only in how the curves are sent. The test isn't kept in the job history.
-  `{"only": "bezier"}` (or `segments`, `circle`) cuts one row only, in its own place, if a row stops the machine
-  or cuts wrong.
+  **Rows** (or `{"only": "bezier"}`, `segments`, `circle`) cuts one row only, in its own place, if a row stops
+  the machine or cuts wrong.
 - Watch and listen while each row cuts: does the head move smoothly round the curves, or stutter? Does the
   machine stop or report an error on a row (it may ignore a command it doesn't know)?
 - Then compare the rows, with a magnifier if you have one:

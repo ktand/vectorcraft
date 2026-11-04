@@ -536,7 +536,50 @@ fn test_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
         ui.label(egui::RichText::new(note).color(if *bad { t.bleed } else { t.text_dim }));
     }
     origin_rows(app, ui, &mut c.note);
+    let device = found.get(m.chosen).or(found.first()).map(|(id, _)| id.clone());
+    curve_test_rows(app, ui, device, !found.is_empty() && !sending, &mut c.note);
     crate::panels::set_pstate(&ctx, "cutting-test", c);
+}
+
+/// The curve test's rows, as the choice shows them and as `cutting.testCurves` takes them.
+const CURVE_ROWS: [(&str, Option<&str>); 4] =
+    [("All Three Rows", None), ("Straight Moves", Some("segments")), ("Béziers (BZ)", Some("bezier")), ("Circle (W)", Some("circle"))];
+
+/// C4.9: the curve test (hardware checks step 18), closed at first: whether the machine cuts
+/// its own curve commands as well as straight moves. An error or what to look for goes to the
+/// test's note.
+fn curve_test_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, device: Option<String>, can: bool, note: &mut Option<(bool, String)>) {
+    if !crate::panels::cutting::fold(ui, "cutting-curves", tl!("Curve Test")) {
+        return;
+    }
+    let ctx = ui.ctx().clone();
+    let mut row: usize = crate::panels::pstate(&ctx, "cutting-curves-row");
+    let names: Vec<&str> = CURVE_ROWS.iter().map(|(n, _)| crate::i18n::t(n)).collect();
+    let shown = names.get(row).copied().unwrap_or_default();
+    widgets::label_row(ui, tl!("Rows"), 60.0, |ui| {
+        if let Some(i) = widgets::dropdown_names(ui, ("cutting", "curves", "row"), shown, &names, 140.0) {
+            row = i;
+        }
+    });
+    let button = ui
+        .add_enabled(can, egui::Button::new(tl!("Cut Curve Test")))
+        .on_hover_text(tl!("A 10 mm circle and a 50 mm S-curve in three rows: as straight moves, as the machine's own Bézier curves, and the circle as its own circle command. Compare how round and smooth each row is (hardware checks, step 18)."));
+    if button.clicked() {
+        let mut p = json!({});
+        if let Some(only) = CURVE_ROWS.get(row).and_then(|(_, id)| *id) {
+            p["only"] = json!(only);
+        }
+        if let Some(id) = &device {
+            p["device"] = json!(id);
+        }
+        *note = Some(match app.run("cutting.testCurves", p) {
+            Ok(_) => {
+                (false, tl!("Cutting the curve test: compare the rows, top to bottom: straight moves, Béziers, the circle command.").to_string())
+            }
+            Err(e) => (true, e),
+        });
+    }
+    crate::panels::set_pstate(&ctx, "cutting-curves-row", row);
 }
 
 /// The machine's origin adjustment (C4.6), under the test cut that measures it: how far every
@@ -813,6 +856,11 @@ mod tests {
         crate::panels::set_pstate(&ctx, "cutting-origin", true);
         let texts = window_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t == "Across") && texts.iter().any(|t| t == "Down"), "{texts:?}");
+        // C4.9: the curve test, closed at first.
+        assert!(texts.iter().any(|t| t == "Curve Test") && !texts.iter().any(|t| t == "Cut Curve Test"), "{texts:?}");
+        crate::panels::set_pstate(&ctx, "cutting-curves", true);
+        let texts = window_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Cut Curve Test") && texts.iter().any(|t| t == "All Three Rows"), "{texts:?}");
         crate::panels::set_pstate(&ctx, "cutting-origin", false);
         app.run("cutting.settings.set", json!({"grouping": "layer"})).unwrap();
         assert!(window_texts(&mut app, &ctx).iter().any(|t| t == "Setup"));

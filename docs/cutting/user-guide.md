@@ -231,6 +231,16 @@ kept with your preferences and used for every send until you change it; the head
 A mat that isn't Silhouette's may put its grid a little differently: check it when you change mats. With Print &
 Cut the machine measures from the marks, so the adjustment only moves where it starts looking for them.
 
+**Curve Test** (under Origin Adjustment, closed at first) is a check for the machine, not for a material.
+**Cut Curve Test** cuts a 10 mm circle and a 50 mm S-curve in three rows from the top-left corner (about
+75 × 80 mm), each sent its own way:
+- **top row:** as short straight moves, as every job is sent;
+- **middle row:** as the machine's own Bézier curves;
+- **bottom row:** the circle as the machine's own circle command.
+
+Compare how round and smooth each row is. **Rows** cuts just one of them. Each row is cut once, without overcut,
+and the test isn't kept in the history. Whether jobs will ever be sent as curves depends on what this shows.
+
 ## 5. Making cut lines
 
 ### Contour: a cut line round your art
