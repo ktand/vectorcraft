@@ -172,3 +172,17 @@ fn rollers_cut_down_the_mat_once() {
     let seq: Vec<usize> = order.iter().map(|id| row_of(*id)).collect();
     assert!(seq.windows(2).all(|w| w[0] <= w[1]), "row by row: {seq:?}");
 }
+
+/// C18.2: the checks before cutting reach the job's warnings, naming the object.
+#[test]
+fn the_checks_name_what_spoils_a_cut() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 600, "height": 600})).unwrap();
+    let clean = s.execute("cutting.job", &json!({})).unwrap()["job"]["warnings"].as_array().map_or(0, Vec::len);
+    let tiny = s.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 4, "height": 4})).unwrap()["id"].clone();
+    let j = s.execute("cutting.job", &json!({})).unwrap();
+    let w = j["job"]["warnings"].as_array().unwrap();
+    assert_eq!(w.len(), clean + 1, "{w:?}");
+    assert_eq!(w.last().unwrap()["source"]["node"], tiny);
+    assert!(w.last().unwrap()["message"].as_str().unwrap().contains("smaller than 2 mm"));
+}

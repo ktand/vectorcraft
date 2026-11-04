@@ -281,6 +281,8 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
         return;
     };
+    // C18.2: a warning naming an object selects it on a click.
+    let mut pick: Option<u64> = None;
     match &*job {
         Ok(made) => {
             let (j, s) = (&made.job, &made.stats);
@@ -291,7 +293,17 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
             if !j.warnings.is_empty() {
                 egui::ScrollArea::vertical().max_height(110.0).id_salt("cutting-send-warnings").show(ui, |ui| {
                     for w in j.warnings.iter().take(SHOWN_WARNINGS) {
-                        ui.label(egui::RichText::new(&w.message).color(t.warning));
+                        let text = egui::RichText::new(&w.message).color(t.warning);
+                        match w.source {
+                            Some(src) => {
+                                if ui.add(egui::Label::new(text).sense(egui::Sense::click())).on_hover_text(tl!("Click to select it")).clicked() {
+                                    pick = Some(src.node);
+                                }
+                            }
+                            None => {
+                                ui.label(text);
+                            }
+                        }
                     }
                     if j.warnings.len() > SHOWN_WARNINGS {
                         widgets::dim_label(ui, &format!("{} {}", j.warnings.len() - SHOWN_WARNINGS, tl!("more warnings")));
@@ -305,6 +317,11 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
         Err(e) => {
             ui.label(egui::RichText::new(e).color(t.bleed));
         }
+    }
+    if let Some(node) = pick
+        && let Err(e) = app.run("select.set", serde_json::json!({ "ids": [node] }))
+    {
+        app.status(e);
     }
 }
 

@@ -428,6 +428,14 @@ A contour (section 5) is the usual cut line for printed stickers.
 The summary at the top of Cut Settings gives the number of lines, the cut length and the estimated time.
 Warnings show there and in the Send window, such as lines off the mat.
 
+### Checks before cutting
+
+The job is looked over for what usually spoils a cut, and the Send window says so (click a warning to select
+the object): an open path set to Cut (it cuts a slit, not a piece), pieces or holes 2 mm or smaller (hard to
+weed), the same line twice (two copies on top of each other cut through the backing), parts narrower than
+0.5 mm (the blade tears them), and an object whose pieces overlap (script letters that cut through each other:
+set it to Cut Outline to weld them). They are warnings: the job can still be sent.
+
 ## 9. Sending the job
 
 **Send to Cutter…** (top of Cut Settings, or File › Send to Cutter…, **Ctrl+Alt+Shift+X**) opens the Send

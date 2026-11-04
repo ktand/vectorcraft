@@ -24,6 +24,7 @@
 
 pub mod bleed;
 pub mod bridges;
+pub mod checks;
 pub mod clip;
 pub mod contour;
 pub mod corners;
@@ -159,6 +160,8 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     let (polylines, more) = prepare::prepare(&outlines, &cut_on, s.tolerance_mm, s.clip_to_mat).map_err(BuildError::Prepare)?;
     warnings.extend(more);
     let polylines = perforated(d, &s, &items, polylines);
+    // C18.2: what usually spoils a cut, said before it is sent.
+    warnings.extend(checks::checks(&polylines));
     if d.units == vectorcraft_doc::Unit::Pixels && !polylines.is_empty() {
         warnings.push(vectorcraft_cutjob::JobWarning { source: None, message: PIXELS_WARNING.into() });
     }
