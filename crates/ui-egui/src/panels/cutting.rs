@@ -89,6 +89,22 @@ fn job_settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             set(app, json!({ "grouping": grouping_ids.get(i).copied().unwrap_or("none") }));
         }
     });
+    // C18.1: layered vinyl cut back to what shows of each colour, the overlap under the next.
+    if grouping > 0 {
+        let mut on = s["knockout"].as_bool().unwrap_or(false);
+        let hint = tl!("Each colour is cut only where it shows, running the Overlap under the colours above it, so stacked vinyl isn't thick.");
+        widgets::label_row(ui, tl!("Knockout"), LABEL_W, |ui| {
+            if ui.checkbox(&mut on, "").on_hover_text(hint).changed() {
+                set(app, json!({ "knockout": on }));
+            }
+            if on {
+                let (lo, hi) = vectorcraft_cutjob::CuttingSettings::KNOCKOUT_MM;
+                if let Some(v) = mm_field(ui, "knockout-overlap", s["knockoutOverlapMm"].as_f64().unwrap_or(0.5), lo) {
+                    set(app, json!({ "knockoutOverlapMm": v.clamp(lo, hi) }));
+                }
+            }
+        });
+    }
 }
 
 /// A group row's material choices: the document's setup first, then every material.

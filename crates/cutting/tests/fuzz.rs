@@ -166,6 +166,8 @@ fn json_value() -> impl Strategy<Value = Value> {
         Just("weedMarginMm"),
         Just("weedLines"),
         Just("weedLineSpacingMm"),
+        Just("knockout"),
+        Just("knockoutOverlapMm"),
         Just("bladeOffsetMm"),
         Just("depth"),
         Just("#000000"),
@@ -273,7 +275,7 @@ proptest! {
     fn any_document_makes_a_job_or_says_why(
         objs in prop::collection::vec(obj(), 0..8),
         layers in prop::collection::vec(layer(), 0..3),
-        settings in prop_oneof![Just(json!({})), json_value(), json_value().prop_map(|v| json!({"grouping": "layer", "weedBox": true, "weedLines": true, "colorSetups": {"#000000": v}}))],
+        settings in prop_oneof![Just(json!({})), json_value(), json_value().prop_map(|v| json!({"grouping": "layer", "weedBox": true, "weedLines": true, "colorSetups": {"#000000": v}})), json_value().prop_map(|v| json!({"grouping": "color", "knockout": true, "knockoutOverlapMm": v}))],
     ) {
         let d = document_with(&objs, &layers, &settings);
         // C8.7: the groups, the test cut at each corner, nesting: an answer or a reason, no panic.

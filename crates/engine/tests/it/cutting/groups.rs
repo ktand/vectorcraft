@@ -129,3 +129,38 @@ fn groups_by_fill_colour() {
     s.execute("cutting.settings.set", &json!({"grouping": "color"})).unwrap();
     assert_eq!(groups(&mut s)["groups"][0]["name"], json!("#000000"), "by line colour, the outline");
 }
+
+/// C18.1: knockout through the commands: by layer, the lower layer's square cut back to the
+/// upper's edge plus the overlap; the overlap in range.
+#[test]
+fn knockout_cuts_the_lower_layer_back() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 600, "height": 600})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 200, "height": 200})).unwrap();
+    s.execute("layer.new", &json!({"name": "Top"})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 200, "y": 50, "width": 200, "height": 300})).unwrap();
+    s.execute("cutting.settings.set", &json!({"grouping": "layer"})).unwrap();
+    // Each path's width across the mat, mm, narrowest first.
+    let widths = |s: &mut Session| {
+        let mut w: Vec<f64> = job(s)["paths"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| {
+                let xs: Vec<f64> = p["points"].as_array().unwrap().iter().map(|q| q[0].as_f64().unwrap()).collect();
+                xs.iter().copied().fold(f64::MIN, f64::max) - xs.iter().copied().fold(f64::MAX, f64::min)
+            })
+            .collect();
+        w.sort_by(f64::total_cmp);
+        w
+    };
+    let mm = |pt: f64| pt * 25.4 / 72.0;
+    let before = widths(&mut s);
+    assert!((before[0] - mm(200.0)).abs() < 0.1, "{before:?}");
+    s.execute("cutting.settings.set", &json!({"knockout": true, "knockoutOverlapMm": 1})).unwrap();
+    let after = widths(&mut s);
+    assert!((after[0] - (mm(100.0) + 1.0)).abs() < 0.1, "the lower square cut back to 1 mm under the upper: {after:?}");
+    for bad in [json!({"knockoutOverlapMm": 4}), json!({"knockoutOverlapMm": -1}), json!({"knockout": "yes"})] {
+        assert!(s.execute("cutting.settings.set", &bad).is_err(), "{bad}");
+    }
+}

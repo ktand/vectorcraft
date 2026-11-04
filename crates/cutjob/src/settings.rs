@@ -421,6 +421,10 @@ pub struct CuttingSettings {
     /// (spacing 0), or one every this many mm.
     pub weed_lines: bool,
     pub weed_line_spacing_mm: f64,
+    /// Knockout for layered vinyl (C18.1): in a grouped job, each object cut back to what shows
+    /// of it under the other groups painted above, running this far under their edges, mm.
+    pub knockout: bool,
+    pub knockout_overlap_mm: f64,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -457,6 +461,8 @@ impl Default for CuttingSettings {
             weed_margin_mm: 3.0,
             weed_lines: false,
             weed_line_spacing_mm: 0.0,
+            knockout: false,
+            knockout_overlap_mm: 0.5,
             extra: Map::new(),
         }
     }
@@ -468,7 +474,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 29] = [
+    const KEYS: [&'static str; 31] = [
         "version",
         "mat",
         "customMatMm",
@@ -498,6 +504,8 @@ impl CuttingSettings {
         "weedMarginMm",
         "weedLines",
         "weedLineSpacingMm",
+        "knockout",
+        "knockoutOverlapMm",
     ];
 
     /// The weed box's margin and the weed lines' spacing (0: one from each side's middle), mm.
@@ -505,6 +513,8 @@ impl CuttingSettings {
     pub const WEED_LINE_SPACING_MM: (f64, f64) = (0.0, 200.0);
     /// The print bleed's distance, mm: the range, and the usual (C12.3).
     pub const BLEED_MM: (f64, f64) = (0.1, 5.0);
+    /// How far a lower colour runs under the one above it, mm (C18.1).
+    pub const KNOCKOUT_MM: (f64, f64) = (0.0, 3.0);
     pub const DEFAULT_BLEED_MM: f64 = 1.27;
     /// A perforation's cut and gap lengths, mm: the range (C14.4).
     pub const PERFORATE_MM: (f64, f64) = (0.2, 50.0);
@@ -571,6 +581,8 @@ impl CuttingSettings {
             weed_margin_mm: num(m, "weedMarginMm", Self::WEED_MARGIN_MM.0, Self::WEED_MARGIN_MM.1, d.weed_margin_mm),
             weed_lines: flag(m, "weedLines", d.weed_lines),
             weed_line_spacing_mm: num(m, "weedLineSpacingMm", Self::WEED_LINE_SPACING_MM.0, Self::WEED_LINE_SPACING_MM.1, d.weed_line_spacing_mm),
+            knockout: flag(m, "knockout", d.knockout),
+            knockout_overlap_mm: num(m, "knockoutOverlapMm", Self::KNOCKOUT_MM.0, Self::KNOCKOUT_MM.1, d.knockout_overlap_mm),
             extra: unknown(m, &Self::KEYS),
         }
     }
@@ -612,6 +624,8 @@ impl CuttingSettings {
         m.insert("weedMarginMm".into(), json!(self.weed_margin_mm));
         m.insert("weedLines".into(), json!(self.weed_lines));
         m.insert("weedLineSpacingMm".into(), json!(self.weed_line_spacing_mm));
+        m.insert("knockout".into(), json!(self.knockout));
+        m.insert("knockoutOverlapMm".into(), json!(self.knockout_overlap_mm));
         if !self.group_options.is_empty() {
             let g: Map<String, Value> = self.group_options.iter().map(|(k, o)| (k.clone(), json!({"off": o.off, "pause": o.pause}))).collect();
             m.insert("groupOptions".into(), Value::Object(g));

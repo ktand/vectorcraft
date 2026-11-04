@@ -31,6 +31,7 @@ pub mod edge;
 pub mod geometry;
 pub mod group;
 pub mod hatch;
+pub mod knockout;
 pub mod live;
 pub mod marks;
 pub mod nest;
@@ -147,6 +148,8 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     let (outlines, mut warnings) = geometry::outlines(d, &items);
     let (outlines, welding) = weld::weld(outlines);
     warnings.extend(welding);
+    let (outlines, knocked) = knockout::knockout(d, &s, &items, outlines);
+    warnings.extend(knocked);
     // Mirrored (C14.7): laid on the mat flipped across the artboard's middle, before it is fitted
     // to the cut area; Print & Cut reads the marks as printed, so it never is.
     let cut_on = if s.mirror && !s.print_and_cut { placement.mirrored() } else { placement.clone() };

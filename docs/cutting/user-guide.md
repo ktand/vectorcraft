@@ -127,6 +127,12 @@ While cutting in groups, Cut Settings lists each group in cutting order. Give a 
 own **Force** and **Passes**. A group left on "Document's setup" uses the tool settings below. When a group has a
 material, the pause says what to load ("Paused before Gold. Load Cardstock, then Continue.").
 
+**Knockout** (shown once the job is cut in groups) is for layered vinyl, heat transfer vinyl above all: each colour
+is cut only where it shows, the colours painted above it taken out of it, so the layers don't pile up thick. The
+**Overlap** beside it (default 0.5 mm) is how far a lower colour still runs under the edge of the one above, so no
+gap shows when the layers are pressed a little off. The document doesn't change, only what's cut; a colour that
+is wholly hidden isn't cut, and the Send window says so.
+
 ## 4. Tools and materials
 
 ### The tool table
