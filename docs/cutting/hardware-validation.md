@@ -20,9 +20,9 @@ control is and what it does: the [user guide](user-guide.md).
 | 2 | Which way the axes go | Pass | As the preview: nothing mirrored or swapped |
 | 3 | Size | Pass | 10.0 × 10.0 mm; 2 mm left of where sent on a Nicapa mat: Origin Adjustment Across +2 |
 | 4 | Test cut at each corner | Pass (part) | All four 2 mm left of where sent (Across 0), none off down: the step 3 shift; the design warning shows; force not yet noted |
-| 5 | Speed | Pass (1–10) | 100 mm: 10 s at 1, 1 s at 10 (10 mm/s a step, as taken); 0.6 s at 30, too short a line to tell |
+| 5 | Speed | Pass (1–10) | 100 mm: 10 s at 1, 1 s at 10 (10 mm/s a step, as taken); 2026-11-04: 87, 148 and 200 mm/s at 10, 20 and 30 over 100 mm legs, so less than 10 mm/s a step above 10 |
 | 6 | Blade depth, acceleration, track enhancing, corners | | |
-| 7 | Blade offset | | |
+| 7 | Blade offset | Pass | 0.9 mm (`FC18`, the default) gives the sharpest corners of 0, 0.45 and 0.9 mm (2026-11-04, sent directly) |
 | 8 | Cutting in groups, with a pause | | |
 | 9 | Each group's own setup | | |
 | 10 | Weeding | | |
@@ -33,7 +33,7 @@ control is and what it does: the [user guide](user-guide.md).
 | 15 | A real cut | | |
 | 16 | Tools and holders | | |
 | 17 | Cutting from the roll | | |
-| 18 | Curves sent to the machine | | |
+| 18 | Curves sent to the machine | Pass | All three rows cut; the `BZ` and `W` circles rounder than the straight moves (2026-11-04) |
 
 ## Before you start
 
@@ -335,4 +335,6 @@ Note: for each row whether it cut at all, how it looked and sounded, and the cir
 bottom row is as good as the top or better, curves can be offered as a setting; if either cuts wrong or not at
 all, the notes say so and the encoder keeps sending straight moves.
 
-Result:
+Result (2026-11-04, firmware V5.05): every row cut through and every circle dropped out. The 2nd (`BZ`) and 3rd
+(`W`) circles are clearly rounder than the 1st (straight moves); the S-curves look alike. Each circle has a
+small nub where its cut starts and ends (no overcut in this test). Curves are worth offering.

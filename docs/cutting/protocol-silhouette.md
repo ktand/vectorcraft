@@ -3,7 +3,8 @@
 > **Status:** facts gathered for the encoder (C4.3); framing, units, axes, the origin, status and the tools query
 > checked on the owner's Cameo 4 (2026-11-01, [HW]); Print & Cut facts from Silhouette Studio's interface replaced
 > by public tutorials where they cover them (2026-11-03, R2); curve commands from Graphtec's GP-GL manual
-> (2026-11-04, to confirm) · **Written:** 2026-10-28 ·
+> (2026-11-04); curves, dashes, the cut area and the status words tried on the Cameo 4 (2026-11-04, [HW]) ·
+> **Written:** 2026-10-28 ·
 > **Scope:** Cameo 4 first; other models noted where the source gives them
 
 These are facts about how a computer talks to a Silhouette cutter: what it sends, what it gets back, and in
@@ -84,7 +85,7 @@ relies on most are listed again in [Checks on the machine](#checks-on-the-machin
 | Status is asked for with ESC followed by ENQ (`0x1B 0x05`). The reply is one character and ETX: `0` ready, `1` moving, `2` no media loaded. | [IS]; ready with the mat loaded confirmed [HW] (the send's ready check passed); an answer asked for while the machine is busy can come late and be read with the next one's (a tools answer `2,0` before a status `0`), [HW] 2026-11-03, so each answer is told by its form |
 | ESC followed by NAK (`0x1B 0x15`) asks which tools are in the holders: a comma-separated code per holder (0 empty, 1 ratchet blade, 2 AutoBlade, 3 deep-cut blade, 4 kraft blade, 5 rotary blade, 7 pen, 255 error). | [IS]; 2 (AutoBlade, holder 1) and 0 (holder 2 empty) confirmed [HW] |
 | The firmware version is asked for with the `FG` query. | [IS], **to confirm** |
-| The machine answers `0` (ready) only once it has cut all it was sent, and `1` while it has work. A sender that waits for `0` before each part of a job therefore stops the machine at the end of each part: a box cut on 2026-11-04 paused mid-job, at the end of the first 4 KB. So only the first part waits for ready (and the parts after a group's pause or a mark search); the rest are written straight after, the machine holding a write back until its buffer has room (USB flow control), so a write may take as long as the cutting that makes room. | [HW] (the pause); straight after, **to confirm** by cutting the box again |
+| The machine answers `0` (ready) only once it has cut all it was sent, and `1` while it has work. A sender that waits for `0` before each part of a job therefore stops the machine at the end of each part: a box cut on 2026-11-04 paused mid-job, at the end of the first 4 KB. So only the first part waits for ready (and the parts after a group's pause or a mark search); the rest are written straight after, the machine holding a write back until its buffer has room (USB flow control), so a write may take as long as the cutting that makes room. | [HW] (the pause); straight after confirmed [HW] 2026-11-04: a spiral of 1,100 short moves (11 KB) sent in 4 KB pieces, each after the machine answered ready, paused two or three times (28.5 s); the same sent back to back ran in one go (23.3 s). Sent one move per write it stuttered all the way (101 s): each write took about 90 ms, so pieces must be large |
 
 ## A job
 
@@ -119,8 +120,8 @@ own presets [IS]; the encoder sends settings directly and needs none.
 ### Curves
 
 The machine is sent straight moves today; GP-GL also has curve commands, which the machine breaks into straight
-segments itself. Whether a Cameo 4 or 5 takes them, and how finely it divides them, is **to confirm** with the
-curve test (C4.8, [hardware-validation.md](hardware-validation.md)).
+segments itself. The owner's Cameo 4 takes `BZ` and `W` and cuts them rounder than our straight moves ([HW] 2026-11-04);
+the Cameo 5 is untested. Checked with the curve test (C4.8, [hardware-validation.md](hardware-validation.md)).
 
 | Fact | Source |
 |---|---|
@@ -130,8 +131,8 @@ curve test (C4.8, [hardware-validation.md](hardware-validation.md)).
 | **Curve** `Y`a,x1,y1,…,xn,yn and **relative curve** `_`a,Δx1,Δy1,…: a smooth cubic curve *through* the points (it interpolates them; it is not a Bézier), `a` 0 open, 1 closed; at least three points, none repeated in a row, best evenly spaced; a terminator after the last. A closed curve starts and ends at its second point. | [GM] 1-21, 1-22 |
 | **Ellipse** `)`a,x,y,r1,r2,θ1,θ2,θ3[,d]: `a` 0 goes to the start with the tool up, 1 with it down; centre x,y; the major and minor radii; start and end angles; θ3 the major axis's angle to the x axis; `d` as for `W`. | [GM] 1-23 |
 | On the plotter, "during the cutter mode" curves are processed differently according to a DIP switch (S2-8); the manual doesn't say how. A cutter may treat curves otherwise than a pen plotter does (for instance in how it turns the blade round them). | [GM] 1-20 |
-| **Bézier** `BZ`a,x1,y1,x2,y2,x3,y3,x4,y4[,d]: a cubic Bézier through four control points (start, two handles, end), listed in Graphtec's Craft Robo Pro / CE5000 summary; also a three-point circle `WP`x1,y1,x2,y2,x3,y3[,d]. The list leaves the meaning of `a` and `d` open. | [ISC] from [GS], **to confirm** |
-| `BZ` with `a` = 1 (a cubic) and a trailing 0 was reported "physically tested" on a CAMEO Pro Mark II, firmware V1.09; the Cameo 4 and 5 are expected to take it, untested. The report doesn't say how smooth the result was. Claimed benefits, unmeasured: a smaller USB payload and no stalls from the machine's input buffer running dry. | [ISC] (#369), **to confirm** |
+| **Bézier** `BZ`a,x1,y1,x2,y2,x3,y3,x4,y4[,d]: a cubic Bézier through four control points (start, two handles, end), listed in Graphtec's Craft Robo Pro / CE5000 summary; also a three-point circle `WP`x1,y1,x2,y2,x3,y3[,d]. The list leaves the meaning of `a` and `d` open. | [ISC] from [GS]; `BZ1`,…,`0` confirmed [HW] 2026-11-04 |
+| `BZ` with `a` = 1 (a cubic) and a trailing 0 was reported "physically tested" on a CAMEO Pro Mark II, firmware V1.09; the Cameo 4 and 5 are expected to take it, untested. The report doesn't say how smooth the result was. Claimed benefits, unmeasured: a smaller USB payload and no stalls from the machine's input buffer running dry. | [ISC] (#369); on the owner's Cameo 4 (V5.05) both `BZ1` and `W` cut, and a 10 mm circle came out rounder as either than as the 32 straight moves sent today, [HW] 2026-11-04 (the curve test, C4.9) |
 | Silhouette publishes no protocol documentation: asked in 2018, it considered an SDK and in January 2019 decided against it, with no documentation planned. | inkscape-silhouette [issue #72](https://github.com/fablabnbg/inkscape-silhouette/issues/72) |
 | Open questions for the machine: whether it takes each command at all; how finely it divides a curve when `d` is left out (coarser than our 0.025 mm would be worse than today); whether its blade offset (`FC`) is applied along native curves as along straight moves; whether motion along a `BZ` is smoother or quicker than along our segments. | our questions, 2026-11-04 |
 | Using them would be a choice for paths the job leaves whole: our overcut, clipping to the mat, perforation and dashes work on straight segments, so a path with any of those stays flattened. Our decision of 2026-11-01 ("not planned") is replaced by: decide after the curve test. | our decision, 2026-11-04 |
@@ -192,6 +193,33 @@ How `vectorcraft-cutjob`'s machine-neutral settings become these commands (the e
 - **Passes:** the encoder repeats each path's strokes, as the simulator does.
 - **Overcut:** the encoder extends closed paths, as the simulator does.
 - **Score:** the same commands at the score operation's force and speed.
+
+## More of GP-GL, tried on the Cameo 4
+
+Commands from Graphtec's GP-GL manual [GM] sent one at a time to the owner's Cameo 4 (firmware `CAMEO 4 V5.05`,
+the answer to `FG`) on 2026-11-04, each answer read before the next command: [HW]. Coordinates as everywhere
+here: machine units, down first, then across.
+
+| Command | What the machine did | Use for us |
+|---|---|---|
+| `BZ1`,…,`0` and `W` (curves, see [Curves](#curves)) | Cut; the circles rounder than the same circle as about 32 straight moves (the curve test, C4.9) | Sending curves |
+| `L`p (line type) and `B`l (pitch) | With `B200` (10 mm): `L3` cut 5 mm and left 5, `L4` about 8 and 2, `L2` about 1 and 9, as the manual's 1/2, 25/32 and 1/8 of the pitch; a circle (`W`) after `L3` came out dashed too; `L0` solid again | Perforation done by the machine, along curves as well as lines, for those cut-to-pitch shares |
+| `\`x,y and `Z`x,y (the cut area's corners) | The area read back as set (`\400,400`, `Z800,800`); a diagonal and a line running across it were cut only inside it, the blade lifted at its edge | A limit the machine keeps: nothing cut outside the cut area, whatever is sent |
+| (the same) | The area **stays set** after the job ends, after a reset (ESC EOT) and after `TG`; switching the machine off and on clears it | A job that sets it must set it every time, and the cut area put back after; one left set clips every later job, Studio's too |
+| `[` and `U` (read the cut area) | Two six-character numbers each. After switching on and a reset: 0,0 to 20320,5900 (1016 mm down, 295 across); after `TG1` (the 12 × 12 in mat): 0,0 to 6100,6100 (305 × 305 mm) | The machine's own cut area for the mat, to check a job against |
+| `@` (off-scale) | `    0` normally; after moves outside the area, `    4`, then `    2` once the head had gone home (the manual's +Y and −X, in its axes) | After a job: whether anything was outside the cut area |
+| `V` (status word 1) | Always `    0`, idle or not, before and after an error: neither the buffer space nor the error bit the manual describes | Nothing |
+| `#` (error status) and `"`m (error mask) | `#` never answered; `"57` changed nothing | Nothing |
+| `;` (interface clear), `:` (clear) and a reset (ESC EOT), each sent a third of the way into a spiral of 1,100 moves sent back to back | No change: every spiral came out whole, with the same force. None empties what the machine has queued | Cancel can only stop sending: what the machine holds is cut. To stop sooner, keep less waiting in the machine |
+| `D` with a list of points (`D`x1,y1,x2,y2,…), 100 points a command | Cut as the same points sent one `D` each | A byte saved a point; little use beside curves (C4.14) |
+| `T`n (buzzer) | `T1` with the mat loaded and the machine ready: no sound, no light, no answer | A pause has to be signalled by the app |
+| `!`n (speed), a 100 mm line cut once and five times at steps 10, 20 and 30 | The 400 mm between took 4.6, 2.7 and 2.0 s, turns at the ends included: 87, 148 and 200 mm/s | About 10 mm/s a step up to 10; above, less gained each step (the turns, or a lower top speed): the time estimates are optimistic at high speeds |
+| `FC`n (blade offset): 15 mm squares with `FC0`, `FC18` and `FC9` | The `FC18` (0.9 mm) square has the sharpest corners | The machine applies the offset sent; 0.9 mm suits the AutoBlade (step 7) |
+| `TJ`n (acceleration): a zig-zag of 45 mm legs at `TJ1` and `TJ3` | Sounded different; 10.1 and 9.9 s; the cuts look the same | It takes effect; little time gained on short legs |
+| `W` ending at 360°, 371.5° and 396° (an overcut of 0, 1 and 3 mm) | By eye, the 360° circle ends where it began; past that couldn't be told. Read with `G` after a 3 mm circle: ending at 3600 the head stood at its start (1060, 1700); ending at 3715 at 1058, 1861, which is 11.5° on (1059, 1862 by the sum) | An end angle past 360° is honoured: `W` can carry its own overcut |
+| `G` (where the tool is) | Three numbers, down, across and a status (`10` with the tool up, after a job had finished; other values not seen): `     0,  4000,    10` with the head parked at 200 mm across. Answered after the commands before it had run | Checking on the machine where a job really ended |
+| `TF`d`,1` (AutoBlade depth) with a 0.5 mm cut after it | The AutoBlade's dial read 3 after `TF3,1`, then 7 after `TF7,1` | The depth setting works as sent (step 6) |
+| A command the machine doesn't know (`` `1 ``) | Ignored without an answer; the commands after it ran | Mistakes in what we send aren't reported: our own check before sending (C4.11) is the one there is |
 
 ## Checks on the machine
 
