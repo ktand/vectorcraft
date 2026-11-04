@@ -49,6 +49,7 @@ fn the_defaults_round_trip_as_documented() {
             "detailSpeedMmS": 30.0,
             "detailSizeMm": 10.0,
             "alignMarks": false,
+            "sendCurves": true,
             "weedLines": false,
             "weedLineSpacingMm": 0.0
         })
@@ -106,6 +107,7 @@ fn every_setting_round_trips() {
         detail_speed_mm_s: 20.0,
         detail_size_mm: 8.0,
         align_marks: true,
+        send_curves: false,
         extra: Map::new(),
     };
     assert_eq!(read(s.to_value()), s);

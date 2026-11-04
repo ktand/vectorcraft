@@ -12,6 +12,7 @@
 
 #![forbid(unsafe_code)]
 
+use vectorcraft_cutjob::Piece;
 use vectorcraft_cutjob::{CutJob, ToolSettings};
 /// What a holder has in it (C10.3), for those that read [`tool_warnings`]' holders.
 pub use vectorcraft_cutter::tools::Fitted;
@@ -278,32 +279,63 @@ impl Commands {
         (units(p[1] - self.origin[1]), units(p[0] - self.origin[0]))
     }
 
-    /// C4.9: `native` as the machine's own curve (protocol notes › Curves; to confirm on the
-    /// machine), from a blade-up move to its start. Bézier pieces as `BZ1`, the four points
-    /// each and a trailing 0; a circle as `W` round its centre from angle 0 to 360° (tenths of
-    /// a degree), its radius the same at both ends, the division left to the machine.
-    fn native(&mut self, native: &Native) {
+    /// `q` as a `BZ1` from the current point `from` (protocol notes › Curves, [HW] 2026-11-04):
+    /// the four points, then a trailing 0.
+    fn bezier(&mut self, from: [f64; 2], a: [f64; 2], b: [f64; 2], q: [f64; 2]) {
+        let pts: Vec<String> = [from, a, b, q]
+            .iter()
+            .map(|&p| {
+                let (x, y) = self.at(p);
+                format!("{x},{y}")
+            })
+            .collect();
+        self.cmd(&format!("BZ1,{},0", pts.join(",")));
+    }
+
+    /// `pieces` cut on from `from`: a line as `D`, a cubic as `BZ1`. Where it ends.
+    fn pieces(&mut self, from: [f64; 2], pieces: &[Piece]) -> [f64; 2] {
+        let mut at = from;
+        for piece in pieces {
+            match *piece {
+                Piece::Line(q) => self.to(true, q),
+                Piece::Cubic(a, b, q) => self.bezier(at, a, b, q),
+            }
+            at = piece.end();
+        }
+        at
+    }
+
+    /// C4.9, C4.14: `native` as the machine's own curves, from a blade-up move to its start, once;
+    /// a closed one cut on past its start by `overcut_mm`. A design's path as lines (`D`) and
+    /// Bézier pieces (`BZ1`), its overcut the first stretch of it again; a circle as `W` round its
+    /// centre from angle 0 (down the mat), its end angle past 360° by the overcut (in tenths of a
+    /// degree; honoured, [HW] 2026-11-04), the division left to the machine.
+    fn native(&mut self, native: &Native, closed: bool, overcut_mm: f64) {
+        let overcut = if closed && overcut_mm.is_finite() { overcut_mm.max(0.0) } else { 0.0 };
         match native {
             Native::Bezier(pieces) => {
                 let Some(first) = pieces.first() else { return };
                 self.to(false, first[0]);
-                for piece in pieces {
-                    let pts: Vec<String> = piece
-                        .iter()
-                        .map(|&q| {
-                            let (a, b) = self.at(q);
-                            format!("{a},{b}")
-                        })
-                        .collect();
-                    self.cmd(&format!("BZ1,{},0", pts.join(",")));
+                for [p0, a, b, q] in pieces {
+                    self.bezier(*p0, *a, *b, *q);
                 }
             }
             Native::Circle { centre, radius_mm } => {
-                // Angle 0 is along the machine's first axis (down the mat).
                 self.to(false, [centre[0], centre[1] + radius_mm]);
                 let (a, b) = self.at(*centre);
                 let r = units(*radius_mm);
-                self.cmd(&format!("W{a},{b},{r},{r},0,3600"));
+                let extra = if *radius_mm > 0.0 { (overcut / radius_mm).to_degrees() * 10.0 } else { 0.0 };
+                let end = 3600 + extra.round().clamp(0.0, 3600.0) as i64;
+                self.cmd(&format!("W{a},{b},{r},{r},0,{end}"));
+            }
+            Native::Path { start, pieces } => {
+                self.to(false, *start);
+                let end = self.pieces(*start, pieces);
+                if overcut > 0.0 {
+                    if let Some(again) = native.overcut(overcut) {
+                        self.pieces(end, &again);
+                    }
+                }
             }
         }
     }
@@ -390,6 +422,7 @@ fn check_native(job: &CutJob, native: &[Option<Native>]) -> Result<(), String> {
         let ok = match n {
             None => true,
             Some(Native::Bezier(pieces)) => !pieces.is_empty() && pieces.len() <= MAX_NATIVE_PIECES && pieces.iter().flatten().all(on),
+            Some(n @ Native::Path { pieces, .. }) => !pieces.is_empty() && pieces.len() <= MAX_NATIVE_PIECES && n.points().iter().all(on),
             Some(Native::Circle { centre, radius_mm }) => {
                 radius_mm.is_finite()
                     && *radius_mm > 0.0
@@ -425,6 +458,8 @@ impl Silhouette {
     /// tool is chosen (the reference sends `J` to two-holder machines only).
     fn encode_holders(&self, job: &CutJob, width_mm: f64, adjust_mm: [f64; 2], holders: u8, native: &[Option<Native>]) -> Result<Encoded, String> {
         job.validate().map_err(|e| e.to_string())?;
+        // The curves given, else the job's own (C4.14).
+        let native = if native.is_empty() { job.curves.as_slice() } else { native };
         check_native(job, native)?;
         let area = job.mat.cut_area_mm;
         if area.x1 > width_mm + 1e-6 {
@@ -540,9 +575,11 @@ impl Silhouette {
                     c.cmd(&format!("TJ{accel}"));
                 }
                 for (k, p) in in_group.iter().enumerate().filter(|(_, p)| p.op == op_index) {
-                    // C4.9: the machine's own curve, once, without overcut.
+                    // C4.9, C4.14: the machine's own curves, each pass, a closed one's overcut too.
                     if let Some(Some(n)) = native.get(start + k) {
-                        c.native(n);
+                        for _ in 0..op.tool.passes.max(1) {
+                            c.native(n, p.closed, op.tool.overcut_mm);
+                        }
                         continue;
                     }
                     let Some(&first) = p.points.first() else { continue };

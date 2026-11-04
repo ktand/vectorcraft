@@ -4,8 +4,8 @@
 //! cut area stops the job, naming its object; with `clipToMat` it is cut up to the area's edge
 //! instead, in pieces, with a warning.
 
-use vectorcraft_cutjob::{JobWarning, MAX_POINTS, OpKind, RectMm, SourceRef};
-use vectorcraft_geom::PathEl;
+use vectorcraft_cutjob::{JobWarning, MAX_POINTS, Native, OpKind, Piece, RectMm, SourceRef};
+use vectorcraft_geom::{BezPath, PathEl};
 
 use crate::geometry::Outline;
 use crate::placement::Placement;
@@ -18,6 +18,121 @@ pub struct Polyline {
     /// Back to its first point at the end (which isn't repeated).
     pub closed: bool,
     pub points: Vec<[f64; 2]>,
+    /// Fork (C4.14): the curve the points were flattened from, for a machine that cuts curves;
+    /// `None` once a step changes the points other than by starting or reversing them.
+    pub curve: Option<Box<Curve>>,
+}
+
+/// Fork (C4.14): a polyline's curve, and where its pieces start among the points.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Curve {
+    pub native: Native,
+    /// `(point, piece)`: the point where each kept piece starts, in order; the first is `(0, 0)`.
+    /// A closed path may be started only at these, so its curve can start there too.
+    pub starts: Vec<(usize, usize)>,
+}
+
+impl Polyline {
+    /// Where a closed path may start: any point, or with a curve the points where a piece starts.
+    pub(crate) fn start_points(&self) -> Vec<usize> {
+        match &self.curve {
+            Some(c) => c.starts.iter().map(|s| s.0).collect(),
+            None => (0..self.points.len()).collect(),
+        }
+    }
+
+    /// A closed path started at point `i` instead, its curve with it.
+    pub(crate) fn start_at(&mut self, i: usize) {
+        if i == 0 || i >= self.points.len() {
+            return;
+        }
+        self.points.rotate_left(i);
+        let n = self.points.len();
+        self.curve = self.curve.take().and_then(|c| {
+            let &(_, k) = c.starts.iter().find(|s| s.0 == i)?;
+            let Native::Path { pieces, .. } = &c.native else { return None };
+            let m = pieces.len();
+            let mut starts: Vec<(usize, usize)> = c.starts.iter().map(|&(p, q)| ((p + n - i) % n, (q + m - k) % m)).collect();
+            starts.sort_unstable();
+            Some(Box::new(Curve { native: c.native.started_at(k), starts }))
+        });
+    }
+
+    /// An open path cut the other way round, its curve with it.
+    pub(crate) fn reverse(&mut self) {
+        self.points.reverse();
+        self.curve =
+            if self.closed { None } else { self.curve.take().map(|c| Box::new(Curve { native: c.native.reversed(), starts: vec![(0, 0)] })) };
+    }
+}
+
+/// Fork (C4.14): `path` (one subpath, on the mat) as lines and cubics, and where among `points`
+/// (what it was flattened and tidied to) each piece starts. `None` when the points don't start
+/// where the curve does.
+fn curve_of(path: &BezPath, closed: bool, points: &[[f64; 2]]) -> Option<Box<Curve>> {
+    let mut start: Option<[f64; 2]> = None;
+    let mut at = [0.0, 0.0];
+    let mut pieces = vec![];
+    let xy = |p: vectorcraft_geom::Point| [p.x, p.y];
+    for el in path.elements() {
+        match *el {
+            PathEl::MoveTo(p) => {
+                if start.is_some() {
+                    // A second subpath: not one stroke.
+                    return None;
+                }
+                start = Some(xy(p));
+                at = xy(p);
+            }
+            PathEl::LineTo(p) => {
+                pieces.push(Piece::Line(xy(p)));
+                at = xy(p);
+            }
+            PathEl::QuadTo(q, p) => {
+                // The same curve as a cubic: its handles two thirds of the way to the control point.
+                let (q, p) = (xy(q), xy(p));
+                let third = |a: [f64; 2]| [a[0] + 2.0 / 3.0 * (q[0] - a[0]), a[1] + 2.0 / 3.0 * (q[1] - a[1])];
+                pieces.push(Piece::Cubic(third(at), third(p), p));
+                at = p;
+            }
+            PathEl::CurveTo(a, b, p) => {
+                pieces.push(Piece::Cubic(xy(a), xy(b), xy(p)));
+                at = xy(p);
+            }
+            PathEl::ClosePath => {}
+        }
+    }
+    let start = start?;
+    if closed && dist(at, start) >= SAME_MM {
+        pieces.push(Piece::Line(start));
+    }
+    if pieces.is_empty()
+        || !pieces
+            .iter()
+            .flat_map(|p| match *p {
+                Piece::Line(q) => vec![q],
+                Piece::Cubic(a, b, q) => vec![a, b, q],
+            })
+            .all(|q| q.iter().all(|v| v.is_finite()))
+    {
+        return None;
+    }
+    // Each piece's start among the points, in order.
+    let mut starts = vec![];
+    let mut from = 0;
+    let mut piece_start = start;
+    for (k, piece) in pieces.iter().enumerate() {
+        if let Some(i) = points.iter().enumerate().skip(from).find(|(_, q)| dist(**q, piece_start) < SAME_MM).map(|(i, _)| i) {
+            starts.push((i, k));
+            from = i;
+        }
+        piece_start = piece.end();
+    }
+    if starts.first() != Some(&(0, 0)) {
+        return None;
+    }
+    starts.dedup_by_key(|s| s.0);
+    Some(Box::new(Curve { native: Native::Path { start, pieces }, starts }))
 }
 
 /// Why outlines can't be laid on the mat.
@@ -81,7 +196,7 @@ pub fn prepare(
         if points.len() >= budget {
             return Err(PrepError::TooManyPoints);
         }
-        let Some(p) = tidy(o, points) else { continue };
+        let Some(mut p) = tidy(o, points) else { continue };
         if let Some(point) = p.points.iter().copied().find(|q| !inside(*q, area)) {
             if !clip_to_mat {
                 return Err(PrepError::OffTheCutArea { source: o.source, point });
@@ -96,6 +211,8 @@ pub fn prepare(
             continue;
         }
         budget = budget.saturating_sub(p.points.len());
+        // Whole on the mat: its curve kept beside its points (C4.14). A clipped one has none.
+        p.curve = curve_of(&on_mat, p.closed, &p.points);
         out.push(p);
     }
     for source in clipped {
@@ -169,7 +286,7 @@ fn tidy(o: &Outline, points: Vec<[f64; 2]>) -> Option<Polyline> {
         }
     }
     let length: f64 = kept.windows(2).map(|w| dist(w[0], w[1])).sum();
-    (kept.len() >= 2 && length >= SAME_MM).then_some(Polyline { op: o.op, source: o.source, closed, points: kept })
+    (kept.len() >= 2 && length >= SAME_MM).then_some(Polyline { op: o.op, source: o.source, closed, points: kept, curve: None })
 }
 
 /// The parts of segment `a`–`b` inside `r` (Liang–Barsky): its ends there, or `None`.
@@ -238,7 +355,7 @@ fn clip(p: &Polyline, r: RectMm) -> Vec<Polyline> {
     pieces
         .into_iter()
         .filter(|pc| pc.windows(2).map(|w| dist(w[0], w[1])).sum::<f64>() >= SAME_MM)
-        .map(|points| Polyline { op: p.op, source: p.source, closed: false, points })
+        .map(|points| Polyline { op: p.op, source: p.source, closed: false, points, curve: None })
         .collect()
 }
 

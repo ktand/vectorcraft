@@ -93,6 +93,9 @@ pub struct CutJob {
     pub groups: Vec<JobGroup>,
     /// Print & Cut: the machine finds these marks first and cuts between them.
     pub registration: Option<JobRegistration>,
+    /// Fork (C4.14): path `i`'s curve, where it has one, for a driver that sends curves in place
+    /// of the points; empty when none has. Not saved with the job: it is made with it each time.
+    pub curves: Vec<Option<crate::Native>>,
 }
 
 /// Where a Print & Cut job's registration marks lie on the mat (C6.1): what the machine is told

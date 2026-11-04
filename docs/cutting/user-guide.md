@@ -171,7 +171,12 @@ The Send window's **Advanced** (closed at first, under the table) holds what mos
 (gentler or faster moves), **Corners** (the blade runs a little past each sharp corner), **Blade offset** (how far
 the blade's tip trails its axis; the machine turns the blade round corners with it; a pen shows "—") and **Track
 Enhancing**. Cut Settings' own **Advanced** holds the design's: **Perforate** (the cut and gap lengths for
-objects set to Perforate) and **Cut Order**.
+objects set to Perforate), **Slow Details**, **Send Curves** and **Cut Order**.
+
+**Send Curves** (on at first) sends the curves of your design to the machine as curves, which it cuts smoother
+and rounder than the short straight lines they are otherwise broken into. A path that is perforated, cut up to
+the mat's edge (Clip to Mat) or given corner runs (**Corners**) is still sent as straight lines. Turn it off to cut
+everything as straight lines, as earlier versions did. The preview looks the same either way.
 
 **Cut Order** decides the order the lines are cut in. Scoring always comes before cutting, and with the first two
 choices a shape inside another (the counter of an O) is cut before it, so the piece around it stays held:

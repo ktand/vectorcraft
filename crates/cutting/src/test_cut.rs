@@ -106,6 +106,7 @@ pub fn test_job(d: &Document, corner: Corner, group: Option<&str>) -> Result<Cut
         track_enhancing: s.track_enhancing,
         groups: vec![],
         registration: None,
+        curves: vec![],
     };
     job.validate().map_err(BuildError::Invalid)?;
     Ok(job)

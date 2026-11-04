@@ -3,7 +3,7 @@ use vectorcraft_cutjob::{OpKind, SourceRef};
 use super::*;
 
 fn poly(node: u64, op: OpKind, closed: bool, points: &[[f64; 2]]) -> Polyline {
-    Polyline { op, source: SourceRef { node, subpath: 0 }, closed, points: points.to_vec() }
+    Polyline { op, source: SourceRef { node, subpath: 0 }, closed, points: points.to_vec(), curve: None }
 }
 
 fn square(node: u64, x: f64, y: f64, side: f64) -> Polyline {

@@ -101,17 +101,8 @@ pub struct Check {
 /// The largest origin adjustment, mm, either way on each axis (C4.6).
 pub const ORIGIN_ADJUST_MM: f64 = 10.0;
 
-/// Fork (C4.9): a path as the machine's own curve, for a driver that can send one in place of
-/// the path's points (which stay in the job for the preview, the simulator and the history).
-/// Mat millimetres, as the job's points.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Native {
-    /// Cubic Bézier pieces end to end, each `[start, handle, handle, end]`, each starting where
-    /// the one before ends.
-    Bezier(Vec<[[f64; 2]; 4]>),
-    /// A whole circle.
-    Circle { centre: [f64; 2], radius_mm: f64 },
-}
+/// Fork (C4.9, C4.14): a path as the machine's own curve ([`vectorcraft_cutjob::Native`]).
+pub use vectorcraft_cutjob::Native;
 
 /// One family of machines: what it accepts and how it answers. No I/O: the sender does that.
 pub trait Driver: Send + Sync {

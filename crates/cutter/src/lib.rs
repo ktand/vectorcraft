@@ -120,6 +120,7 @@ mod tests {
             warnings: vec![],
             track_enhancing: false,
             registration: None,
+            curves: vec![],
             groups: vec![],
         }
     }

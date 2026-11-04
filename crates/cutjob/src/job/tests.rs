@@ -24,6 +24,7 @@ fn job() -> CutJob {
         warnings: vec![],
         track_enhancing: false,
         registration: None,
+        curves: vec![],
         groups: vec![],
     }
 }
@@ -125,6 +126,7 @@ fn any_job() -> impl Strategy<Value = CutJob> {
         warnings: vec![],
         track_enhancing: false,
         registration: None,
+        curves: vec![],
         groups: vec![],
     })
 }

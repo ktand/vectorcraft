@@ -323,6 +323,17 @@ fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             }
         }
     });
+    // C4.14: curves sent as the machine's own curves.
+    let mut curves = s["sendCurves"].as_bool().unwrap_or(true);
+    widgets::label_row(ui, tl!("Send Curves"), LABEL_W, |ui| {
+        if ui
+            .checkbox(&mut curves, "")
+            .on_hover_text(tl!("Curves go to the machine as curves, which it cuts smoother than the short straight lines they are otherwise cut as. Off: straight lines, as older versions sent."))
+            .changed()
+        {
+            set(app, json!({ "sendCurves": curves }));
+        }
+    });
     // C14.6: the order paths are cut in (each inside another first, unless as in the document).
     let orders = vectorcraft_cutjob::Ordering::ALL;
     let labels = ["Shortest Travel", "Fewest Roller Moves", "As in the Document"];

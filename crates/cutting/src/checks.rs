@@ -144,7 +144,7 @@ mod tests {
     use super::*;
 
     fn poly(node: u64, closed: bool, pts: &[[f64; 2]]) -> Polyline {
-        Polyline { op: OpKind::Cut, source: SourceRef { node, subpath: 0 }, closed, points: pts.to_vec() }
+        Polyline { op: OpKind::Cut, source: SourceRef { node, subpath: 0 }, closed, points: pts.to_vec(), curve: None }
     }
 
     fn square(node: u64, x: f64, y: f64, s: f64) -> Polyline {

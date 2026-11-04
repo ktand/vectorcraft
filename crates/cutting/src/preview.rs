@@ -104,6 +104,7 @@ mod tests {
             warnings: vec![],
             track_enhancing: false,
             registration: None,
+            curves: vec![],
             groups: vec![],
         };
         let svg = to_svg(&job);

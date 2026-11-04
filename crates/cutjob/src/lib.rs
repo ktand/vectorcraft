@@ -16,7 +16,9 @@
 mod job;
 pub mod marks;
 mod mat;
+// Fork (C4.9, C4.14): paths as the machine's own curves.
 mod material;
+mod native;
 mod read;
 mod settings;
 mod simulate;
@@ -30,6 +32,7 @@ pub use mat::{MAT_PRESETS, MatGeometry, ROLL, RectMm};
 pub use material::{
     GroupSetup, MAX_MATERIALS, MAX_NAME, MAX_ROLL_MM, Material, Peel, Press, Pressure, Price, builtin_materials, read_materials, valid_name,
 };
+pub use native::{Native, Piece};
 pub use settings::{
     CuttingSettings, DOCUMENT_KEY, GroupOptions, Grouping, MAX_GROUP_NAME, MAX_GROUP_SETUPS, Op, Operations, Ordering, Orientation, SETTINGS_VERSION,
     ToolSettings,

@@ -21,6 +21,7 @@ fn job(square: ToolSettings, line: ToolSettings) -> CutJob {
         warnings: vec![],
         track_enhancing: false,
         registration: None,
+        curves: vec![],
         groups: vec![],
     }
 }

@@ -131,7 +131,7 @@ fn perforated(d: &Document, s: &CuttingSettings, items: &[select::Item], polylin
         match patterns.get(&p.source.node) {
             Some(pattern) => {
                 for points in perforate::dashes(&p.points, p.closed, pattern) {
-                    out.push(prepare::Polyline { op: p.op, source: p.source, closed: false, points });
+                    out.push(prepare::Polyline { op: p.op, source: p.source, closed: false, points, curve: None });
                 }
             }
             None => out.push(p),
@@ -268,6 +268,9 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
             Operation { kind, tool }
         })
         .collect();
+    // C4.14: each path's curve, for a machine that cuts curves, when the settings send them.
+    let curves: Vec<Option<vectorcraft_cutjob::Native>> =
+        if s.send_curves { ordered.iter().map(|(p, _)| p.curve.as_ref().map(|c| c.native.clone())).collect() } else { vec![] };
     let paths = ordered
         .into_iter()
         .map(|(p, slot)| Toolpath {
@@ -286,8 +289,21 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
         track_enhancing: s.track_enhancing,
         groups,
         registration,
+        curves,
     };
+    // A path the corner overcut adds to is cut as its points: the curve doesn't have the runs.
+    let before: Vec<usize> = job.paths.iter().map(|p| p.points.len()).collect();
     corners::overcut_corners(&mut job);
+    for (i, p) in job.paths.iter().enumerate() {
+        if before.get(i) != Some(&p.points.len())
+            && let Some(c) = job.curves.get_mut(i)
+        {
+            *c = None;
+        }
+    }
+    if job.curves.iter().all(Option::is_none) {
+        job.curves.clear();
+    }
     job.validate().map_err(BuildError::Invalid)?;
     Ok(job)
 }

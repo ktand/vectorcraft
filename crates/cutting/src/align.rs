@@ -29,7 +29,7 @@ pub fn cross(paths: &[Polyline], area: RectMm) -> Option<Vec<Polyline>> {
     // Top left, top right, bottom left, bottom right.
     let corners = [(b.x0 - off, b.y0 - off), (b.x1 + off, b.y0 - off), (b.x0 - off, b.y1 + off), (b.x1 + off, b.y1 + off)];
     let (cx, cy) = corners.into_iter().find(|&(x, y)| x - r >= area.x0 && x + r <= area.x1 && y - r >= area.y0 && y + r <= area.y1)?;
-    let arm = |a: [f64; 2], z: [f64; 2]| Polyline { op: OpKind::Cut, source: SOURCE, closed: false, points: vec![a, z] };
+    let arm = |a: [f64; 2], z: [f64; 2]| Polyline { op: OpKind::Cut, source: SOURCE, closed: false, points: vec![a, z], curve: None };
     Some(vec![arm([cx - r, cy], [cx + r, cy]), arm([cx, cy - r], [cx, cy + r])])
 }
 
@@ -43,6 +43,7 @@ mod tests {
             source: SourceRef { node: 5, subpath: 0 },
             closed: true,
             points: vec![[x, y], [x + s, y], [x + s, y + s], [x, y + s]],
+            curve: None,
         }
     }
 

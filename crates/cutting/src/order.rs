@@ -134,11 +134,12 @@ fn inner_counts(paths: &[Polyline], b: &[RectMm]) -> (Vec<usize>, Vec<Vec<usize>
     (inside, containers)
 }
 
-/// `p` started where it is nearest `at`: a closed path turned to its nearest point, an open one
-/// reversed when its last point is nearer. With the distance to that start.
+/// `p` started where it is nearest `at`: a closed path turned to its nearest point (one where a
+/// piece of its curve starts, when it has one), an open one reversed when its last point is
+/// nearer. With the distance to that start.
 fn nearest_start(p: &Polyline, at: [f64; 2]) -> (f64, Option<usize>, bool) {
     if p.closed {
-        let best = p.points.iter().enumerate().map(|(i, q)| (dist(at, *q), i)).min_by(|a, b| a.0.total_cmp(&b.0));
+        let best = p.start_points().into_iter().filter_map(|i| Some((dist(at, *p.points.get(i)?), i))).min_by(|a, b| a.0.total_cmp(&b.0));
         best.map_or((f64::INFINITY, None, false), |(d, i)| (d, Some(i), false))
     } else {
         let first = p.points.first().map_or(f64::INFINITY, |q| dist(at, *q));
@@ -178,10 +179,10 @@ fn order_group(paths: Vec<Polyline>, at: [f64; 2], work: usize) -> Vec<Polyline>
         let Some((_, i, rotate, reverse)) = best else { break };
         let Some(mut p) = slots.get_mut(i).and_then(Option::take) else { break };
         if let Some(r) = rotate {
-            p.points.rotate_left(r);
+            p.start_at(r);
         }
         if reverse {
-            p.points.reverse();
+            p.reverse();
         }
         for &c in containers.get(i).into_iter().flatten() {
             if let Some(n) = waiting_inside.get_mut(c) {
@@ -280,12 +281,12 @@ fn improve(paths: &mut [Polyline], ids: &mut [usize], containers: &[Vec<usize>],
             }
             *work = work.saturating_sub(p.points.len());
             let cost = |q: [f64; 2]| dist(prev, q) + next.map_or(0.0, |s| dist(q, s));
-            let best = p.points.iter().enumerate().map(|(i, q)| (cost(*q), i)).min_by(|a, b| a.0.total_cmp(&b.0));
+            let best = p.start_points().into_iter().filter_map(|i| Some((cost(*p.points.get(i)?), i))).min_by(|a, b| a.0.total_cmp(&b.0));
             if let (Some((c, b)), Some(&now)) = (best, p.points.first())
                 && b != 0
                 && c < cost(now) - 1e-9
             {
-                p.points.rotate_left(b);
+                p.start_at(b);
                 improved = true;
             }
         }
@@ -309,7 +310,7 @@ fn turn(paths: &mut [Polyline], ids: &mut [usize], pos: &mut [usize], i: usize, 
     if let Some(seg) = paths.get_mut(i..=j) {
         seg.reverse();
         for p in seg.iter_mut().filter(|p| !p.closed) {
-            p.points.reverse();
+            p.reverse();
         }
     }
     if let Some(seg) = ids.get_mut(i..=j) {

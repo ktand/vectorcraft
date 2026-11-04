@@ -161,6 +161,7 @@ fn curve_job(s: &Session, p: &Value, cmd: &str) -> Result<(CutJob, Vec<Option<Na
         track_enhancing: settings.track_enhancing,
         groups: vec![],
         registration: None,
+        curves: vec![],
     };
     job.validate().map_err(|e| bad(cmd, e.to_string()))?;
     Ok((job, native, rows))
@@ -175,7 +176,7 @@ fn job_only(s: &mut Session, p: &Value) -> Result<Value> {
     let kinds: Vec<Value> = native
         .iter()
         .map(|n| match n {
-            Some(Native::Bezier(_)) => json!("bezier"),
+            Some(Native::Bezier(_) | Native::Path { .. }) => json!("bezier"),
             Some(Native::Circle { .. }) => json!("circle"),
             None => Value::Null,
         })

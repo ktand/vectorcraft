@@ -433,6 +433,9 @@ pub struct CuttingSettings {
     /// Alignment marks (C18.10): in a grouped job, a small cross cut at the same place in every
     /// group, outside the design, to line the layers up by.
     pub align_marks: bool,
+    /// Curves sent as curves (C4.14): a machine that cuts its own curves gets a path's Béziers
+    /// rather than the short straight moves they flatten to, where the path is left whole.
+    pub send_curves: bool,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -475,6 +478,7 @@ impl Default for CuttingSettings {
             detail_speed_mm_s: 30.0,
             detail_size_mm: 10.0,
             align_marks: false,
+            send_curves: true,
             extra: Map::new(),
         }
     }
@@ -486,7 +490,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 35] = [
+    const KEYS: [&'static str; 36] = [
         "version",
         "mat",
         "customMatMm",
@@ -522,6 +526,7 @@ impl CuttingSettings {
         "detailSpeedMmS",
         "detailSizeMm",
         "alignMarks",
+        "sendCurves",
     ];
 
     /// The weed box's margin and the weed lines' spacing (0: one from each side's middle), mm.
@@ -605,6 +610,7 @@ impl CuttingSettings {
             detail_speed_mm_s: num(m, "detailSpeedMmS", ToolSettings::SPEED_MM_S.0, ToolSettings::SPEED_MM_S.1, d.detail_speed_mm_s),
             detail_size_mm: num(m, "detailSizeMm", Self::DETAIL_SIZE_MM.0, Self::DETAIL_SIZE_MM.1, d.detail_size_mm),
             align_marks: flag(m, "alignMarks", d.align_marks),
+            send_curves: flag(m, "sendCurves", d.send_curves),
             extra: unknown(m, &Self::KEYS),
         }
     }
@@ -652,6 +658,7 @@ impl CuttingSettings {
         m.insert("detailSpeedMmS".into(), json!(self.detail_speed_mm_s));
         m.insert("detailSizeMm".into(), json!(self.detail_size_mm));
         m.insert("alignMarks".into(), json!(self.align_marks));
+        m.insert("sendCurves".into(), json!(self.send_curves));
         if !self.group_options.is_empty() {
             let g: Map<String, Value> = self.group_options.iter().map(|(k, o)| (k.clone(), json!({"off": o.off, "pause": o.pause}))).collect();
             m.insert("groupOptions".into(), Value::Object(g));

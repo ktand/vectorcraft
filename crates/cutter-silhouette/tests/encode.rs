@@ -24,6 +24,7 @@ fn job(ops: Vec<Operation>, paths: Vec<Toolpath>, mat: &str) -> CutJob {
         warnings: vec![],
         track_enhancing: false,
         registration: None,
+        curves: vec![],
         groups: vec![],
     }
 }
@@ -479,6 +480,29 @@ fn the_tools_answer_is_read() {
     });
 }
 
+/// C4.14: a design's path carried in the job as lines and cubics: sent as `D` and `BZ1` from a
+/// blade-up move to its start, each pass, a closed one's overcut the first stretch of it again.
+#[test]
+fn a_jobs_own_curves_as_bytes() {
+    use vectorcraft_cutjob::{Native, Piece};
+    let mut j = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 2.0) }],
+        vec![path(0, true, &[[10.0, 10.0], [20.0, 10.0], [20.0, 20.0]])],
+        "silhouette.12x12",
+    );
+    j.curves = vec![Some(Native::Path {
+        start: [10.0, 10.0],
+        pieces: vec![Piece::Line([20.0, 10.0]), Piece::Cubic([25.0, 15.0], [25.0, 20.0], [20.0, 20.0]), Piece::Line([10.0, 10.0])],
+    })];
+    let text = String::from_utf8_lossy(&Silhouette.encode(&j, &cameo4()).unwrap().chunks.concat()).replace('\u{3}', " ");
+    let cuts = text.split_once("FC18,1,1 ").unwrap().1;
+    assert_eq!(cuts, "M200,200 D200,400 BZ1,200,400,300,500,400,500,400,400,0 D200,200 D200,240 M0,0 SO0 ", "2 mm of overcut along the first line");
+    // Without curves the same job goes as its points, with its overcut.
+    j.curves.clear();
+    let text = String::from_utf8_lossy(&Silhouette.encode(&j, &cameo4()).unwrap().chunks.concat()).replace('\u{3}', " ");
+    assert!(text.contains("M200,200 D200,400 D400,400 D200,200 D200,240"), "{text}");
+}
+
 /// C4.9: a path's native curve sent in its place, once and without overcut: Bézier pieces as
 /// `BZ1` (down, across in units, a trailing 0) from a blade-up move to the start, a circle as
 /// `W` from angle 0 (down the mat) round to 3600; the other paths as points, as before.
@@ -503,9 +527,10 @@ fn native_curves_as_bytes() {
     let cuts = text.split_once("FC18,1,1 ").unwrap().1;
     assert_eq!(
         cuts,
-        "M400,200 BZ1,400,200,400,300,500,400,600,400,0 M1100,1000 W1000,1000,100,100,0,3600 \
+        "M400,200 BZ1,400,200,400,300,500,400,600,400,0 M400,200 BZ1,400,200,400,300,500,400,600,400,0 \
+         M1100,1000 W1000,1000,100,100,0,3715 M1100,1000 W1000,1000,100,100,0,3715 \
          M2000,2000 D2000,2200 M2000,2000 D2000,2200 M0,0 SO0 ",
-        "the curves once each; the line twice (two passes)"
+        "each path twice (two passes); the closed circle's end angle 11.5 degrees past 360 (1 mm on 5 mm)"
     );
     // Without native curves, nothing changes.
     assert_eq!(Silhouette.encode_native(&j, &[], &cameo4(), [0.0, 0.0]).unwrap().chunks, Silhouette.encode(&j, &cameo4()).unwrap().chunks);

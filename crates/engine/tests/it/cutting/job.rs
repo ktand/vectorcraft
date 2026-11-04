@@ -199,3 +199,47 @@ fn the_weeding_map_is_an_svg() {
     assert!(r["data"].as_str().unwrap().contains("fill-rule=\"evenodd\""));
     assert!(r["name"].as_str().unwrap().ends_with("-weeding.svg"));
 }
+
+/// C4.14: a design's curves go in the job beside its points, in step with them whatever order and
+/// direction the paths are cut in: each curve starts at its path's first point, an open one ends
+/// at its last, a closed one comes back to its start; curved pieces stay cubics. Off with the
+/// setting; none for a perforated path.
+#[test]
+fn curves_go_in_the_job_in_step_with_the_points() {
+    use vectorcraft_cutjob::{Native, Piece};
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 600, "height": 600})).unwrap();
+    let first = s.execute("shape.ellipse", &json!({"x": 300, "y": 40, "width": 80, "height": 50})).unwrap()["id"].as_u64().unwrap();
+    s.execute("shape.ellipse", &json!({"x": 40, "y": 300, "width": 60, "height": 60})).unwrap();
+    s.execute("shape.star", &json!({"cx": 200, "cy": 200, "radius1": 50, "radius2": 20, "points": 5})).unwrap();
+    s.execute("shape.spiral", &json!({"cx": 450, "cy": 400, "radius": 60})).unwrap();
+    square(&mut s, 150.0, 150.0, 20.0);
+    let doc = s.active().unwrap().doc.clone();
+    let job = vectorcraft_cutting::build_job(&doc).unwrap();
+    assert_eq!(job.curves.len(), job.paths.len());
+    let near = |a: [f64; 2], b: [f64; 2]| (a[0] - b[0]).hypot(a[1] - b[1]) < 1e-6;
+    let mut cubics = 0;
+    for (p, c) in job.paths.iter().zip(&job.curves) {
+        let Some(Native::Path { start, pieces }) = c else { panic!("every path here has its curve: {p:?}") };
+        assert!(near(*start, p.points[0]), "starts where the points do: {start:?} {:?}", p.points[0]);
+        let end = pieces.last().unwrap().end();
+        if p.closed {
+            assert!(near(end, *start), "a closed curve comes back to its start");
+        } else {
+            assert!(near(end, *p.points.last().unwrap()), "an open curve ends where the points do");
+        }
+        cubics += pieces.iter().filter(|q| matches!(q, Piece::Cubic(..))).count();
+    }
+    assert!(cubics >= 8, "the ellipses and the spiral keep their curves: {cubics}");
+    // The setting off: no curves.
+    s.execute("cutting.settings.set", &json!({"sendCurves": false})).unwrap();
+    assert!(vectorcraft_cutting::build_job(&s.active().unwrap().doc).unwrap().curves.is_empty());
+    s.execute("cutting.settings.set", &json!({"sendCurves": true})).unwrap();
+    // A perforated path is cut in pieces: none of them has a curve.
+    s.execute("select.set", &json!({"ids": [first]})).unwrap();
+    s.execute("cutting.op.set", &json!({"op": "perforate"})).unwrap();
+    let job = vectorcraft_cutting::build_job(&s.active().unwrap().doc).unwrap();
+    let perforated: Vec<_> =
+        job.paths.iter().zip(job.curves.iter().chain(std::iter::repeat(&None))).filter(|(p, _)| p.source.node == first).collect();
+    assert!(perforated.len() > 1 && perforated.iter().all(|(_, c)| c.is_none()), "{}", perforated.len());
+}
