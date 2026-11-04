@@ -87,6 +87,19 @@ fn contour_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             Err(e) => (true, e),
         });
     }
+    // C18.5: the contour, a print bleed, Print & Cut and a cut round the sheet, in one step.
+    if ui
+        .add_enabled(selected, egui::Button::new(tl!("Make Sticker Sheet")))
+        .on_hover_text(tl!(
+            "Print & Cut on, a kiss cut round each selected design at the Offset, a print bleed, and a stronger cut round the whole sheet, cut last."
+        ))
+        .clicked()
+    {
+        c.note = Some(match app.run("cutting.stickers", json!({ "offsetMm": c.offset_mm.min(20.0), "sheetCut": true })) {
+            Ok(r) => (false, format!("{} {}", r["pieces"], tl!("stickers, and a cut round the sheet"))),
+            Err(e) => (true, e),
+        });
+    }
     if let Some((bad, note)) = &c.note {
         ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
     }
