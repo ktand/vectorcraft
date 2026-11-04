@@ -290,6 +290,28 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
             ui.label(format!("{}: {:.0} mm", tl!("Cut length"), s.blade_mm));
             ui.label(format!("{}: {:.0} mm", tl!("Travel"), s.travel_mm));
             ui.label(format!("{}: {:.0} s", tl!("Estimated time"), made.sim.total_seconds));
+            // C18.3: the material it takes and, where the material has a price, what it costs.
+            if let Some(st) = app.session.active() {
+                let settings = vectorcraft_cutting::settings(&st.doc);
+                let listed = app.session.execute("cutting.materials", &json!({})).unwrap_or_default();
+                let prices: Vec<(String, vectorcraft_cutjob::Price)> = listed["materials"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|m| Some((m["name"].as_str()?.to_string(), vectorcraft_cutjob::Price::from_value(&m["price"])?)))
+                    .collect();
+                let price_of = |name: &str| prices.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, p)| *p);
+                let q = vectorcraft_cutting::quote::quote(&settings, j, &price_of);
+                let metres: f64 = q.shares.iter().map(|g| g.metres).sum();
+                let sheets: f64 = q.shares.iter().map(|g| g.sheets).sum();
+                let used = if metres > 0.0 { format!("{metres:.2} m") } else { format!("{sheets:.0} {}", tl!("sheets")) };
+                match q.cost {
+                    Some(c) => ui.label(format!("{}: {used} · {}: {c:.2}", tl!("Material"), tl!("Cost"))),
+                    None => {
+                        ui.label(format!("{}: {used}", tl!("Material"))).on_hover_text(tl!("Give the material a price in Cut Settings for the cost."))
+                    }
+                };
+            }
             if !j.warnings.is_empty() {
                 egui::ScrollArea::vertical().max_height(110.0).id_salt("cutting-send-warnings").show(ui, |ui| {
                     for w in j.warnings.iter().take(SHOWN_WARNINGS) {

@@ -25,6 +25,43 @@ pub struct Material {
     /// Cut from the back, as heat transfer vinyl is (C14.12): applying it turns Cut Mirrored on,
     /// and a send asks whether to cut mirrored or as is.
     pub mirror: bool,
+    /// What it costs (C18.3), for the job's quote; none: not given.
+    pub price: Option<Price>,
+}
+
+/// What a material costs (C18.3), in whatever currency the user keeps their prices in.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Price {
+    pub amount: f64,
+    /// Per sheet (a mat's worth), or per metre of a roll.
+    pub per_metre: bool,
+    /// What's spoilt or trimmed, added to a roll's length, %.
+    pub waste_pct: f64,
+}
+
+impl Price {
+    /// The amount's range.
+    pub const AMOUNT: (f64, f64) = (0.0, 1_000_000.0);
+    /// The waste's range, %.
+    pub const WASTE_PCT: (f64, f64) = (0.0, 100.0);
+
+    pub fn to_value(&self) -> Value {
+        json!({"amount": self.amount, "per": if self.per_metre { "metre" } else { "sheet" }, "wastePct": self.waste_pct})
+    }
+
+    /// Read leniently: none unless the amount is a number in range.
+    pub fn from_value(v: &Value) -> Option<Price> {
+        let amount = v.get("amount")?.as_f64().filter(|a| a.is_finite() && (Self::AMOUNT.0..=Self::AMOUNT.1).contains(a))?;
+        let per_metre = v.get("per").and_then(Value::as_str) == Some("metre");
+        let waste_pct =
+            v.get("wastePct").and_then(Value::as_f64).filter(|w| w.is_finite()).map_or(0.0, |w| w.clamp(Self::WASTE_PCT.0, Self::WASTE_PCT.1));
+        Some(Price { amount, per_metre, waste_pct })
+    }
+
+    /// The cost of `sheets` sheets, or of `metres` of a roll (the waste added).
+    pub fn cost(&self, sheets: f64, metres: f64) -> f64 {
+        if self.per_metre { self.amount * metres * (1.0 + self.waste_pct / 100.0) } else { self.amount * sheets }
+    }
 }
 
 fn tool(force: f64, speed_mm_s: f64, passes: u8) -> ToolSettings {
@@ -33,7 +70,7 @@ fn tool(force: f64, speed_mm_s: f64, passes: u8) -> ToolSettings {
 
 /// The starting points built in: light settings to test from, not tested values.
 pub fn builtin_materials() -> Vec<Material> {
-    let m = |name: &str, cut, score| Material { name: name.into(), cut, score, builtin: true, mirror: false };
+    let m = |name: &str, cut, score| Material { name: name.into(), cut, score, builtin: true, mirror: false, price: None };
     vec![
         m("Paper (light)", tool(0.2, 100.0, 1), tool(0.08, 100.0, 1)),
         m("Cardstock", tool(0.45, 80.0, 2), tool(0.15, 100.0, 1)),
@@ -55,6 +92,9 @@ impl Material {
         if let (true, Some(m)) = (self.mirror, v.as_object_mut()) {
             m.insert("mirror".into(), json!(true));
         }
+        if let (Some(p), Some(m)) = (self.price, v.as_object_mut()) {
+            m.insert("price".into(), p.to_value());
+        }
         v
     }
 
@@ -70,6 +110,7 @@ impl Material {
             score: ToolSettings::read_lenient(object(m, "score"), defaults.score),
             builtin: false,
             mirror: m.get("mirror").and_then(Value::as_bool) == Some(true),
+            price: m.get("price").and_then(Price::from_value),
         })
     }
 }
@@ -135,9 +176,26 @@ pub fn read_materials(v: &Value) -> Vec<Material> {
 mod tests {
     use super::*;
 
+    /// A price round-trips; one out of range or not a number is none.
+    #[test]
+    fn prices_round_trip() {
+        let p = Price { amount: 2.5, per_metre: true, waste_pct: 10.0 };
+        assert_eq!(Price::from_value(&p.to_value()), Some(p));
+        assert!((p.cost(0.0, 2.0) - 5.5).abs() < 1e-9);
+        assert!((Price { per_metre: false, ..p }.cost(3.0, 0.0) - 7.5).abs() < 1e-9);
+        for bad in [json!({}), json!({"amount": "2"}), json!({"amount": -1}), json!({"amount": 2e9})] {
+            assert_eq!(Price::from_value(&bad), None, "{bad}");
+        }
+        let mut m = builtin_materials()[0].clone();
+        m.builtin = false;
+        m.price = Some(p);
+        assert_eq!(Material::from_value(&m.to_value()).and_then(|m| m.price), Some(p));
+    }
+
     #[test]
     fn materials_round_trip_through_their_file() {
-        let user = Material { name: "My vinyl".into(), cut: tool(0.3, 90.0, 1), score: tool(0.1, 100.0, 1), builtin: false, mirror: false };
+        let user =
+            Material { name: "My vinyl".into(), cut: tool(0.3, 90.0, 1), score: tool(0.1, 100.0, 1), builtin: false, mirror: false, price: None };
         let file = json!([user.to_value()]);
         assert_eq!(read_materials(&file), std::slice::from_ref(&user));
         assert!(file[0].get("mirror").is_none(), "only a mark is written");
@@ -151,7 +209,7 @@ mod tests {
     #[test]
     fn the_blade_setup_is_kept() {
         let cut = ToolSettings { depth: Some(4), accel: Some(2), corner_overcut_mm: 0.3, blade_offset_mm: Some(0.25), ..tool(0.3, 90.0, 1) };
-        let user = Material { name: "Thick card".into(), cut, score: tool(0.1, 100.0, 1), builtin: false, mirror: false };
+        let user = Material { name: "Thick card".into(), cut, score: tool(0.1, 100.0, 1), builtin: false, mirror: false, price: None };
         let back = read_materials(&json!([user.to_value()]));
         assert_eq!(back, std::slice::from_ref(&user));
         assert!(back[0].cut.same_setup(&user.cut));

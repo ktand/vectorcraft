@@ -428,6 +428,14 @@ A contour (section 5) is the usual cut line for printed stickers.
 The summary at the top of Cut Settings gives the number of lines, the cut length and the estimated time.
 Warnings show there and in the Send window, such as lines off the mat.
 
+### What it takes and costs
+
+Under the job's numbers the Send window says how much material the job takes (a sheet on a mat; on a roll,
+the length to the end of the last path and 10 mm more) and, when the material has a price, what that costs.
+Give one of your own materials a **Price** in Cut Settings, per sheet or per metre (a roll's length gets 10%
+added for waste). A built-in material can't be priced: save it as your own first. Each group of a job cut in
+groups counts its own material.
+
 ### Checks before cutting
 
 The job is looked over for what usually spoils a cut, and the Send window says so (click a warning to select

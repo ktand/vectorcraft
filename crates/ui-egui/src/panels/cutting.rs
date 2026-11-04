@@ -470,6 +470,24 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             error = app.run("cutting.material.delete", json!({ "name": c })).err();
         }
     });
+    // C18.3: a material of the user's has a price, for the job's quote.
+    if let Some(c) = &current
+        && let Some(m) = info["materials"].as_array().into_iter().flatten().find(|m| m["name"] == *c && m["builtin"] == false)
+    {
+        let price = &m["price"];
+        let amount = price["amount"].as_f64();
+        let per_metre = price["per"] == "metre";
+        widgets::label_row(ui, tl!("Price"), LABEL_W, |ui| {
+            let r = widgets::spin_plain(ui, ("cutting", "material-price"), amount.unwrap_or(0.0), "", 2, 70.0, 0.1, 0.0, &[]);
+            let pers = [tl!("per sheet"), tl!("per metre")];
+            let per = widgets::dropdown(ui, ("cutting", "material-price-per"), pers[usize::from(per_metre)], &pers, 90.0);
+            let (amount, per_metre) = (r.unwrap_or(amount.unwrap_or(0.0)), per.map_or(per_metre, |i| i == 1));
+            if r.is_some() || per.is_some() {
+                let p = json!({ "name": c, "amount": amount.max(0.0), "per": if per_metre { "metre" } else { "sheet" }, "wastePct": price["wastePct"].as_f64().unwrap_or(10.0) });
+                error = app.run("cutting.material.price", p).err();
+            }
+        });
+    }
     if let Some(e) = &error {
         ui.label(egui::RichText::new(e).color(t.bleed));
     }

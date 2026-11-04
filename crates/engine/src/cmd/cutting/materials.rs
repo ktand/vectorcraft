@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use serde_json::{Value, json};
-use vectorcraft_cutjob::{CuttingSettings, Material, ToolSettings, builtin_materials, read_materials, valid_name};
+use vectorcraft_cutjob::{CuttingSettings, Material, Price, ToolSettings, builtin_materials, read_materials, valid_name};
 
 use super::{CommandSpec, Result, Session, bad, cmd, has_doc, str_param};
 
@@ -81,7 +81,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Materials",
             [],
             None,
-            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, mirror: cut from the back (Send asks whether to cut mirrored), cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since}",
+            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, mirror: cut from the back (Send asks whether to cut mirrored), price: {amount, per: sheet|metre, wastePct} or null (C18.3), cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since}",
             has_doc,
             list
         ),
@@ -104,6 +104,15 @@ pub fn specs() -> Vec<CommandSpec> {
             save_cmd
         ),
         cmd!(
+            "cutting.material.price",
+            "Set Cutting Material Price",
+            [],
+            None,
+            "{name, amount: 0–1000000 or null (no price), per?: sheet|metre (default sheet: a mat's worth; metre: of a roll), wastePct?: 0–100 (default 10: added to a roll's length)} the price of the user's material `name` (built-in ones can't be changed: save it as your own first), for the job's quote (cutting.job's quote) → as cutting.materials",
+            has_doc,
+            price_cmd
+        ),
+        cmd!(
             "cutting.material.delete",
             "Delete Cutting Material",
             [],
@@ -119,7 +128,7 @@ fn listing(s: &Session) -> Result<Value> {
     let settings = vectorcraft_cutting::settings(&s.doc()?.doc);
     let materials: Vec<Value> = all()
         .iter()
-        .map(|m| json!({"name": m.name, "builtin": m.builtin, "mirror": m.mirror, "cut": m.cut.to_value(), "score": m.score.to_value()}))
+        .map(|m| json!({"name": m.name, "builtin": m.builtin, "mirror": m.mirror, "price": m.price.map(|p| p.to_value()), "cut": m.cut.to_value(), "score": m.score.to_value()}))
         .collect();
     Ok(json!({"materials": materials, "current": settings.material, "changed": changed(&settings)}))
 }
@@ -162,6 +171,46 @@ fn apply(s: &mut Session, p: &Value) -> Result<Value> {
     listing(s)
 }
 
+fn price_cmd(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "cutting.material.price";
+    let name = name_param(p, CMD)?;
+    super::check_numbers(p, &["wastePct"], CMD)?;
+    let price = match p.get("amount") {
+        Some(Value::Null) => None,
+        Some(v) => {
+            let amount = v
+                .as_f64()
+                .filter(|a| a.is_finite() && (Price::AMOUNT.0..=Price::AMOUNT.1).contains(a))
+                .ok_or_else(|| bad(CMD, "amount is 0–1000000, or null"))?;
+            let per_metre = match p.get("per").and_then(Value::as_str) {
+                None | Some("sheet") => false,
+                Some("metre") => true,
+                Some(other) => return Err(bad(CMD, format!("per is sheet or metre, not {other:?}"))),
+            };
+            let waste_pct = p.get("wastePct").and_then(Value::as_f64).unwrap_or(10.0);
+            if !(Price::WASTE_PCT.0..=Price::WASTE_PCT.1).contains(&waste_pct) {
+                return Err(bad(CMD, "wastePct is 0–100"));
+            }
+            Some(Price { amount, per_metre, waste_pct })
+        }
+        None => return Err(bad(CMD, "amount is required (null: no price)")),
+    };
+    if builtin_materials().iter().any(|m| m.name.eq_ignore_ascii_case(&name)) {
+        return Err(bad(CMD, format!("{name:?} is a built-in material: save it as your own to give it a price")));
+    }
+    {
+        let mut st = store().lock().map_err(|_| bad(CMD, "the materials are damaged"))?;
+        let m = st
+            .user
+            .iter_mut()
+            .find(|u| u.name.eq_ignore_ascii_case(&name))
+            .ok_or_else(|| bad(CMD, format!("no material of yours named {name:?}")))?;
+        m.price = price;
+        save(&st).map_err(|e| bad(CMD, format!("the price is kept until VectorCraft closes, but couldn't be saved: {e}")))?;
+    }
+    listing(s)
+}
+
 fn save_cmd(s: &mut Session, p: &Value) -> Result<Value> {
     const CMD: &str = "cutting.material.save";
     let name = name_param(p, CMD)?;
@@ -175,6 +224,8 @@ fn save_cmd(s: &mut Session, p: &Value) -> Result<Value> {
         score: ToolSettings { tool: None, ..settings.operations.score.clone() },
         builtin: false,
         mirror: settings.mirror,
+        // Saved again under its name, it keeps its price (C18.3).
+        price: find(&name).and_then(|old| old.price),
     };
     {
         let mut st = store().lock().map_err(|_| bad(CMD, "the materials are damaged"))?;

@@ -118,7 +118,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Job",
             [],
             None,
-            "{} the cut job the document makes with its cutting settings, in cutting order (the document isn't changed) → {job: {version, mat: {id, sizeMm, cutAreaMm}, operations: [{kind: score|cut, force, speedMmS, passes, overcutMm}], paths: [{op: index into operations, source: {node: object id, subpath}, closed, points: [[x, y] mm on the mat]}], warnings: [{source, message}]}, stats: {pathCount, pointCount, pathMm, bladeMm, travelMm}}; an error when art leaves the cut area (unless clipToMat) or the settings' artboard is missing",
+            "{} the cut job the document makes with its cutting settings, in cutting order (the document isn't changed) → {job: {version, mat: {id, sizeMm, cutAreaMm}, operations: [{kind: score|cut, force, speedMmS, passes, overcutMm}], paths: [{op: index into operations, source: {node: object id, subpath}, closed, points: [[x, y] mm on the mat]}], warnings: [{source, message}]}, stats: {pathCount, pointCount, pathMm, bladeMm, travelMm}, quote: {seconds: the cut's time, groups: [{name, material, sheets, metres: of a roll, cost: null when its material has no price}], cost: the whole job's, or null} (C18.3)}; an error when art leaves the cut area (unless clipToMat) or the settings' artboard is missing",
             has_doc,
             job
         ),
@@ -301,8 +301,11 @@ fn simulate(s: &mut Session, p: &Value) -> Result<Value> {
 }
 
 fn job(s: &mut Session, _: &Value) -> Result<Value> {
-    let job = vectorcraft_cutting::build_job(&s.doc()?.doc).map_err(|e| bad("cutting.job", e.to_string()))?;
-    Ok(json!({"job": job.to_value(), "stats": job.stats().to_value()}))
+    let d = &s.doc()?.doc;
+    let job = vectorcraft_cutting::build_job(d).map_err(|e| bad("cutting.job", e.to_string()))?;
+    let price_of = |name: &str| materials::find(name).and_then(|m| m.price);
+    let quote = vectorcraft_cutting::quote::quote(&vectorcraft_cutting::settings(d), &job, &price_of);
+    Ok(json!({"job": job.to_value(), "stats": job.stats().to_value(), "quote": quote.to_value()}))
 }
 
 fn mat_json(m: &MatGeometry) -> Value {

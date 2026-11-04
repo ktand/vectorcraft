@@ -44,6 +44,7 @@ pub mod popup;
 pub mod prepare;
 pub mod preview;
 pub mod puzzle;
+pub mod quote;
 pub mod select;
 pub mod setups;
 pub mod stones;

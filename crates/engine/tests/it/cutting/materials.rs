@@ -13,6 +13,32 @@ fn names(v: &Value) -> Vec<String> {
     v["materials"].as_array().unwrap().iter().map(|m| m["name"].as_str().unwrap().to_string()).collect()
 }
 
+/// C18.3: a price on the user's material "My card" (applied), kept when it is saved again, and the
+/// job's quote.
+fn prices(s: &mut Session) {
+    s.execute("shape.rectangle", &json!({"x": 50, "y": 50, "width": 100, "height": 100})).unwrap();
+    s.execute("cutting.material.apply", &json!({"name": "My card"})).unwrap();
+    for bad in [
+        json!({"name": "My card"}),
+        json!({"name": "My card", "amount": -1}),
+        json!({"name": "My card", "amount": 1, "per": "yard"}),
+        json!({"name": "My card", "amount": 1, "wastePct": 200}),
+        json!({"name": "Vinyl", "amount": 1}),
+        json!({"name": "Nothing", "amount": 1}),
+    ] {
+        assert!(s.execute("cutting.material.price", &bad).is_err(), "{bad}");
+    }
+    let q = s.execute("cutting.job", &json!({})).unwrap()["quote"].clone();
+    assert!(q["seconds"].as_f64().unwrap() > 0.0);
+    assert_eq!(q["cost"], Value::Null, "no price yet");
+    s.execute("cutting.material.price", &json!({"name": "My card", "amount": 1.25})).unwrap();
+    s.execute("cutting.material.save", &json!({"name": "My card"})).unwrap();
+    let m = materials(s)["materials"].as_array().unwrap().iter().find(|m| m["name"] == "My card").unwrap().clone();
+    assert_eq!(m["price"]["amount"], json!(1.25), "kept when saved again");
+    let q = s.execute("cutting.job", &json!({})).unwrap()["quote"].clone();
+    assert_eq!((q["groups"][0]["sheets"].clone(), q["cost"].clone()), (json!(1.0), json!(1.25)));
+}
+
 #[test]
 fn materials_are_applied_saved_and_kept() {
     let dir = std::env::temp_dir().join(format!("vectorcraft-materials-{}", std::process::id()));
@@ -76,6 +102,8 @@ fn materials_are_applied_saved_and_kept() {
     s.execute("cutting.material.apply", &json!({"name": "My iron-on"})).unwrap();
     assert_eq!(mirror(&mut s), json!(true));
     s.execute("cutting.material.delete", &json!({"name": "My iron-on"})).unwrap();
+
+    prices(&mut s);
 
     // Built-in names and unknown ones are refused; the user's own can go.
     assert!(s.execute("cutting.material.save", &json!({"name": "Vinyl"})).is_err());
