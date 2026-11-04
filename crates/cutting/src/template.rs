@@ -11,6 +11,7 @@ use vectorcraft_geom::{Anchor, PathData, Point, SubPath};
 
 mod boxes;
 mod cards;
+mod gable;
 pub mod mesh;
 mod more;
 pub mod papercraft;
@@ -167,6 +168,7 @@ pub const KINDS: &[Kind] = &[
     boxes::PILLOW,
     more::CARTON,
     more::DRAWER,
+    gable::GABLE,
     cards::ENVELOPE,
     cards::POINTED_ENVELOPE,
     cards::PLACE_CARD,
