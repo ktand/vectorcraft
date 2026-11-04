@@ -44,8 +44,11 @@ mod windows_usb {
 
     /// The USB printer device interface (GUID_DEVINTERFACE_USBPRINT).
     const USBPRINT: GUID = GUID::from_u128(0x28d78fad_5a12_11d1_ae5b_0000f803a8c2);
-    /// How long one write may take, ms.
-    const WRITE_TIMEOUT_MS: u32 = 10_000;
+    /// How long one write may take, ms. The sender doesn't wait for the machine to finish between
+    /// chunks (a stop at every chunk's end otherwise), so a write waits while the machine's buffer
+    /// is full and goes as it cuts and makes room: a chunk of long slow lines can take minutes.
+    /// Ten minutes, as long as the sender waits for a busy machine; one unplugged fails at once.
+    const WRITE_TIMEOUT_MS: u32 = 600_000;
     /// The longest device path read.
     const MAX_PATH_BYTES: u32 = 4_096;
 

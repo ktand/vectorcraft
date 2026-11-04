@@ -56,15 +56,26 @@ fn run(t: &mut MemoryTransport, chunks: &[&str]) -> (Result<(), SendError>, Prog
 }
 
 #[test]
-fn each_chunk_goes_once_the_machine_is_ready() {
+fn the_first_chunk_goes_once_the_machine_is_ready_the_rest_straight_after() {
     let mut t = MemoryTransport::answering(b"R");
     t.state.lock().unwrap().replies.extend([b"M".to_vec(), b"M".to_vec()]);
-    let (r, p) = run(&mut t, &["a", "b"]);
+    let (r, p) = run(&mut t, &["a", "b", "c"]);
     assert_eq!(r, Ok(()));
-    assert_eq!((p.chunks_sent, p.chunks, p.outcome), (2, 2, Some(Ok(()))));
+    assert_eq!((p.chunks_sent, p.chunks, p.outcome), (3, 3, Some(Ok(()))));
     let writes = t.state.lock().unwrap().writes.clone();
-    let want: Vec<&[u8]> = vec![b"?", b"?", b"?", b"a", b"?", b"b"];
-    assert_eq!(writes, want, "asked until ready, twice moving first");
+    let want: Vec<&[u8]> = vec![b"?", b"?", b"?", b"a", b"b", b"c"];
+    assert_eq!(writes, want, "asked until ready, twice moving first; then no stop between chunks");
+}
+
+/// A machine still cutting the chunk before gets the next one at once: waiting for it to finish
+/// would stop it at every chunk's end (the pause seen mid-job on the Cameo 4).
+#[test]
+fn a_busy_machine_gets_the_next_chunk_without_a_stop() {
+    let mut t = MemoryTransport::answering(b"M");
+    t.state.lock().unwrap().replies.push_front(b"R".to_vec());
+    let (r, p) = run(&mut t, &["a", "b", "c"]);
+    assert_eq!((r, p.chunks_sent), (Ok(()), 3));
+    assert_eq!(t.written(), b"?abc");
 }
 
 #[test]
@@ -116,7 +127,7 @@ fn a_spawned_send_reports_its_outcome() {
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     assert_eq!(running.progress().outcome, Some(Ok(())));
-    assert_eq!(seen.written(), b"?a?b?c");
+    assert_eq!(seen.written(), b"?abc");
 }
 
 struct OneMachine;

@@ -10,7 +10,7 @@ These are facts about how a computer talks to a Silhouette cutter: what it sends
 which units. They are written in our own words, with the source of each. Encoders are written from this page,
 not from the sources.
 
-**Silhouette Studio.** Never capture or watch what Silhouette Studio sends to or gets from a machine: its licence forbids it, and no fact here comes from such a capture. Studio's interface is a source (**[ST]**) only where public documentation doesn't cover the fact; see [ARCHITECTURE.md › R2](ARCHITECTURE.md) (owner decision, 2026-11-03).
+**Silhouette Studio.** Never capture or watch what Silhouette Studio sends to or gets from a machine: its licence forbids it, and no fact here comes from a capture of our own; facts others have published (inkscape-silhouette) are a source whatever their origin (owner, 2026-11-04). Studio's interface is a source (**[ST]**) only where public documentation doesn't cover the fact; see [ARCHITECTURE.md › R2](ARCHITECTURE.md) (owner decision, 2026-11-03).
 
 **Sources.**
 
@@ -84,6 +84,7 @@ relies on most are listed again in [Checks on the machine](#checks-on-the-machin
 | Status is asked for with ESC followed by ENQ (`0x1B 0x05`). The reply is one character and ETX: `0` ready, `1` moving, `2` no media loaded. | [IS]; ready with the mat loaded confirmed [HW] (the send's ready check passed); an answer asked for while the machine is busy can come late and be read with the next one's (a tools answer `2,0` before a status `0`), [HW] 2026-11-03, so each answer is told by its form |
 | ESC followed by NAK (`0x1B 0x15`) asks which tools are in the holders: a comma-separated code per holder (0 empty, 1 ratchet blade, 2 AutoBlade, 3 deep-cut blade, 4 kraft blade, 5 rotary blade, 7 pen, 255 error). | [IS]; 2 (AutoBlade, holder 1) and 0 (holder 2 empty) confirmed [HW] |
 | The firmware version is asked for with the `FG` query. | [IS], **to confirm** |
+| The machine answers `0` (ready) only once it has cut all it was sent, and `1` while it has work. A sender that waits for `0` before each part of a job therefore stops the machine at the end of each part: a box cut on 2026-11-04 paused mid-job, at the end of the first 4 KB. So only the first part waits for ready (and the parts after a group's pause or a mark search); the rest are written straight after, the machine holding a write back until its buffer has room (USB flow control), so a write may take as long as the cutting that makes room. | [HW] (the pause); straight after, **to confirm** by cutting the box again |
 
 ## A job
 

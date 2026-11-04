@@ -1,5 +1,6 @@
-//! Sending an encoded job to a machine: each chunk once the machine says it is ready, with
-//! progress, and cancelled between chunks. [`send`] does it where it is called; [`spawn`] on a
+//! Sending an encoded job to a machine: the first chunk once the machine says it is ready, the
+//! rest straight after (the machine's USB flow control holds a write back while its buffer is
+//! full), with progress, and cancelled between chunks. [`send`] does it where it is called; [`spawn`] on a
 //! thread of its own, for the app (native builds; the web build has no threads yet).
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -124,8 +125,11 @@ fn expect(t: &mut dyn Transport, check: &crate::device::Check, patience: Patienc
     if got.get(..check.expect.len()) == Some(check.expect.as_slice()) { Ok(()) } else { Err(SendError::Refused(check.failure.clone())) }
 }
 
-/// Sends `job` to `t`: each chunk once the machine is ready, and before each of the job's pauses
-/// (once the machine has finished what it has) waiting to be told to go on. `progress` follows
+/// Sends `job` to `t`: the first chunk once the machine is ready, the others straight after it,
+/// and before each of the job's pauses (once the machine has finished what it has) waiting to be
+/// told to go on. Waiting for ready before every chunk would stop the machine at each chunk's
+/// end: it answers ready only once it has cut all it was sent (the pause seen mid-job on the
+/// Cameo 4, 2026-11-04). `progress` follows
 /// it; `controls` stop it before the next chunk or resume it after a pause.
 pub fn send(
     t: &mut dyn Transport,
@@ -144,8 +148,12 @@ pub fn send(
     set(&|p| *p = Progress { chunks: job.chunks.len(), ..Progress::default() });
     let result = (|| {
         for (i, chunk) in job.chunks.iter().enumerate() {
-            wait_ready(t, driver, patience, cancel)?;
-            if let Some((_, name)) = job.pauses.iter().find(|(at, _)| *at == i) {
+            let pause = job.pauses.iter().find(|(at, _)| *at == i);
+            // Ready first, and before a pause: the machine has finished what it has.
+            if i == 0 || pause.is_some() {
+                wait_ready(t, driver, patience, cancel)?;
+            }
+            if let Some((_, name)) = pause {
                 controls.resume.store(false, Ordering::Relaxed);
                 set(&|p| p.waiting = Some(name.clone()));
                 while !controls.resume.swap(false, Ordering::Relaxed) {
