@@ -2,8 +2,9 @@
 //! text paths (`a b c d tx ty startPt Tp`, an area's frame, one for each linked area, or the path
 //! type runs along, `TP`), the modal character and paragraph attributes
 //! (`Tr Tf Ts Tz Tt TA Tl Ta Ti`, and §15.4.7 and §22's letter and word spacing `TC TW`, hanging
-//! punctuation `Tq` and hyphenation `Th`), the paint style, and the characters (`Tx`, `Tj`,
-//! overflow `TX`; `\r` ends a paragraph). Final-form operators (the
+//! punctuation `Tq`, hyphenation `Th` and tab stops `Xb Xe XB`), the paint style, and the characters (`Tx`, `Tj`,
+//! overflow `TX`; `\r` ends a paragraph). Type set in rendering modes 4 to 7 is a mask (§5.7): the
+//! text object clips the objects of its clipping group. Final-form operators (the
 //! computed positions, §15.1) are skipped: the type is laid out again. Strings are decoded by the
 //! encoding pairs of the current font's `TZ`, then by the file's `TE` encoding unless that `TZ`'s
 //! `useDefault` is 0, else as Windows-1252; a re-encoded font `/_name` is the font its `%AI3_BeginEncoding` or `TZ` names
@@ -11,12 +12,12 @@
 
 use kurbo::{Affine, BezPath, ParamCurve, ParamCurveArclen};
 use vectorcraft_color::Paint;
-use vectorcraft_doc::{CharStyle, Justify, NodeKind, ParaStyle, TextKind, TextObject, TextRun};
+use vectorcraft_doc::{CharStyle, Justify, NodeKind, ParaStyle, TabAlign, TabStop, TextKind, TextObject, TextRun};
 use vectorcraft_geom::AnchorKind;
 
 use super::super::obj::V;
 use super::art::path_data;
-use super::{FLIP, GState, HashSet, Node, NodeId, Reader};
+use super::{FLIP, GState, HashSet, Kind, Node, NodeId, Reader};
 use crate::latin;
 
 /// Most characters of type read in one file.
@@ -25,6 +26,10 @@ const MAX_CHARS: usize = 1 << 22;
 const MAX_SIZE: f64 = 1e4;
 /// Most re-encoded fonts read in one file, for their names and for their encodings each.
 const MAX_FONTS: usize = 4096;
+/// Most tab stops read in one tab definition.
+const MAX_TABS: usize = 1024;
+/// Largest tab stop position read (points), as `text.tabs.set` takes it.
+const MAX_TAB_POSITION: f64 = 100_000.0;
 /// Most values read before one operator in a re-encoding section.
 const MAX_ENCODING_VALUES: usize = 1024;
 /// Most text paths read in one text object (its linked areas); the frames of others are left out,
@@ -36,6 +41,9 @@ const MAX_TEXT_PATHS: usize = 4096;
 const MAX_THREAD_WORK: usize = MAX_CHARS;
 /// The warning when [`MAX_TEXT_PATHS`] or [`MAX_THREAD_WORK`] leaves frames of linked areas out.
 const LINKED_AREAS_LEFT_OUT: &str = "linked type areas past VectorCraft's limits were left out";
+/// The warning when type set in a mask rendering mode can't be a clipping path: type in linked
+/// areas (several frames), in wraparound text or in a compound path doesn't clip.
+const MASK_NOT_CLIPPED: &str = "type used as a mask in linked areas, wraparound text or a compound path doesn't clip";
 
 /// A text path (`Tp` … `TP`).
 #[derive(Debug, Default)]
@@ -67,6 +75,9 @@ pub(super) struct LegacyText {
     para_taken: bool,
     /// An overflow paragraph break (`(\r) TX`) not yet followed by type: the story's end.
     pending_break: bool,
+    /// Characters were set in a mask rendering mode (`Tr` 4 to 7): the text object is a clipping
+    /// path (§5.7).
+    clips: bool,
     /// The state when it began (lock, visibility), and whether it began on a `%_` line.
     gs: GState,
     hidden: bool,
@@ -88,6 +99,8 @@ pub(super) struct TypeState {
     font_encodings: Vec<(String, Vec<Option<char>>, bool)>,
     /// The font `Tf` set last, as the file names it.
     font: Option<String>,
+    /// Between `Xb` and `XB`: the tab stops of the tab definition read so far.
+    tabs: Option<Vec<TabStop>>,
     chars: usize,
 }
 
@@ -101,6 +114,7 @@ impl Default for TypeState {
             fonts: vec![],
             font_encodings: vec![],
             font: None,
+            tabs: None,
             chars: 0,
         }
     }
@@ -278,6 +292,8 @@ impl Reader<'_> {
             self.unreadable("type in a pattern", false);
         }
         let kind = nums::<1>(vals).map_or(0, |[k]| k as i64);
+        // A tab definition left open by an earlier text object (an `Xb` with no `XB`) ends here.
+        self.type_state.tabs = None;
         self.text = Some(LegacyText { kind, gs: self.gs.clone(), hidden, ..LegacyText::default() });
     }
 
@@ -330,8 +346,9 @@ impl Reader<'_> {
         let st = &mut self.type_state;
         let n0 = nums::<1>(vals).map(|[v]| v);
         match w {
+            // `render Tr`: a mode from 0 to 9 (§15.4.5.1).
             "Tr" => {
-                if let Some(v) = n0 {
+                if let Some(v) = n0.filter(|v| v.fract() == 0.0 && (0.0..=9.0).contains(v)) {
                     st.render = v as i64;
                 }
             }
@@ -442,6 +459,37 @@ impl Reader<'_> {
                 h.before_last = letters(tail, 1.0, 15.0);
                 h.hyphen_limit = if limit { letters(max, 0.0, 25.0) } else { 0 };
             }
+            // A tab definition (§22.6): `numDots numTabs Xb` begins it, each
+            // `leader decimal tabType tabPosition Xe` describes one tab stop, and `XB` ends it. The
+            // stops it describes replace the paragraph's tab stops, sorted by position, one stop at
+            // each position; a definition with none (or whose descriptions were all skipped) leaves
+            // the default stops. The dot-leader distance, the count and the two reserved operands are
+            // not read. A description whose type is not 1 to 4 (left, center, right, decimal) or
+            // whose position is not a number from 0 to [`MAX_TAB_POSITION`] is skipped, and so is one
+            // outside a tab definition or past the first [`MAX_TABS`] of one. A text object's `To`
+            // ends a definition that an earlier object left open.
+            "Xb" => st.tabs = Some(vec![]),
+            "Xe" => {
+                let Some(tabs) = st.tabs.as_mut().filter(|t| t.len() < MAX_TABS) else { return };
+                let Some([kind, position]) = nums::<2>(vals) else { return };
+                let align = match kind {
+                    1.0 => TabAlign::Left,
+                    2.0 => TabAlign::Center,
+                    3.0 => TabAlign::Right,
+                    4.0 => TabAlign::Decimal,
+                    _ => return,
+                };
+                if (0.0..=MAX_TAB_POSITION).contains(&position) {
+                    tabs.push(TabStop { position, align, leader: String::new(), align_on: '.' });
+                }
+            }
+            "XB" => {
+                if let Some(mut tabs) = st.tabs.take() {
+                    tabs.sort_by(|a, b| a.position.total_cmp(&b.position));
+                    tabs.dedup_by(|a, b| (a.position - b.position).abs() < 1e-6);
+                    st.para.tabs = tabs;
+                }
+            }
             _ => {}
         }
     }
@@ -469,6 +517,9 @@ impl Reader<'_> {
         st.chars += decoded.chars().count();
         let gs = &self.gs;
         let mut style = st.style.clone();
+        // Characters in modes 4 to 7 make the whole text object the mask, not each run (§5.7); 7
+        // paints nothing, nor does 3 (invisible).
+        t.clips |= (4..=7).contains(&st.render);
         let (fill, stroke) = match st.render {
             0 | 4 => (true, false),
             1 | 5 => (false, true),
@@ -519,6 +570,8 @@ impl Reader<'_> {
         let chars: usize = t.runs.iter().map(|r| r.text.chars().count()).sum();
         let most = (MAX_THREAD_WORK / chars.max(1)).max(1);
         let all_areas = t.paths.iter().filter(|p| p.path.is_some()).count();
+        // Area type with linked areas, also when the limits leave one frame of it.
+        let linked = t.kind == 1 && (all_areas > 1 || t.past_limit);
         let areas: Vec<&TextPath> = t.paths.iter().filter(|p| p.path.is_some()).take(most).collect();
         let placed: Vec<(Affine, TextKind)> = match t.kind {
             1 if areas.len() > 1 => areas.into_iter().map(|p| placed(1, Some(p))).collect(),
@@ -550,7 +603,28 @@ impl Reader<'_> {
             nodes.push(self.new_node(NodeKind::Text(Box::new(obj)), &t.gs));
         }
         let frames: Vec<NodeId> = nodes.iter().map(|n| n.id).collect();
+        // Type used as a mask clips the objects of its clipping group, as a `W` path does. A
+        // clipping path is one object, and wraparound text and compound paths don't clip their
+        // objects with type, so the frames of linked areas and type in those don't clip, with a
+        // warning. The frames up to the clipping group or opacity mask's art are checked, a group in
+        // either included.
+        let in_wrap_or_compound = self
+            .frames
+            .iter()
+            .rev()
+            .take_while(|f| !matches!(f.kind, Kind::Clip | Kind::Mask | Kind::Layer(_)))
+            .any(|f| matches!(f.kind, Kind::Wrap | Kind::Compound));
+        let can_clip = !linked && nodes.len() == 1 && !in_wrap_or_compound;
+        if t.clips && !can_clip {
+            self.warn(MASK_NOT_CLIPPED);
+        }
         for node in nodes.into_iter().rev() {
+            if t.clips
+                && can_clip
+                && let Some(f) = self.frames.last_mut()
+            {
+                f.clips.push(f.children.len());
+            }
             self.add(node, t.hidden || hidden)?;
         }
         if frames.len() > 1 {

@@ -4,6 +4,14 @@
 
 ## Feature submission evidence
 
+Raster rendering fits and preflattens curved stroke outlines more tightly only below four times the raster tolerance, retaining thin-band coverage without changing stroke weight or vector export geometry. Current cached character/object outlines, cropped long strokes, gradient clips and effect rasters share the helper; cropped-region reuse and guarded flattening remain. The unchanged `fractional_curved_strokes_retain_coverage_between_notches` regression covers fractional weights, rotation, phase, opacity and f32-rounded endpoints. This is a quality/cost tradeoff, not a speed claim. Scores and estimates unchanged.
+
+**PR #3273 revision — 2026-11-04:** Thin curved stroke coverage ported to the current raster-only cache, cropped-long-stroke and effect paths with guarded flattening; vector export geometry unchanged. Scores and estimates unchanged.
+
+Group Selection keeps an already selected component selected during a drag; a completed click still adds its next enclosing group. The current Direct Selection click/release machinery is shared, preserving compound-member picks, Shift deselection, isolation and masked-art dragging. Outline Stroke continues to preserve all original fills, including open contours; the change does not remove fills. Regressions: `group_selection_distinguishes_selected_leaf_drags_from_clicks` and `outline_fill_and_stroke_move_independently_with_group_selection` cover tool events, independent component movement and Undo/Redo. Scores and estimates unchanged.
+
+**PR #3272 revision — 2026-11-04:** Group Selection component drags defer ancestor selection until a completed click, using current Direct Selection release handling; original Outline Stroke fills and newer selection behavior retained. Scores and estimates unchanged.
+
 Ligature caret stops use a font's GDEF contour-point positions in horizontal and vertical text. They use unhinted outlines at the default variation location; invalid point indices use the existing evenly divided fallback. Scores and estimates are unchanged.
 
 Creating a gradient from solid or empty paint uses the document's color model for its default stops, including drawing its vector with the Gradient tool. Explicit `keepModel: true` retains RGB defaults, and existing gradients keep their own colors. Scores and estimates are unchanged.
@@ -1631,7 +1639,7 @@ A VectorCraft addition, not a feature of the reference app, so no area score mov
 
 ## Document Tools add-on: Batch Trace Folder (2026-11-04)
 
-A VectorCraft addition (it replaces a script some users ran), so no area score moves. Object › Plug-ins › Document Tools › Batch Trace Folder (`addon.document.batchTraceFolder`) asks for a folder of images and a destination folder, traces each image with a preset (optionally expanded) and saves it there under its own name as `.vectorcraft`, `.svg`, `.pdf`, `.ai` or `.eps`, without replacing files, closing each image's document again and reporting the images it couldn't trace (#4921). A folder with more than 1,000 entries is refused rather than traced in part. Tests: `cmd::addons::document::tests::batch_trace_folder_traces_and_saves_each_image` and `batch_trace_folder_refuses_a_folder_it_cannot_list_in_full` (engine), `addons::document::tests::batch_trace_folder_asks_for_both_folders` (ui-egui).
+A VectorCraft addition (it replaces a script some users ran), so no area score moves. Object › Plug-ins › Document Tools › Batch Trace Folder (`addon.document.batchTraceFolder`) asks for a folder of images and a destination folder, traces each image with a preset (optionally expanded) and saves it there under its own name as `.vectorcraft`, `.svg`, `.pdf`, `.ai` or `.eps`, without replacing files, closing each image's document again and reporting the images it couldn't trace (#4921). A folder with more than 1,000 entries is refused rather than traced in part. Optional settings reject null and values of the wrong type before opening images. Tests: `cmd::addons::document::tests::batch_trace_folder_traces_and_saves_each_image`, `batch_trace_folder_refuses_a_folder_it_cannot_list_in_full`, and `batch_trace_folder_rejects_wrong_typed_options` (engine), `addons::document::tests::batch_trace_folder_asks_for_both_folders` (ui-egui).
 
 ## Color Effects add-on: Find Nearest Swatch (2026-11-01)
 
