@@ -34,6 +34,7 @@ control is and what it does: the [user guide](user-guide.md).
 | 16 | Tools and holders | | |
 | 17 | Cutting from the roll | | |
 | 18 | Curves sent to the machine | Pass | All three rows cut; the `BZ` and `W` circles rounder than the straight moves (2026-11-04) |
+| 19 | The cut area each job sets | | |
 
 ## Before you start
 
@@ -342,3 +343,23 @@ all, the notes say so and the encoder keeps sending straight moves.
 Result (2026-11-04, firmware V5.05): every row cut through and every circle dropped out. The 2nd (`BZ`) and 3rd
 (`W`) circles are clearly rounder than the 1st (straight moves); the S-curves look alike. Each circle has a
 small nub where its cut starts and ends (no overcut in this test). Curves are worth offering.
+
+## Step 19: the cut area each job sets (C4.16)
+
+Each job on a Cameo 4 now sets the machine's cut area to the mat's (`\`, `Z`) after the orientation, asks `@`
+(off-scale) once the last cut is made, and then puts back an area of the machine's width and 3,000 mm, each with
+10 mm more for the origin adjustment (`\0,0`, `Z60200,6296`). Whether the machine takes an area that large is not
+known: what it reports as its area after switching on is 1016 × 295 mm.
+
+- Cut anything small near the mat's **bottom right** corner (inside the cut area). Then cut it again: a job sent
+  straight after another must cut in full. Note whether both cut whole.
+- With UsbPrint, read the area after a job: `UsbPrint query -c "U"`. Note the answer (`60200, 6296` means it was
+  taken as sent; anything smaller is the machine's own limit).
+- Switch the machine off and on, cut once from Silhouette Studio if you use it, and note whether Studio's job cut
+  in full.
+
+The app never sends a job that runs off the mat, so `@` is a safety net; that it answers non-zero after cuts outside
+the area was seen on 2026-11-04 (protocol notes › More of GP-GL).
+
+If the large area isn't taken (a later job, or Studio's, is cut short), the note goes here and the encoder puts
+back a smaller one, or stops setting the area.

@@ -48,12 +48,38 @@ fn a_square_as_bytes() {
     let e = Silhouette.encode(&j, &cameo4()).unwrap();
     let got = e.chunks.concat();
     let mut want = vec![0x1B, 0x04];
-    for c in ["TG1", "TB50,0", "J1", "FX17,1", "!10,1", "FC18,1,1", "M400,200", "D400,400", "D600,400", "D600,200", "D400,200", "M0,0", "SO0"] {
+    // C4.16: the mat's cut area set after the orientation; after the cut, `@` asked and the
+    // machine's full area (3,000 mm down, its width across, each with the origin adjustment's 10 mm) put back before home.
+    let cmds = [
+        "TG1",
+        "TB50,0",
+        "\\0,0",
+        "Z6096,6096",
+        "J1",
+        "FX17,1",
+        "!10,1",
+        "FC18,1,1",
+        "M400,200",
+        "D400,400",
+        "D600,400",
+        "D600,200",
+        "D400,200",
+        "@",
+        "\\0,0",
+        "Z60200,6296",
+        "M0,0",
+        "SO0",
+    ];
+    for c in cmds {
         want.extend(c.as_bytes());
         want.push(0x03);
     }
     assert_eq!(String::from_utf8_lossy(&got), String::from_utf8_lossy(&want));
-    assert_eq!(e.chunks.len(), 1);
+    // Split after `@`, whose answer is a warning check.
+    assert_eq!(e.chunks.len(), 2);
+    assert_eq!(e.checks.len(), 1);
+    let check = &e.checks[0];
+    assert_eq!((check.after_chunk, check.expect.as_slice(), check.warning), (0, b"    0\x03".as_slice(), true));
     assert!(e.warnings.iter().any(|w| w.contains("approximate")));
 }
 
@@ -111,7 +137,7 @@ fn chunks_stay_small_and_split_between_commands() {
     }
     for c in e.chunks.iter().skip(1) {
         // Each chunk after the first starts a command: a letter, not the middle of numbers.
-        assert!(c[0].is_ascii_alphabetic() || c[0] == b'!', "{:?}", c[0] as char);
+        assert!(c[0].is_ascii_alphabetic() || c[0] == b'!' || c[0] == b'\\', "{:?}", c[0] as char);
     }
 }
 
@@ -214,7 +240,7 @@ fn depth_acceleration_and_track_enhancing() {
     let mut j = job(vec![Operation { kind: OpKind::Cut, tool: t }], vec![path(0, false, &[[1.0, 1.0], [2.0, 2.0]])], "silhouette.12x12");
     j.track_enhancing = true;
     let text = String::from_utf8_lossy(&Silhouette.encode(&j, &cameo4()).unwrap().chunks.concat()).to_string();
-    assert!(text.contains("TB50,0\u{3}FY0\u{3}J1\u{3}"), "{text:?}");
+    assert!(text.contains("TB50,0\u{3}FY0\u{3}\\0,0\u{3}Z6096,6096\u{3}J1\u{3}"), "{text:?}");
     assert!(text.contains("FC18,1,1\u{3}TF3,1\u{3}TJ2\u{3}M"), "{text:?}");
     // Left unset: not sent.
     let plain = job(
@@ -375,7 +401,7 @@ fn print_and_cut_searches_for_the_marks_first() {
     // Without it, none of that.
     j.registration = None;
     let plain = Silhouette.encode(&j, &cameo4()).unwrap();
-    assert!(plain.checks.is_empty() && !String::from_utf8_lossy(&plain.chunks.concat()).contains("TB123"));
+    assert!(plain.checks.iter().all(|c| c.warning) && !String::from_utf8_lossy(&plain.chunks.concat()).contains("TB123"));
 }
 
 /// C4.6: the origin adjustment moves every position on the mat (40 units a mm across: the owner's
@@ -492,7 +518,10 @@ fn a_jobs_own_curves_as_bytes() {
     })];
     let text = String::from_utf8_lossy(&Silhouette.encode(&j, &cameo4()).unwrap().chunks.concat()).replace('\u{3}', " ");
     let cuts = text.split_once("FC18,1,1 ").unwrap().1;
-    assert_eq!(cuts, "M200,200 D200,400 BZ1,200,400,300,500,400,500,400,400,0 D200,200 D200,240 M0,0 SO0 ", "2 mm of overcut along the first line");
+    assert_eq!(
+        cuts, "M200,200 D200,400 BZ1,200,400,300,500,400,500,400,400,0 D200,200 D200,240 @ \\0,0 Z60200,6296 M0,0 SO0 ",
+        "2 mm of overcut along the first line"
+    );
     // Without curves the same job goes as its points, with its overcut.
     j.curves.clear();
     let text = String::from_utf8_lossy(&Silhouette.encode(&j, &cameo4()).unwrap().chunks.concat()).replace('\u{3}', " ");
@@ -525,7 +554,7 @@ fn native_curves_as_bytes() {
         cuts,
         "M400,200 BZ1,400,200,400,300,500,400,600,400,0 M400,200 BZ1,400,200,400,300,500,400,600,400,0 \
          M1100,1000 W1000,1000,100,100,0,3715 M1100,1000 W1000,1000,100,100,0,3715 \
-         M2000,2000 D2000,2200 M2000,2000 D2000,2200 M0,0 SO0 ",
+         M2000,2000 D2000,2200 M2000,2000 D2000,2200 @ \\0,0 Z60200,6296 M0,0 SO0 ",
         "each path twice (two passes); the closed circle's end angle 11.5 degrees past 360 (1 mm on 5 mm)"
     );
     // Without native curves, nothing changes.
@@ -540,4 +569,35 @@ fn native_curves_as_bytes() {
     ] {
         assert!(Silhouette.encode_native(&j, &bad, &cameo4(), [0.0, 0.0]).is_err(), "{bad:?}");
     }
+}
+
+/// C4.16: the cut area is set only on a Cameo 4, and not with Print & Cut; the origin adjustment
+/// moves it as it moves the cut, never past the origin.
+#[test]
+fn the_cut_area_is_set_where_it_is_known() {
+    let j = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }],
+        vec![path(0, false, &[[30.0, 40.0], [50.0, 40.0]])],
+        "silhouette.12x12",
+    );
+    let text = |j: &CutJob, d: &DeviceInfo, a: [f64; 2]| {
+        String::from_utf8_lossy(&Silhouette.encode_adjusted(j, d, a).unwrap().chunks.concat()).replace('\u{3}', " ")
+    };
+    let area = |t: &str| t.contains(r"\0,0 ") || t.contains(" Z") || t.contains(" @ ");
+    assert!(area(&text(&j, &cameo4(), [0.0, 0.0])));
+    for other in [0x112F, 0x1138, 0x1140] {
+        let t = text(&j, &DeviceInfo { product_id: other, ..cameo4() }, [0.0, 0.0]);
+        assert!(!area(&t), "{other:04x}: {t}");
+    }
+    assert!(!area(&String::from_utf8_lossy(&Silhouette.encode_for(&j, 304.8, [0.0, 0.0]).unwrap().chunks.concat())));
+    let mut pc = j.clone();
+    pc.registration = Some(vectorcraft_cutjob::JobRegistration { origin_mm: [20.0, 25.0], size_mm: [180.0, 230.0], length_mm: 20.0, line_mm: 0.5 });
+    let t = text(&pc, &cameo4(), [0.0, 0.0]);
+    assert!(!area(&t), "{t}");
+    // 2 mm right and 1 mm down: the area moves with the cut; the other way, its near corner
+    // stops at the origin.
+    let t = text(&j, &cameo4(), [2.0, 1.0]);
+    assert!(t.contains(r"TB50,0 \20,40 Z6116,6136 "), "{t}");
+    let t = text(&j, &cameo4(), [-2.0, -1.0]);
+    assert!(t.contains(r"TB50,0 \0,0 Z6076,6056 "), "{t}");
 }

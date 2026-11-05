@@ -538,6 +538,11 @@ it larger.
 Closing the window doesn't stop a cut. Cut Settings shows how far it has got, and opening the window again shows
 it in full.
 
+On a Cameo 4 each job tells the machine the mat's cut area, so nothing outside it is cut whatever the design
+holds, and puts the machine's whole area back at the end. The window then waits for the machine to finish the
+last cut (the bar stays full until it has) and asks whether anything lay outside the area; if so it says so
+under **Sent.** The [history](#10-history) keeps that note with the send.
+
 Before you press Send: load the mat in the machine, and close Silhouette Studio so it doesn't hold the machine.
 
 ## 10. History
@@ -576,6 +581,7 @@ workflow can be tried before the machine is plugged in. Nothing is cut, of cours
 | "the cutter didn't answer in time" | Switch the machine off and on, press Find Cutters, and try again. If it keeps happening, pass on the report and the log. |
 | "the cutter didn't find the registration marks" | Check the sheet's position (square mark at the top left), print at 100 %, and that the marks printed dark. |
 | The artboard goes off the mat | Move it with **Offset**, choose a larger mat, turn on **Clip to Mat**, nest the pieces, or cut it in **Tiles**. |
+| "part of the job lay outside the mat's cut area" | That part wasn't cut. It shouldn't happen (a job that runs off the mat isn't sent): pass on the history entry and the log. |
 | A tool warning in the Send window | Fit the tool the job needs in the holder it names, or choose the fitted tool in the Tool row, then **Check Tools**. |
 
 The app's log is in `%APPDATA%\VectorCraft\logs\`. With a failed send's report from

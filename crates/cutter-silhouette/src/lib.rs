@@ -155,6 +155,25 @@ pub fn tool_warnings(job: &vectorcraft_cutjob::CutJob, holders: &[vectorcraft_cu
 
 /// The product id of the one model here whose holder 2 doesn't take the specialty tools.
 const CAMEO_3: u16 = 0x112F;
+const CAMEO_4: u16 = 0x1137;
+
+/// `@`'s answer when nothing was outside the cut area (protocol notes › More of GP-GL).
+const IN_AREA: &[u8] = b"    0\x03";
+
+/// How long the answer to `@` after a job is waited for, ms: it comes once the machine has cut
+/// all it holds; the sender's ten minutes of patience.
+const AREA_CHECK_MS: u32 = 600_000;
+
+/// Fork (C4.16): the full cut area of `device`, units (down, across), where it takes one: a
+/// job's own area is set inside it and this put back after, since the machine keeps an area set
+/// until it is switched off ([HW] 2026-11-04). From the machine's width and the longest job, not
+/// from what the machine reports (`U`), which isn't dependable (it read 295 mm across after
+/// switching on, narrower than the 12 × 12 in mat it cuts), with room for the origin adjustment
+/// both ways. Tried on the Cameo 4 only; other models are sent no area.
+fn full_area(device: &DeviceInfo) -> Option<(i64, i64)> {
+    let m = model(device).filter(|m| m.0 == CAMEO_4)?;
+    Some((units(MAX_LENGTH_MM + ORIGIN_ADJUST_MM), units(m.2 + ORIGIN_ADJUST_MM)))
+}
 /// The Portrait 3 and 4: the Cameo 4's commands, one tool holder (protocol notes › Machines).
 const PORTRAIT_3: u16 = 0x113A;
 const PORTRAIT_4: u16 = 0x113F;
@@ -340,6 +359,37 @@ impl Commands {
         }
     }
 
+    /// C4.16: the machine's cut area set to `area` (mat mm), so nothing is cut outside it whatever
+    /// is sent (the blade lifts at its edge, [HW] 2026-11-04); whether it was. Not where `area`
+    /// reaches past `full` (units, down and across), which the machine would clip it to.
+    fn set_area(&mut self, area: &vectorcraft_cutjob::RectMm, full: (i64, i64)) -> bool {
+        let (d0, a0) = self.at([area.x0, area.y0]);
+        let (d1, a1) = self.at([area.x1, area.y1]);
+        let (d0, a0) = (d0.max(0), a0.max(0));
+        let fits = d1 <= full.0 && a1 <= full.1 && d1 > d0 && a1 > a0;
+        if fits {
+            self.cmd(&format!("\\{d0},{a0}"));
+            self.cmd(&format!("Z{d1},{a1}"));
+        }
+        fits
+    }
+
+    /// C4.16: after the last cut, whether anything lay outside the area (`@`, off-scale, answered
+    /// once the machine has cut all it holds: a different answer is a warning), then the `full`
+    /// area put back, before the head goes home (the origin may lie outside the job's area).
+    fn end_area(&mut self, (down, across): (i64, i64)) {
+        self.cmd("@");
+        self.check(Check {
+            after_chunk: 0,
+            expect: IN_AREA.to_vec(),
+            timeout_ms: AREA_CHECK_MS,
+            failure: "the cutter says part of the job lay outside the mat's cut area: that part wasn't cut".into(),
+            warning: true,
+        });
+        self.cmd("\\0,0");
+        self.cmd(&format!("Z{down},{across}"));
+    }
+
     /// Packed into chunks of at most [`CHUNK_BYTES`], split only between commands, at each
     /// pause, which becomes "before chunk n", and at each check, "after chunk n".
     fn chunks(self) -> Packed {
@@ -445,18 +495,28 @@ impl Silhouette {
     /// `job` as commands for a machine of `width_mm` cut width, every position moved `adjust_mm`
     /// (across, down) on the mat: the user's origin adjustment (C4.6).
     pub fn encode_for(&self, job: &CutJob, width_mm: f64, adjust_mm: [f64; 2]) -> Result<Encoded, String> {
-        self.encode_holders(job, width_mm, adjust_mm, 2, &[])
+        self.encode_holders(job, width_mm, adjust_mm, 2, &[], None)
     }
 
     /// As [`Silhouette::encode_for`], `native[i]`, where there is one, sent in place of path
     /// `i`'s points (C4.9).
     pub fn encode_native_for(&self, job: &CutJob, native: &[Option<Native>], width_mm: f64, adjust_mm: [f64; 2]) -> Result<Encoded, String> {
-        self.encode_holders(job, width_mm, adjust_mm, 2, native)
+        self.encode_holders(job, width_mm, adjust_mm, 2, native, None)
     }
 
     /// As [`Silhouette::encode_for`], for a machine with `holders` tool holders: with one, no
-    /// tool is chosen (the reference sends `J` to two-holder machines only).
-    fn encode_holders(&self, job: &CutJob, width_mm: f64, adjust_mm: [f64; 2], holders: u8, native: &[Option<Native>]) -> Result<Encoded, String> {
+    /// tool is chosen (the reference sends `J` to two-holder machines only); with a `full` cut
+    /// area (units, down and across), the job's own set inside it and `full` put back after.
+    #[allow(clippy::too_many_arguments)]
+    fn encode_holders(
+        &self,
+        job: &CutJob,
+        width_mm: f64,
+        adjust_mm: [f64; 2],
+        holders: u8,
+        native: &[Option<Native>],
+        full: Option<(i64, i64)>,
+    ) -> Result<Encoded, String> {
         job.validate().map_err(|e| e.to_string())?;
         // The curves given, else the job's own (C4.14).
         let native = if native.is_empty() { job.curves.as_slice() } else { native };
@@ -495,6 +555,11 @@ impl Silhouette {
             // confirm on the machine).
             c.cmd("FY0");
         }
+        // C4.16: the machine's cut area set to the mat's (not with Print & Cut).
+        let windowed = match full {
+            Some(full) if job.registration.is_none() => c.set_area(&area, full),
+            _ => false,
+        };
         if let Some(r) = job.registration {
             // Print & Cut (protocol notes): the portrait marks, then the search, which the machine
             // answers once it has looked; positions are from the top-left mark after it.
@@ -514,6 +579,7 @@ impl Silhouette {
                 expect: MARKS_FOUND.to_vec(),
                 timeout_ms: MARK_SEARCH_MS,
                 failure: "the cutter didn't find the registration marks: check the sheet is the right way round, the marks are printed dark and the sheet is flat".into(),
+                warning: false,
             });
             c.origin = r.origin_mm;
             warnings.push("Print & Cut is to confirm on the machine: cut a test sheet first".into());
@@ -598,6 +664,9 @@ impl Silhouette {
         if !job.operations.is_empty() {
             warnings.push(format!("speeds are approximate until measured on the machine: one step is taken as {MM_S_PER_SPEED_STEP} mm/s"));
         }
+        if let (true, Some(full)) = (windowed, full) {
+            c.end_area(full);
+        }
         // Home: the head back to the origin (the top-left mark with Print & Cut), the mat left
         // loaded; then the end of the job.
         c.to(false, c.origin);
@@ -634,7 +703,7 @@ impl Driver for Silhouette {
         {
             return Err(format!("the {} goes in holder 2, and the {} has one holder: choose a holder 1 tool", t.label, self.model(device)));
         }
-        self.encode_holders(job, width, adjust_mm, holders, &[])
+        self.encode_holders(job, width, adjust_mm, holders, &[], full_area(device))
     }
 
     fn encode_native(&self, job: &CutJob, native: &[Option<Native>], device: &DeviceInfo, adjust_mm: [f64; 2]) -> Result<Encoded, String> {
@@ -642,7 +711,7 @@ impl Driver for Silhouette {
         self.encode_adjusted(job, device, adjust_mm)?;
         let width = model(device).map_or(304.8, |m| m.2);
         let holders = if ONE_HOLDER.contains(&device.product_id) { 1 } else { 2 };
-        self.encode_holders(job, width, adjust_mm, holders, native)
+        self.encode_holders(job, width, adjust_mm, holders, native, full_area(device))
     }
 
     fn status_query(&self) -> &[u8] {
@@ -696,8 +765,8 @@ pub fn simulated_cameo4() -> vectorcraft_cutter::simulated::SimulatedMachine {
             moving: vec![b'1', ETX],
             busy_per_write: Duration::from_secs(2),
             busy_per_byte: Duration::from_millis(1),
-            // It always finds the registration marks.
-            answers: vec![(b"TB123,".to_vec(), MARKS_FOUND.to_vec())],
+            // It always finds the registration marks, and nothing is outside the cut area.
+            answers: vec![(b"TB123,".to_vec(), MARKS_FOUND.to_vec()), (b"@\x03".to_vec(), IN_AREA.to_vec())],
             // The AutoBlade in holder 1, holder 2 empty.
             replies: vec![(vec![ESC, NAK], b"2,0\x03".to_vec())],
         },

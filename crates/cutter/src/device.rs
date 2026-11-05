@@ -96,13 +96,15 @@ pub struct Encoded {
 }
 
 /// An answer the machine must give after chunk `after_chunk`, within `timeout_ms`; anything else
-/// stops the job with `failure`.
+/// stops the job with `failure`. Fork (C4.16): a `warning` check doesn't stop it: a different
+/// answer adds `failure` to the send's warnings, and no answer is nothing.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Check {
     pub after_chunk: usize,
     pub expect: Vec<u8>,
     pub timeout_ms: u32,
     pub failure: String,
+    pub warning: bool,
 }
 
 /// The largest origin adjustment, mm, either way on each axis (C4.6).

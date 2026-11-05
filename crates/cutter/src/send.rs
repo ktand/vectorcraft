@@ -38,6 +38,8 @@ pub struct Progress {
     pub waiting: Option<String>,
     /// Once it has stopped, how long it ran, seconds (pauses included; set by [`spawn`]).
     pub seconds: Option<f64>,
+    /// Fork (C4.16): what the machine's answers to the job's warning checks said.
+    pub warnings: Vec<String>,
 }
 
 /// What a send is told while it runs: stop, or go on after a pause.
@@ -104,8 +106,8 @@ const PAUSE_POLL_MS: u64 = 50;
 const CHECK_READ_MS: u32 = 250;
 
 /// Reads the machine's answer for `check`: as many bytes as the answer it must give, within
-/// about its timeout.
-fn expect(t: &mut dyn Transport, check: &crate::device::Check, patience: Patience, cancel: &AtomicBool) -> Result<(), SendError> {
+/// about its timeout. A warning check's different answer is `Ok(Some(warning))`.
+fn expect(t: &mut dyn Transport, check: &crate::device::Check, patience: Patience, cancel: &AtomicBool) -> Result<Option<String>, SendError> {
     let mut got = vec![];
     let mut buf = [0u8; 64];
     let tries = (check.timeout_ms / (2 * CHECK_READ_MS)).max(1);
@@ -122,7 +124,14 @@ fn expect(t: &mut dyn Transport, check: &crate::device::Check, patience: Patienc
             std::thread::sleep(std::time::Duration::from_millis(u64::from(CHECK_READ_MS)));
         }
     }
-    if got.get(..check.expect.len()) == Some(check.expect.as_slice()) { Ok(()) } else { Err(SendError::Refused(check.failure.clone())) }
+    if got.get(..check.expect.len()) == Some(check.expect.as_slice()) {
+        Ok(None)
+    } else if check.warning {
+        // No answer says nothing either way (C4.16).
+        Ok((!got.is_empty()).then(|| check.failure.clone()))
+    } else {
+        Err(SendError::Refused(check.failure.clone()))
+    }
 }
 
 /// Sends `job` to `t`: the first chunk once the machine is ready, the others straight after it,
@@ -173,7 +182,9 @@ pub fn send(
             t.write_chunk(chunk).map_err(SendError::Transport)?;
             set(&|p| p.chunks_sent = i + 1);
             for check in job.checks.iter().filter(|c| c.after_chunk == i) {
-                expect(t, check, patience, cancel)?;
+                if let Some(w) = expect(t, check, patience, cancel)? {
+                    set(&|p| p.warnings.push(w.clone()));
+                }
             }
         }
         Ok(())

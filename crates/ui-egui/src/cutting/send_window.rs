@@ -724,6 +724,10 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
             other => (other.to_string(), true),
         };
         ui.label(egui::RichText::new(text).color(if bad { t.bleed } else { t.text_dim }));
+        // C4.16: what the machine said after the job, e.g. that part of it lay outside the cut area.
+        for w in status["warnings"].as_array().into_iter().flatten().filter_map(Value::as_str) {
+            ui.label(egui::RichText::new(w).color(t.bleed));
+        }
     }
     if let Some((bad, note)) = &m.note
         && !note.is_empty()
@@ -905,7 +909,8 @@ mod tests {
                 moving: b"1".to_vec(),
                 busy_per_write: Duration::ZERO,
                 busy_per_byte: Duration::ZERO,
-                answers: vec![],
+                // C4.16: nothing outside the cut area.
+                answers: vec![(b"@\x03".to_vec(), b"    0\x03".to_vec())],
                 replies: vec![(vec![0x1B, 0x15], b"2,0".to_vec())],
             },
             sent: Sent::default(),

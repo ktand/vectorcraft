@@ -199,7 +199,13 @@ fn a_paused_send_can_be_cancelled() {
 }
 
 fn checked_job() -> Encoded {
-    let check = vectorcraft_cutter::Check { after_chunk: 0, expect: b"OK".to_vec(), timeout_ms: 1_000, failure: "the marks weren't found".into() };
+    let check = vectorcraft_cutter::Check {
+        after_chunk: 0,
+        expect: b"OK".to_vec(),
+        timeout_ms: 1_000,
+        failure: "the marks weren't found".into(),
+        warning: false,
+    };
     Encoded { chunks: vec![b"find".to_vec(), b"cut".to_vec()], checks: vec![check], ..Encoded::default() }
 }
 
@@ -222,5 +228,25 @@ fn a_checked_answer_lets_the_job_go_on_or_stops_it() {
         let (r, written) = run_checked(wrong);
         assert_eq!(r, Err(SendError::Refused("the marks weren't found".into())), "{wrong:?}");
         assert!(!written.ends_with(b"cut"), "nothing cut after a wrong answer");
+    }
+}
+
+/// C4.16: a warning check's different answer goes in the warnings and the job goes on; the
+/// expected answer, or none, adds nothing.
+#[test]
+fn a_warning_check_warns_without_stopping() {
+    for (answer, warned) in [(&b"OK"[..], false), (b"NO", true), (b"", false)] {
+        // Silent once it has said ready, so no answer is nothing at all.
+        let mut t = MemoryTransport::answering(b"");
+        t.state.lock().unwrap().replies = [b"R".to_vec(), answer.to_vec()].into();
+        let mut job = checked_job();
+        job.checks[0].warning = true;
+        job.checks[0].failure = "something lay outside the cut area".into();
+        let progress = Mutex::new(Progress::default());
+        let r = send(&mut t, &TestDriver, &job, QUICK, &Controls::default(), &progress);
+        assert_eq!(r, Ok(()), "{answer:?}");
+        assert!(t.written().ends_with(b"cut"), "{answer:?}");
+        let warnings = progress.lock().unwrap().warnings.clone();
+        assert_eq!(warnings.len(), usize::from(warned), "{answer:?}: {warnings:?}");
     }
 }

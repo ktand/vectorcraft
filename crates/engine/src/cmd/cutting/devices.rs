@@ -76,7 +76,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Status",
             [],
             None,
-            "{} the job last sent → {sending: bool, device: name or null, chunksSent, chunks, waitingFor: the group it has paused before (cutting.continue goes on) or null, outcome: null while sending, else done|cancelled|the error}",
+            "{} the job last sent → {sending: bool, device: name or null, chunksSent, chunks, waitingFor: the group it has paused before (cutting.continue goes on) or null, outcome: null while sending, else done|cancelled|the error, warnings: [what the machine's answers said, e.g. that part of the job lay outside the cut area]}",
             always,
             status
         ),
@@ -250,7 +250,7 @@ fn status(_: &mut Session, _: &Value) -> Result<Value> {
     // A send that has stopped finishes its history entry.
     super::history::resolve();
     let Some((device, running)) = registry::current() else {
-        return Ok(json!({"sending": false, "device": null, "chunksSent": 0, "chunks": 0, "waitingFor": null, "outcome": null}));
+        return Ok(json!({"sending": false, "device": null, "chunksSent": 0, "chunks": 0, "waitingFor": null, "outcome": null, "warnings": []}));
     };
     let p = running.progress();
     let outcome = match &p.outcome {
@@ -260,7 +260,7 @@ fn status(_: &mut Session, _: &Value) -> Result<Value> {
         Some(Err(e)) => json!(e.to_string()),
     };
     Ok(
-        json!({"sending": p.outcome.is_none(), "device": device.name, "chunksSent": p.chunks_sent, "chunks": p.chunks, "waitingFor": p.waiting, "outcome": outcome}),
+        json!({"sending": p.outcome.is_none(), "device": device.name, "chunksSent": p.chunks_sent, "chunks": p.chunks, "waitingFor": p.waiting, "outcome": outcome, "warnings": p.warnings}),
     )
 }
 

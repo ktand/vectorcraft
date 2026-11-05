@@ -153,6 +153,10 @@ fn finish_pending(s: &mut Store) -> bool {
         e.insert("seconds".into(), json!(seconds.round()));
         e.insert("chunksSent".into(), json!(p.chunks_sent));
         e.insert("chunks".into(), json!(p.chunks));
+        // C4.16: what the machine's answers said, e.g. that something lay outside the cut area.
+        if !p.warnings.is_empty() {
+            e.insert("machineWarnings".into(), json!(p.warnings));
+        }
         if failed && let Some(dir) = report_dir {
             match write_report(&dir, e) {
                 Ok(path) => {
@@ -210,7 +214,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting History",
             [],
             None,
-            "{} the sends to a machine, newest first → {entries: [{index, time: Unix seconds or null, shownTime, document, machine, test, corner and group: a test cut's, material, grouping, materials: [each group's], paths, cutMm, estimatedSeconds, seconds, outcome: sending|done|cancelled|the error, report: a failed send's report file or null, settings}], file: the history file or null}",
+            "{} the sends to a machine, newest first → {entries: [{index, time: Unix seconds or null, shownTime, document, machine, test, corner and group: a test cut's, material, grouping, materials: [each group's], paths, cutMm, estimatedSeconds, seconds, outcome: sending|done|cancelled|the error, report: a failed send's report file or null, machineWarnings: what the machine said after the job (when it said anything), settings}], file: the history file or null}",
             always,
             list
         ),
