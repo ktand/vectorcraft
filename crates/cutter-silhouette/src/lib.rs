@@ -12,6 +12,8 @@
 
 #![forbid(unsafe_code)]
 
+// Fork (C4.11): every job checked before it is sent.
+pub mod check;
 // Fork (C4.10): reading back what is sent.
 pub mod decode;
 
@@ -778,6 +780,8 @@ impl Silhouette {
         c.to(false, c.origin);
         c.cmd("SO0");
         let (chunks, pauses, checks) = c.chunks();
+        // C4.11: read back and checked against the protocol notes; a fault refuses the send.
+        check::check(&chunks.concat(), width_mm)?;
         Ok(Encoded { chunks, warnings, pauses, checks })
     }
 }

@@ -235,7 +235,7 @@ here: machine units, down first, then across.
 | `W` ending at 360°, 371.5° and 396° (an overcut of 0, 1 and 3 mm) | By eye, the 360° circle ends where it began; past that couldn't be told. Read with `G` after a 3 mm circle: ending at 3600 the head stood at its start (1060, 1700); ending at 3715 at 1058, 1861, which is 11.5° on (1059, 1862 by the sum) | An end angle past 360° is honoured: `W` can carry its own overcut |
 | `G` (where the tool is) | Three numbers, down, across and a status (`10` with the tool up, after a job had finished; other values not seen): `     0,  4000,    10` with the head parked at 200 mm across. Answered after the commands before it had run | Checking on the machine where a job really ended |
 | `TF`d`,1` (AutoBlade depth) with a 0.5 mm cut after it | The AutoBlade's dial read 3 after `TF3,1`, then 7 after `TF7,1` | The depth setting works as sent (step 6) |
-| A command the machine doesn't know (`` `1 ``) | Ignored without an answer; the commands after it ran | Mistakes in what we send aren't reported: our own check before sending (C4.11) is the one there is |
+| A command the machine doesn't know (`` `1 ``) | Ignored without an answer; the commands after it ran | Mistakes in what we send aren't reported: our own check before sending (C4.11, `cutter-silhouette/src/check.rs`) is the one there is |
 
 ## Checks on the machine
 
