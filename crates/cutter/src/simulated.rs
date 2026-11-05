@@ -132,11 +132,40 @@ impl DeviceProvider for Providers {
         let owner = self.0.iter().find(|p| p.devices().iter().any(|d| d.id == id)).ok_or(TransportError::Gone)?;
         owner.open(id)
     }
+
+    fn notes(&self) -> Vec<String> {
+        let mut out: Vec<String> = vec![];
+        for n in self.0.iter().flat_map(|p| p.notes()) {
+            if !out.contains(&n) {
+                out.push(n);
+            }
+        }
+        out
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// C12.5: the providers' notes together, each once.
+    #[test]
+    fn notes_are_gathered_once() {
+        struct Noting(&'static str);
+        impl DeviceProvider for Noting {
+            fn devices(&self) -> Vec<DeviceInfo> {
+                vec![]
+            }
+            fn open(&self, _: &str) -> Result<Box<dyn Transport>, TransportError> {
+                Err(TransportError::Gone)
+            }
+            fn notes(&self) -> Vec<String> {
+                vec![self.0.to_string()]
+            }
+        }
+        let all = Providers(vec![Arc::new(Noting("a")), Arc::new(Noting("b")), Arc::new(Noting("a"))]);
+        assert_eq!(all.notes(), ["a", "b"]);
+    }
 
     fn machine() -> SimulatedMachine {
         SimulatedMachine {

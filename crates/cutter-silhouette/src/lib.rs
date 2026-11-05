@@ -725,7 +725,7 @@ impl Silhouette {
                 after_chunk: 0,
                 expect: MARKS_FOUND.to_vec(),
                 timeout_ms: MARK_SEARCH_MS,
-                failure: "the cutter didn't find the registration marks: check the sheet is the right way round, the marks are printed dark and the sheet is flat".into(),
+                failure: "the cutter didn't find the registration marks: check the sheet is the right way round, the marks are printed dark and the sheet is flat, and that no other cutting program is open (it can take the cutter's answer)".into(),
                 warning: false,
             });
             c.origin = r.origin_mm;

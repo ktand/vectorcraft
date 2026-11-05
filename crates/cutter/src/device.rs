@@ -64,6 +64,12 @@ pub trait DeviceProvider: Send + Sync {
     fn devices(&self) -> Vec<DeviceInfo>;
     /// Opens machine `id`.
     fn open(&self, id: &str) -> Result<Box<dyn Transport>, TransportError>;
+    /// Fork (C12.5): what the user should know before sending, such as another program that may
+    /// take the machines' answers. Asked when machines are looked for and at each send, not each
+    /// frame. None by default.
+    fn notes(&self) -> Vec<String> {
+        vec![]
+    }
 }
 
 /// What a machine said when asked how it is.

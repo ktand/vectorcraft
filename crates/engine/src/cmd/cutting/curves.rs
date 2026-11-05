@@ -192,7 +192,9 @@ fn send(s: &mut Session, p: &Value) -> Result<Value> {
     let encoded = driver.encode_native(&job, &native, &device, super::machine::adjust_mm()).map_err(|e| bad(CMD, e))?;
     let provider = registry::provider().ok_or_else(|| bad(CMD, "no cutter is connected"))?;
     let transport = provider.open(&device.id).map_err(|e| bad(CMD, e.to_string()))?;
-    let (chunks, warnings) = (encoded.chunks.len(), encoded.warnings.clone());
+    let chunks = encoded.chunks.len();
+    // C12.5: what to know about the machine's surroundings first.
+    let warnings: Vec<String> = registry::notes().into_iter().chain(encoded.warnings.iter().cloned()).collect();
     let model = driver.model(&device);
     let running = vectorcraft_cutter::send::spawn(transport, driver, encoded, Patience::default()).map_err(|e| bad(CMD, e))?;
     registry::start(device.clone(), running).map_err(|e| bad(CMD, e))?;

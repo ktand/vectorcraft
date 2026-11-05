@@ -28,6 +28,11 @@ pub fn provider() -> Option<Arc<dyn DeviceProvider>> {
     provider_slot().lock().ok().and_then(|p| p.clone())
 }
 
+/// Fork (C12.5): the installed provider's notes ([`DeviceProvider::notes`]).
+pub fn notes() -> Vec<String> {
+    provider().map(|p| p.notes()).unwrap_or_default()
+}
+
 /// Adds `driver`; a driver of the same name is replaced.
 pub fn add_driver(driver: Arc<dyn Driver>) {
     if let Ok(mut d) = drivers_slot().lock() {

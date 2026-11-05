@@ -64,6 +64,9 @@ struct Machines {
     /// C14.12: Send was pressed with a material cut from the back: the device to send to and the
     /// material, until Cut Mirrored or As Is is chosen.
     ask_mirror: Option<(String, String)>,
+    /// C12.5: what to know before sending (Silhouette Studio running), from when the machines
+    /// were last looked for.
+    notes: Vec<String>,
 }
 
 /// The material the document is cut with, when it is cut from the back and the job isn't Print &
@@ -193,9 +196,10 @@ fn tools_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, m: &mut Machines, dev
     }
 }
 
-fn find_machines(app: &mut VectorcraftApp) -> Vec<(String, String)> {
+fn find_machines(app: &mut VectorcraftApp) -> (Vec<(String, String)>, Vec<String>) {
     let r = app.session.execute("cutting.devices", &json!({})).unwrap_or_default();
-    r["devices"]
+    let notes = r["notes"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect();
+    let found = r["devices"]
         .as_array()
         .map(|a| {
             a.iter()
@@ -207,7 +211,8 @@ fn find_machines(app: &mut VectorcraftApp) -> Vec<(String, String)> {
                 })
                 .collect()
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    (found, notes)
 }
 
 /// Draws the window while it is open.
@@ -291,6 +296,11 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
             ui.label(format!("{}: {:.0} mm", tl!("Cut length"), s.blade_mm));
             ui.label(format!("{}: {:.0} mm", tl!("Travel"), s.travel_mm));
             ui.label(format!("{}: {:.0} s", tl!("Estimated time"), made.sim.total_seconds));
+            // C12.5: a Print & Cut job, and how far apart the marks it looks for are.
+            if let Some(r) = &j.registration {
+                ui.label(egui::RichText::new(format!("{}: {:.0} × {:.0} mm", tl!("Print & Cut, marks"), r.size_mm[0], r.size_mm[1])).color(t.accent))
+                    .on_hover_text(tl!("The cutter finds the printed registration marks first (about 20 s), then cuts. Load the printed sheet at the mat's top-left corner, the square mark at the top left."));
+            }
             // C18.3: the material it takes and, where the material has a price, what it costs.
             if let Some(st) = app.session.active() {
                 let settings = vectorcraft_cutting::settings(&st.doc);
@@ -663,8 +673,9 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     let found = match m.found.clone() {
         Some(f) => f,
         None => {
-            let f = find_machines(app);
+            let (f, notes) = find_machines(app);
             m.found = Some(f.clone());
+            m.notes = notes;
             // Machines found again: what they have fitted is asked again too.
             m.tools = None;
             f
@@ -687,7 +698,13 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
             }
         }
     }
+    for note in &m.notes {
+        ui.label(egui::RichText::new(note).color(t.warning));
+    }
     let has_job = crate::cutting::job(app, &ctx).is_some_and(|j| j.as_ref().as_ref().is_ok_and(|made| !made.job.paths.is_empty()));
+    // C12.5: a Print & Cut job's first chunk ends with the search for the marks, answered once the
+    // machine has looked.
+    let print_and_cut = crate::cutting::job(app, &ctx).is_some_and(|j| j.as_ref().as_ref().is_ok_and(|made| made.job.registration.is_some()));
     ui.horizontal(|ui| {
         if widgets::primary_button_enabled(ui, "Send", !found.is_empty() && has_job && !sending).clicked() {
             let device = found.get(m.chosen).or(found.first()).map(|(id, _)| id.clone()).unwrap_or_default();
@@ -723,6 +740,11 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
         };
         let text = format!("{} {group}. {then}", tl!("Paused before"));
         ui.label(egui::RichText::new(text).color(t.text_strong));
+    } else if sending && print_and_cut && status["chunksSent"].as_u64().unwrap_or(0) <= 1 {
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label(tl!("Looking for the registration marks…"));
+        });
     } else if sending {
         let (sent, all) = (status["chunksSent"].as_u64().unwrap_or(0), status["chunks"].as_u64().unwrap_or(0));
         let share = if all > 0 { sent as f32 / all as f32 } else { 0.0 };
@@ -843,6 +865,24 @@ mod tests {
         let texts = window_texts(&mut app, &ctx);
         assert!(!texts.iter().any(|t| t.starts_with("Paths")), "no job: {texts:?}");
         assert!(texts.iter().any(|t| t == "Send"), "{texts:?}");
+    }
+
+    /// C12.5: a Print & Cut job says so, with how far apart the marks it looks for are.
+    #[test]
+    fn a_print_and_cut_job_says_so() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        let mm = 72.0 / 25.4;
+        app.run("file.new", json!({"width": 105.0 * mm, "height": 148.0 * mm})).unwrap();
+        app.run("cutting.settings.set", json!({"printAndCut": true, "markInsetMm": 12})).unwrap();
+        app.run("cutting.marks.add", json!({})).unwrap();
+        app.run("shape.ellipse", json!({"x": 30.0 * mm, "y": 40.0 * mm, "width": 45.0 * mm, "height": 60.0 * mm})).unwrap();
+        set_open(&ctx, true);
+        let texts = window_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Print & Cut, marks: 81 × 124 mm"), "{texts:?}");
+        app.run("cutting.settings.set", json!({"printAndCut": false})).unwrap();
+        let texts = window_texts(&mut app, &ctx);
+        assert!(!texts.iter().any(|t| t.starts_with("Print & Cut")), "{texts:?}");
     }
 
     /// C8.1: the test cut's choices show, and say ahead when the test would land on the design.

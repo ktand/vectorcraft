@@ -459,7 +459,10 @@ To print a design and then cut round the print:
    back both). A sheet printed before that has to be printed again.
 2. Print the artboard at 100 % (no "fit to page").
 3. Put the sheet on the mat at its top-left corner, the square mark at the top left. Load it.
-4. Send. The machine finds the marks, then cuts where the print is. If it can't find them (a sheet turned round,
+4. Send. The Send window says it is a Print & Cut job and how far apart the marks are, and draws the sheet on
+   the mat with its marks and, dashed, the area between them, the only part that can be cut. While the machine
+   looks for the marks (about 20 s) it says "Looking for the registration marks…". The machine finds the marks,
+   then cuts where the print is. If it can't find them (a sheet turned round,
    marks too faint), the job stops before anything is cut.
 
 **Print bleed.** A cut a little off the print leaves a thin white edge. In the Print & Cut panel, **Print
@@ -602,7 +605,7 @@ workflow can be tried before the machine is plugged in. Nothing is cut, of cours
 | "No cutter is connected" | Check the cable and that the machine is on; close Silhouette Studio; press **Find Cutters**. |
 | "load the mat into the cutter first" | Load the mat with the machine's load button, then Send again. |
 | "the cutter didn't answer in time" | Switch the machine off and on, press Find Cutters, and try again. If it keeps happening, pass on the report and the log. |
-| "the cutter didn't find the registration marks" | Check the sheet's position (square mark at the top left), print at 100 %, and that the marks printed dark. |
+| "the cutter didn't find the registration marks" | Close any other cutting program, such as Silhouette Studio (it asks the cutter how it is even when idle and can take the answer that the marks were found; the Send window warns while one runs). Check the sheet's position (square mark at the top left), print at 100 %, and that the marks printed dark. |
 | The artboard goes off the mat | Move it with **Offset**, choose a larger mat, turn on **Clip to Mat**, nest the pieces, or cut it in **Tiles**. |
 | "part of the job lay outside the mat's cut area" | That part wasn't cut. It shouldn't happen (a job that runs off the mat isn't sent): pass on the history entry and the log. |
 | A tool warning in the Send window | Fit the tool the job needs in the holder it names, or choose the fitted tool in the Tool row, then **Check Tools**. |

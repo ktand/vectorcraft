@@ -40,7 +40,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Machines",
             [],
             None,
-            "{} the connected cutting machines this version can send to → {devices: [{id, model, name, simulated: a machine that isn't there (the app's --virtual-cutter)}]} (empty without a connected machine or where the app can't reach USB)",
+            "{} the connected cutting machines this version can send to → {devices: [{id, model, name, simulated: a machine that isn't there (the app's --virtual-cutter)}], notes: [what to know before sending, such as another cutting program running, which can take the cutter's answers]} (devices empty without a connected machine or where the app can't reach USB)",
             always,
             devices
         ),
@@ -169,7 +169,8 @@ fn devices(_: &mut Session, _: &Value) -> Result<Value> {
             json!({"id": d.id, "model": x.model(d), "name": d.name, "simulated": simulated})
         })
         .collect();
-    Ok(json!({ "devices": list }))
+    // C12.5: what to know before sending, such as another program that takes the answers.
+    Ok(json!({ "devices": list, "notes": vectorcraft_cutter::registry::notes() }))
 }
 
 /// The machine `p` names, else the only one connected.
@@ -196,7 +197,8 @@ pub(super) fn start(s: &Session, job: &vectorcraft_cutjob::CutJob, p: &Value, cm
     let provider = registry::provider().ok_or_else(|| bad(cmd, "no cutter is connected"))?;
     let transport = provider.open(&device.id).map_err(|e| bad(cmd, e.to_string()))?;
     let chunks = encoded.chunks.len();
-    let warnings: Vec<String> = before.into_iter().chain(encoded.warnings.iter().cloned()).collect();
+    // C12.5: first what to know about the machine's surroundings (another program taking its answers).
+    let warnings: Vec<String> = registry::notes().into_iter().chain(before).chain(encoded.warnings.iter().cloned()).collect();
     let model = driver.model(&device);
     let running = vectorcraft_cutter::send::spawn(transport, driver, encoded, Patience::default()).map_err(|e| bad(cmd, e))?;
     registry::start(device.clone(), running.clone()).map_err(|e| bad(cmd, e))?;

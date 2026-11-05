@@ -319,11 +319,41 @@ pub(crate) fn preview(app: &VectorcraftApp, p: &egui::Painter, rect: egui::Rect)
     if let Some(job) = crate::cutting::job(app, p.ctx())
         && let Ok(made) = &*job
     {
+        if let Some(r) = &made.job.registration {
+            print_and_cut_sheet(&p, pl.artboard_mm, r, &screen, &t);
+        }
         toolpaths(&p, &made.job, &screen, &t);
         if let Some(mm) = crate::cutting::tick(p.ctx(), &made.sim).mm {
             playback(&p, &made.sim, mm, &screen, &t);
         }
     }
+}
+
+/// C12.5: a Print & Cut job's printed sheet on the Send window's mat: the paper (the artboard),
+/// the three registration marks where they are printed (the square at the top left, the L corners
+/// at the top right and bottom left, their arms pointing in), and, dashed, the area between them,
+/// the only part that may be cut. Drawn only: nothing of it is sent.
+fn print_and_cut_sheet(p: &egui::Painter, paper: RectMm, r: &vectorcraft_cutjob::JobRegistration, screen: &dyn Fn(f64, f64) -> Pos2, t: &Tokens) {
+    let quad = |x0: f64, y0: f64, x1: f64, y1: f64| vec![screen(x0, y0), screen(x1, y0), screen(x1, y1), screen(x0, y1)];
+    let sheet = quad(paper.x0, paper.y0, paper.x1, paper.y1);
+    // As printed: black marks on white paper, whatever the theme.
+    p.add(Shape::convex_polygon(sheet, Color32::from_rgba_unmultiplied(255, 255, 255, 210), Stroke::new(1.0, t.text_dim)));
+    let ink = Color32::BLACK;
+    let fill = |pts: Vec<Pos2>| p.add(Shape::convex_polygon(pts, ink, Stroke::NONE));
+    let [x, y] = r.origin_mm;
+    let [w, h] = r.size_mm;
+    let (len, line) = (r.length_mm, r.line_mm);
+    let side = vectorcraft_cutjob::marks::SQUARE_MM;
+    fill(quad(x, y, x + side, y + side));
+    // The top-right corner: arms left and down from its outer corner.
+    fill(quad(x + w - len, y, x + w, y + line));
+    fill(quad(x + w - line, y, x + w, y + len));
+    // The bottom-left corner: arms right and up.
+    fill(quad(x, y + h - line, x + len, y + h));
+    fill(quad(x, y + h - len, x + line, y + h));
+    let area = quad(x, y, x + w, y + h);
+    let ring: Vec<Pos2> = area.iter().chain(area.first()).copied().collect();
+    p.extend(Shape::dashed_line(&ring, Stroke::new(1.0, Color32::from_gray(110)), 4.0, 3.0));
 }
 
 /// Most toolpath points one frame draws: past them the rest of a large job isn't drawn.

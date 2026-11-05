@@ -101,6 +101,22 @@ mod windows_usb {
         out
     }
 
+    /// Whether Silhouette Studio is running, from the process list (`tasklist`, run without a
+    /// window); false when it can't be read.
+    fn studio_running() -> bool {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        std::process::Command::new("tasklist")
+            .args(["/FO", "CSV", "/NH"])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map(|o| {
+                let list = String::from_utf8_lossy(&o.stdout).to_lowercase();
+                list.contains("\"silhouette studio") || list.contains("\"silhouettestudio")
+            })
+            .unwrap_or(false)
+    }
+
     impl DeviceProvider for UsbPrint {
         fn devices(&self) -> Vec<DeviceInfo> {
             device_paths()
@@ -110,6 +126,16 @@ mod windows_usb {
                     Some(DeviceInfo { name: format!("USB device {vendor_id:04x}:{product_id:04x}"), id: path, vendor_id, product_id })
                 })
                 .collect()
+        }
+
+        /// C12.5: Silhouette Studio, while it runs, asks the machine how it is and can take its
+        /// answers: a send that waits for one (the registration marks found) then waits in vain.
+        fn notes(&self) -> Vec<String> {
+            if studio_running() {
+                vec!["Another cutting program is running: close it before sending, or it can take the cutter's answers (a Print & Cut job then stops, its marks not found)".into()]
+            } else {
+                vec![]
+            }
         }
 
         fn open(&self, id: &str) -> Result<Box<dyn Transport>, TransportError> {
