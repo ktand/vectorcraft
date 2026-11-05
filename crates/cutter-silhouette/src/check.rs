@@ -41,7 +41,7 @@ pub fn check(bytes: &[u8], width_mm: f64) -> Result<(), String> {
     };
     for (n, s) in steps.iter().enumerate() {
         let ok = match s {
-            Step::Reset | Step::End | Step::OffScale => Ok(()),
+            Step::Reset | Step::End | Step::OffScale | Step::Home => Ok(()),
             Step::Mat(code) => MAT_CODES.contains(code).then_some(()).ok_or("a mat code the notes don't give"),
             Step::Orientation(o) => (*o == 0).then_some(()).ok_or("an orientation other than portrait"),
             Step::MarkSetting(code, v) => match (code, v) {

@@ -775,9 +775,16 @@ impl Silhouette {
         if let (true, Some(full)) = (windowed, full) {
             c.end_area(full);
         }
-        // Home: the head back to the origin (the top-left mark with Print & Cut), the mat left
-        // loaded; then the end of the job.
-        c.to(false, c.origin);
+        // Home, the mat left loaded; then the end of the job. With Print & Cut the origin is the
+        // top-left mark, so a move to it parks the head on the sheet (the machine's eject then
+        // only takes it home, a second press unloading: the owner's Cameo 4, 2026-11-05): `H`
+        // takes it to the machine's own home instead, the origin left as it is ([HW] 2026-11-04,
+        // C12.6).
+        if job.registration.is_some() {
+            c.cmd("H");
+        } else {
+            c.to(false, c.origin);
+        }
         c.cmd("SO0");
         let (chunks, pauses, checks) = c.chunks();
         // C4.11: read back and checked against the protocol notes; a fault refuses the send.

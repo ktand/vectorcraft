@@ -62,6 +62,8 @@ pub enum Step {
     Pitch(f64),
     /// `@`: asked whether anything was outside the cut area.
     OffScale,
+    /// `H`: the head to the machine's own home (C12.6), the origin left where it is.
+    Home,
     /// `SO0`: the end of the job.
     End,
 }
@@ -132,7 +134,7 @@ fn points(n: &[i64]) -> Option<Vec<[f64; 2]>> {
 /// One ETX-ended command's text as a step.
 fn step(text: &str) -> Option<Step> {
     // Longer names first: `BZ` before `B`, `TB` before `T…`.
-    let names = ["TB", "TG", "TF", "TJ", "FX", "FC", "FY", "BZ", "SO", "!", "J", "M", "D", "W", "L", "B", "\\", "Z", "@"];
+    let names = ["TB", "TG", "TF", "TJ", "FX", "FC", "FY", "BZ", "SO", "!", "J", "M", "D", "W", "L", "B", "\\", "Z", "@", "H"];
     let name = names.into_iter().find(|n| text.starts_with(n))?;
     let n = numbers(text.get(name.len()..)?)?;
     let one = |n: &[i64]| match n {
@@ -184,6 +186,7 @@ fn step(text: &str) -> Option<Step> {
         "\\" => two(&n).map(|(d, a)| Step::AreaFrom(point(d, a)))?,
         "Z" => two(&n).map(|(d, a)| Step::AreaTo(point(d, a)))?,
         "@" if n.is_empty() => Step::OffScale,
+        "H" if n.is_empty() => Step::Home,
         _ => return None,
     })
 }
@@ -351,6 +354,8 @@ pub fn blade_paths(steps: &[Step]) -> Result<Vec<Vec<[f64; 2]>>, String> {
             // Settings, the area and the marks don't move the blade; a reset or the end of the
             // job lifts it.
             Step::Reset | Step::End => flush(&mut run, &mut out, line, pitch),
+            // Home is the machine's own, not a position from the origin: only lifts the blade.
+            Step::Home => flush(&mut run, &mut out, line, pitch),
             _ => {}
         }
     }
@@ -430,6 +435,8 @@ mod tests {
             assert!(decode(bad).is_err(), "{:?}", String::from_utf8_lossy(bad));
         }
         assert_eq!(decode(b"TG1"), Err(DecodeError::Unterminated));
+        assert_eq!(decode(b"H\x03"), Ok(vec![Step::Home]));
+        assert!(decode(b"H1\x03").is_err());
         assert_eq!(decode(b""), Ok(vec![]));
     }
 
