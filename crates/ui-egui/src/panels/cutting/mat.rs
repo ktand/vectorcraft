@@ -207,6 +207,22 @@ fn nest_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             Err(e) => (true, e),
         });
     }
+    // C18.4: the selection as the template of a batch, one copy a data set, when there are some.
+    let records = app.session.active().map_or(0, |st| st.doc.variables.datasets.len());
+    if selected && records > 0 {
+        let button = ui.button(tl!("Batch from Data Sets")).on_hover_text(tl!(
+            "One copy of the selected design for each data set (Window › Variables), with each record's text in it, nested onto as few sheets as hold them; the design itself is hidden. Bind the text that changes to a variable first."
+        ));
+        if button.clicked() {
+            c.note = Some(match app.run("cutting.batch", json!({ "gapMm": c.gap_mm, "rotate": c.rotate })) {
+                Ok(r) => {
+                    let (n, sheets) = (r["records"].as_array().map_or(0, Vec::len), r["sheets"].as_array().map_or(0, Vec::len));
+                    (false, format!("{n} {} {sheets} {}", tl!("records nested on"), tl!("sheets")))
+                }
+                Err(e) => (true, e),
+            });
+        }
+    }
     // C18.13: the selected pieces moved to another sheet by hand.
     let sheets: Vec<String> = app.session.active().map(|st| st.doc.artboards.iter().map(|a| a.name.clone()).collect()).unwrap_or_default();
     if selected && sheets.len() > 1 {

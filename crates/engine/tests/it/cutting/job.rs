@@ -336,3 +336,80 @@ fn the_calibration_sheet_cuts_what_it_measures() {
     assert_eq!(job.paths.len(), 12, "the rings cut, the crosses not");
     assert!(s.execute("cutting.calibration", &json!({"printAndCut": 3})).is_err());
 }
+
+/// C18.4: a name tag (a rectangle and a name bound to a text variable) and three data sets make
+/// three groups named after them, each with its record's name, nested on the mat; the template
+/// hidden and not cut; one undo step. A record too long for the mat is refused by name, with
+/// nothing changed.
+#[test]
+fn a_batch_makes_a_piece_for_each_record() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 600, "height": 600})).unwrap();
+    let tag = s.execute("shape.rectangle", &json!({"x": 20, "y": 20, "width": 150, "height": 60})).unwrap()["id"].as_u64().unwrap();
+    let name = s.execute("text.create", &json!({"x": 30, "y": 60, "text": "Name", "size": 24})).unwrap()["id"].as_u64().unwrap();
+    s.execute("variable.define", &json!({"name": "who", "kind": "text"})).unwrap();
+    s.execute("variable.bind", &json!({"variable": "who", "ids": [name]})).unwrap();
+    for who in ["Anna", "Bo", "Christopher"] {
+        s.execute("dataset.new", &json!({"name": who, "values": {"who": who}})).unwrap();
+    }
+    s.execute("select.set", &json!({"ids": [tag, name]})).unwrap();
+    let before = vectorcraft_cutting::build_job(&s.active().unwrap().doc).unwrap().paths.len();
+    let r = s.execute("cutting.batch", &json!({})).unwrap();
+    let records = r["records"].as_array().unwrap();
+    assert_eq!(records.iter().map(|x| x["name"].as_str().unwrap()).collect::<Vec<_>>(), ["Anna", "Bo", "Christopher"]);
+    let doc = s.active().unwrap().doc.clone();
+    for x in records {
+        let g = doc.node(vectorcraft_doc::NodeId(x["id"].as_u64().unwrap())).unwrap();
+        assert_eq!(g.name.as_deref(), x["name"].as_str());
+        let texts: Vec<String> = g
+            .children()
+            .unwrap()
+            .iter()
+            .filter_map(|c| match &c.kind {
+                vectorcraft_doc::NodeKind::Text(t) => Some(t.plain_text()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(texts, [x["name"].as_str().unwrap()]);
+    }
+    assert!(!doc.node(vectorcraft_doc::NodeId(tag)).unwrap().visible && !doc.node(vectorcraft_doc::NodeId(name)).unwrap().visible);
+    let job = vectorcraft_cutting::build_job(&doc).unwrap();
+    assert!(job.paths.len() > before * 2, "three tags cut, the template not: {} {before}", job.paths.len());
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(s.active().unwrap().doc.node(vectorcraft_doc::NodeId(name)).unwrap().visible, "one undo step");
+    // A name that makes the tag wider than the mat: refused by name, nothing added.
+    s.execute("dataset.new", &json!({"name": "Long", "values": {"who": "W".repeat(120)}})).unwrap();
+    s.execute("select.set", &json!({"ids": [tag, name]})).unwrap();
+    let e = s.execute("cutting.batch", &json!({"datasets": ["Bo", "Long"]})).unwrap_err().to_string();
+    assert!(e.contains("\"Long\""), "{e}");
+    assert!(s.active().unwrap().doc.node(vectorcraft_doc::NodeId(name)).unwrap().visible);
+    // Nothing bound in the design: refused.
+    s.execute("select.set", &json!({"ids": [tag]})).unwrap();
+    assert!(s.execute("cutting.batch", &json!({})).is_err());
+}
+
+proptest::proptest! {
+    #![proptest_config(proptest::prelude::ProptestConfig { cases: 24, ..proptest::prelude::ProptestConfig::default() })]
+
+    /// C18.4: random records (names of letters, digits and punctuation, empty, long) make a batch or a refusal,
+    /// never a crash; a batch has one piece a record, with its text.
+    #[test]
+    fn random_data_sets_batch_or_refuse(values in proptest::collection::vec("[A-Za-z0-9 ÅÄÖåäöéüß.,'&-]{0,40}", 1..6)) {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({"width": 600, "height": 600})).unwrap();
+        let name = s.execute("text.create", &json!({"x": 30, "y": 60, "text": "Name", "size": 18})).unwrap()["id"].as_u64().unwrap();
+        s.execute("variable.define", &json!({"name": "who", "kind": "text"})).unwrap();
+        s.execute("variable.bind", &json!({"variable": "who", "ids": [name]})).unwrap();
+        let mut made = 0;
+        for (i, v) in values.iter().enumerate() {
+            if s.execute("dataset.new", &json!({"name": format!("r{i}"), "values": {"who": v}})).is_ok() {
+                made += 1;
+            }
+        }
+        s.execute("select.set", &json!({"ids": [name]})).unwrap();
+        match s.execute("cutting.batch", &json!({})) {
+            Ok(r) => proptest::prop_assert_eq!(r["records"].as_array().unwrap().len(), made),
+            Err(e) => proptest::prop_assert!(!e.to_string().is_empty()),
+        }
+    }
+}

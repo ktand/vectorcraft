@@ -432,6 +432,13 @@ so a small piece can sit in a larger one's hole:
 With more than one sheet, the Send window shows "Sheet 1 of 3", with **Previous Sheet** and **Next Sheet**. Cut a
 sheet, load the next, go to the next sheet, Send.
 
+**A batch from data sets.** For name tags, team shirts or place cards: make one design, bind the text that
+changes (a name, a number) to a text variable in Window › Variables, and add a data set for each record. Then,
+with the design selected, the Nesting panel's **Batch from Data Sets** makes one copy of the design for each data
+set, named after it and with its text, and nests the copies onto as few sheets as hold them (with the panel's Gap
+and Turn Pieces). The design itself is hidden, so it isn't cut too. A record that makes the design too large for
+the mat is named, and nothing is changed. One Undo takes the whole batch back.
+
 **Moving a piece to another sheet.** With pieces selected and more than one sheet, the Nesting panel's
 **Move to** moves them to another sheet (artboard), each keeping its place relative to its sheet.
 
