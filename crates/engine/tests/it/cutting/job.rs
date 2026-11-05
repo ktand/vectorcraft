@@ -283,3 +283,32 @@ fn a_perforated_line_the_machine_can_dash_is_kept_whole() {
     let first = job.paths.iter().find(|p| p.source.node == ring).map(length).unwrap();
     assert!((first - 3.0).abs() < 0.05, "{first}");
 }
+
+/// C4.10: a job made from a design, its curves and a ring the machine dashes (C4.15) included,
+/// reads back from the Silhouette bytes as its own paths: as many runs, each starting where its
+/// path does (taking the machine's dashes to start with a cut at the line's start).
+#[test]
+fn a_designs_job_reads_back_from_the_bytes() {
+    use vectorcraft_cutter::Driver;
+    use vectorcraft_cutter_silhouette::decode::{blade_paths, decode};
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 600, "height": 600})).unwrap();
+    let ring = s.execute("shape.ellipse", &json!({"x": 100, "y": 100, "width": 100, "height": 100})).unwrap()["id"].as_u64().unwrap();
+    s.execute("shape.ellipse", &json!({"x": 300, "y": 40, "width": 80, "height": 50})).unwrap();
+    s.execute("shape.star", &json!({"cx": 200, "cy": 400, "radius1": 50, "radius2": 20, "points": 5})).unwrap();
+    square(&mut s, 400.0, 400.0, 20.0);
+    s.execute("cutting.op.set", &json!({"ids": [ring], "op": "perforate"})).unwrap();
+    let job = vectorcraft_cutting::build_job(&s.active().unwrap().doc).unwrap();
+    assert!(!job.dashes.is_empty() && !job.curves.is_empty());
+    let cameo = vectorcraft_cutter::DeviceInfo { id: "usb".into(), vendor_id: 0x0B4D, product_id: 0x1137, name: "Cameo".into() };
+    let bytes = vectorcraft_cutter_silhouette::Silhouette.encode(&job, &cameo).unwrap().chunks.concat();
+    let runs = blade_paths(&decode(&bytes).unwrap()).unwrap();
+    assert_eq!(runs.len(), job.paths.len(), "one run a path, the ring's dashes made by the machine");
+    for (i, (run, p)) in runs.iter().zip(&job.paths).enumerate() {
+        // A dash measured along the machine's curve drifts a little from one along the points.
+        let dash = job.dashes.iter().any(|d| (d.start..d.start + d.count).contains(&i));
+        let reach = if dash { 0.3 } else { 0.03 };
+        let (a, b) = (run[0], p.points[0]);
+        assert!((a[0] - b[0]).abs() < reach && (a[1] - b[1]).abs() < reach, "path {i}: {a:?} {b:?}");
+    }
+}

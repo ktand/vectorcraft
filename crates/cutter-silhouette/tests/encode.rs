@@ -645,3 +645,26 @@ fn a_dashed_line_is_dashed_by_the_machine() {
         assert!(Silhouette.encode(&b, &cameo4()).is_err(), "{bad:?}");
     }
 }
+
+/// C4.10: the paths go in the job's order, each operation's settings sent again where it
+/// changes: a small detail cut slower between two others is cut between them, not after both.
+#[test]
+fn the_paths_go_in_the_jobs_order() {
+    let j = job(
+        vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }, Operation { kind: OpKind::Cut, tool: tool(0.5, 20.0, 1, 0.0) }],
+        vec![
+            path(0, false, &[[10.0, 10.0], [20.0, 10.0]]),
+            path(1, false, &[[30.0, 10.0], [31.0, 10.0]]),
+            path(0, false, &[[40.0, 10.0], [50.0, 10.0]]),
+        ],
+        "silhouette.12x12",
+    );
+    let t = String::from_utf8_lossy(&Silhouette.encode(&j, &cameo4()).unwrap().chunks.concat()).replace('\u{3}', " ");
+    let cuts = t.split_once("J1 ").unwrap().1;
+    assert!(
+        cuts.starts_with(
+            "FX17,1 !10,1 FC18,1,1 M200,200 D200,400 J1 FX17,1 !2,1 FC18,1,1 M200,600 D200,620 J1 FX17,1 !10,1 FC18,1,1 M200,800 D200,1000 "
+        ),
+        "{cuts}"
+    );
+}

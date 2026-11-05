@@ -12,6 +12,9 @@
 
 #![forbid(unsafe_code)]
 
+// Fork (C4.10): reading back what is sent.
+pub mod decode;
+
 use vectorcraft_cutjob::Piece;
 use vectorcraft_cutjob::{CutJob, ToolSettings};
 /// What a holder has in it (C10.3), for those that read [`tool_warnings`]' holders.
@@ -390,6 +393,48 @@ impl Commands {
         self.cmd(&format!("Z{down},{across}"));
     }
 
+    /// `tool`'s settings, on a machine with `holders` holders, what can't be sent as it is said
+    /// once in `warnings`.
+    fn tool_settings(&mut self, settings: &ToolSettings, holders: u8, warnings: &mut Vec<String>) {
+        let (force, speed) = steps(settings);
+        // C10.2: the holder is the tool's; one this driver doesn't know is cut as the usual
+        // blade, said once.
+        let kind = match tool(settings.tool.as_deref()) {
+            Some(t) => t,
+            None => {
+                let id = settings.tool.as_deref().unwrap_or_default();
+                let note = format!("the tool {id:?} isn't one this version knows: it is cut as the AutoBlade in holder 1");
+                if !warnings.contains(&note) {
+                    warnings.push(note);
+                }
+                &AUTOBLADE
+            }
+        };
+        // C10.1: on a two-holder machine each tool setting names its holder (protocol notes ›
+        // A job); the AutoBlade's depth is holder 1's only.
+        let h = kind.holder;
+        if holders > 1 {
+            self.cmd(&format!("J{h}"));
+        }
+        self.cmd(&format!("FX{force},{h}"));
+        self.cmd(&format!("!{speed},{h}"));
+        let offset = if kind.pen { 0 } else { blade_offset_units(settings.blade_offset_mm) };
+        self.cmd(&format!("FC{offset},{FC_SECOND},{h}"));
+        if let Some(depth) = settings.depth {
+            if kind.autoblade && h == 1 {
+                self.cmd(&format!("TF{depth},{h}"));
+            } else {
+                let note = format!("blade depth is the AutoBlade's: not sent for the {}", kind.label);
+                if !warnings.contains(&note) {
+                    warnings.push(note);
+                }
+            }
+        }
+        if let Some(accel) = settings.accel {
+            self.cmd(&format!("TJ{accel}"));
+        }
+    }
+
     /// Path `p` cut as `tool` says, each pass: as `native` when it has one (C4.9, C4.14), a closed
     /// one's overcut too.
     fn path(&mut self, p: &vectorcraft_cutjob::Toolpath, native: Option<&Native>, tool: &ToolSettings) {
@@ -685,8 +730,7 @@ impl Silhouette {
             warnings.push("Print & Cut is to confirm on the machine: cut a test sheet first".into());
         }
         // Group by group (one without grouping), a pause before those after the first that ask
-        // for one; in each,
-        // every operation's settings again (the tool may have been changed) and its paths.
+        // for one.
         let starts: Vec<(usize, &str, bool)> =
             if job.groups.is_empty() { vec![(0, "", false)] } else { job.groups.iter().map(|g| (g.start, g.name.as_str(), g.pause)).collect() };
         for (gi, &(start, name, pause)) in starts.iter().enumerate() {
@@ -696,63 +740,31 @@ impl Silhouette {
             if gi > 0 && pause {
                 c.pause(name);
             }
-            for (op_index, op) in job.operations.iter().enumerate() {
-                if !in_group.iter().any(|p| p.op == op_index) {
-                    continue;
+            // The paths in the job's order, each operation's settings sent again where it
+            // changes and at each group's start (the tool may have been changed at a pause): the
+            // order the job, its preview and its time estimate have (C4.10 found the encoder
+            // sending each operation's paths together, a small detail's after the rest).
+            let mut current = None;
+            for (k, p) in in_group.iter().enumerate() {
+                let Some(op) = job.operations.get(p.op) else { continue };
+                if current != Some(p.op) {
+                    c.tool_settings(&op.tool, holders, &mut warnings);
+                    current = Some(p.op);
                 }
-                let (force, speed) = steps(&op.tool);
-                // C10.2: the holder is the tool's; one this driver doesn't know is cut as the
-                // usual blade, said once.
-                let kind = match tool(op.tool.tool.as_deref()) {
-                    Some(t) => t,
-                    None => {
-                        let id = op.tool.tool.as_deref().unwrap_or_default();
-                        let note = format!("the tool {id:?} isn't one this version knows: it is cut as the AutoBlade in holder 1");
-                        if !warnings.contains(&note) {
-                            warnings.push(note);
+                // C4.15: a dashed line cut once is sent whole, its dashes cut by the machine;
+                // cut more than once, as its dashes (whether the machine's dashes start again
+                // at each pass isn't known).
+                match dashes.get(start + k) {
+                    Some(&Dashed::Start(d, code)) if op.tool.passes <= 1 => {
+                        if let Some(d) = job.dashes.get(d) {
+                            c.dashed(d, code);
                         }
-                        &AUTOBLADE
+                        continue;
                     }
-                };
-                // C10.1: on a two-holder machine each tool setting names its holder (protocol
-                // notes › A job); the AutoBlade's depth is holder 1's only.
-                let h = kind.holder;
-                if holders > 1 {
-                    c.cmd(&format!("J{h}"));
+                    Some(Dashed::Later) if op.tool.passes <= 1 => continue,
+                    _ => {}
                 }
-                c.cmd(&format!("FX{force},{h}"));
-                c.cmd(&format!("!{speed},{h}"));
-                let offset = if kind.pen { 0 } else { blade_offset_units(op.tool.blade_offset_mm) };
-                c.cmd(&format!("FC{offset},{FC_SECOND},{h}"));
-                if let Some(depth) = op.tool.depth {
-                    if kind.autoblade && h == 1 {
-                        c.cmd(&format!("TF{depth},{h}"));
-                    } else {
-                        let note = format!("blade depth is the AutoBlade's: not sent for the {}", kind.label);
-                        if !warnings.contains(&note) {
-                            warnings.push(note);
-                        }
-                    }
-                }
-                if let Some(accel) = op.tool.accel {
-                    c.cmd(&format!("TJ{accel}"));
-                }
-                for (k, p) in in_group.iter().enumerate().filter(|(_, p)| p.op == op_index) {
-                    // C4.15: a dashed line cut once is sent whole, its dashes cut by the machine;
-                    // cut more than once, as its dashes (whether the machine's dashes start again
-                    // at each pass isn't known).
-                    match dashes.get(start + k) {
-                        Some(&Dashed::Start(d, code)) if op.tool.passes <= 1 => {
-                            if let Some(d) = job.dashes.get(d) {
-                                c.dashed(d, code);
-                            }
-                            continue;
-                        }
-                        Some(Dashed::Later) if op.tool.passes <= 1 => continue,
-                        _ => {}
-                    }
-                    c.path(p, native.get(start + k).and_then(Option::as_ref), &op.tool);
-                }
+                c.path(p, native.get(start + k).and_then(Option::as_ref), &op.tool);
             }
         }
         if !job.operations.is_empty() {
