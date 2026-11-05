@@ -96,6 +96,28 @@ pub struct CutJob {
     /// Fork (C4.14): path `i`'s curve, where it has one, for a driver that sends curves in place
     /// of the points; empty when none has. Not saved with the job: it is made with it each time.
     pub curves: Vec<Option<crate::Native>>,
+    /// Fork (C4.15): perforated lines a machine that dashes by itself may cut whole, in place of
+    /// their dashes among the paths. Not saved with the job either.
+    pub dashes: Vec<MachineDash>,
+}
+
+/// Fork (C4.15): the shares of each pitch a GP-GL machine cuts as a line type of its own (1/2,
+/// 25/32 and 1/8: on a Silhouette `L3`, `L4` and `L2`; protocol notes › More of GP-GL).
+pub const MACHINE_DASH_SHARES: [f64; 3] = [0.5, 25.0 / 32.0, 0.125];
+
+/// Fork (C4.15): paths `start..start + count`, the dashes one perforated line was cut into, from
+/// its start: the line itself (`points`, or `curve`, mat mm), and its dashes' `pitch_mm` and the
+/// `share` of it cut, one of [`MACHINE_DASH_SHARES`]. A driver whose machine dashes by itself
+/// may send the line whole under its line type instead of the dashes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MachineDash {
+    pub start: usize,
+    pub count: usize,
+    pub closed: bool,
+    pub points: Vec<[f64; 2]>,
+    pub curve: Option<crate::Native>,
+    pub pitch_mm: f64,
+    pub share: f64,
 }
 
 /// Where a Print & Cut job's registration marks lie on the mat (C6.1): what the machine is told

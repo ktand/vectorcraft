@@ -243,3 +243,43 @@ fn curves_go_in_the_job_in_step_with_the_points() {
         job.paths.iter().zip(job.curves.iter().chain(std::iter::repeat(&None))).filter(|(p, _)| p.source.node == first).collect();
     assert!(perforated.len() > 1 && perforated.iter().all(|(_, c)| c.is_none()), "{}", perforated.len());
 }
+
+/// C4.15: a perforated line whose cut share is near one of the machine's own (the settings'
+/// 3 mm and 1 mm: 25/32 of 4 mm is 3.125) is kept as a whole line beside its dashes, made to
+/// the machine's share, with its curve; a share the machine hasn't, or Send Curves off, only
+/// dashes, of the lengths set.
+#[test]
+fn a_perforated_line_the_machine_can_dash_is_kept_whole() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 600, "height": 600})).unwrap();
+    let ring = s.execute("shape.ellipse", &json!({"x": 100, "y": 100, "width": 100, "height": 100})).unwrap()["id"].as_u64().unwrap();
+    square(&mut s, 300.0, 300.0, 20.0);
+    s.execute("cutting.op.set", &json!({"ids": [ring], "op": "perforate"})).unwrap();
+    let job = vectorcraft_cutting::build_job(&s.active().unwrap().doc).unwrap();
+    assert_eq!(job.dashes.len(), 1, "{:?}", job.dashes);
+    let d = &job.dashes[0];
+    assert!((d.pitch_mm - 4.0).abs() < 1e-9 && (d.share - 25.0 / 32.0).abs() < 1e-9, "{d:?}");
+    assert!(d.closed && d.curve.is_some());
+    let dashes = &job.paths[d.start..d.start + d.count];
+    assert!(dashes.len() > 10 && dashes.iter().all(|p| p.source.node == ring && !p.closed && p.op == dashes[0].op));
+    assert!(
+        job.paths.iter().enumerate().all(|(i, p)| (p.source.node == ring) == (d.start..d.start + d.count).contains(&i)),
+        "the ring's dashes together"
+    );
+    let length = |p: &vectorcraft_cutjob::Toolpath| p.points.windows(2).map(|w| (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1])).sum::<f64>();
+    let first = length(&dashes[0]);
+    assert!((first - 3.125).abs() < 0.05, "the machine's share of the pitch: {first}");
+    assert!(dashes[0].points[0] == d.points[0], "the dashes start where the line does");
+    // A share the machine hasn't: dashes only, as set.
+    s.execute("cutting.settings.set", &json!({"perforateCutMm": 2.0, "perforateGapMm": 1.0})).unwrap();
+    let job = vectorcraft_cutting::build_job(&s.active().unwrap().doc).unwrap();
+    assert!(job.dashes.is_empty());
+    let first = job.paths.iter().find(|p| p.source.node == ring).map(length).unwrap();
+    assert!((first - 2.0).abs() < 0.05, "{first}");
+    // Send Curves off: the same, at the lengths set.
+    s.execute("cutting.settings.set", &json!({"perforateCutMm": 3.0, "sendCurves": false})).unwrap();
+    let job = vectorcraft_cutting::build_job(&s.active().unwrap().doc).unwrap();
+    assert!(job.dashes.is_empty());
+    let first = job.paths.iter().find(|p| p.source.node == ring).map(length).unwrap();
+    assert!((first - 3.0).abs() < 0.05, "{first}");
+}

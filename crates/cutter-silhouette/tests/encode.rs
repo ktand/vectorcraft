@@ -25,6 +25,7 @@ fn job(ops: Vec<Operation>, paths: Vec<Toolpath>, mat: &str) -> CutJob {
         track_enhancing: false,
         registration: None,
         curves: vec![],
+        dashes: vec![],
         groups: vec![],
     }
 }
@@ -600,4 +601,47 @@ fn the_cut_area_is_set_where_it_is_known() {
     assert!(t.contains(r"TB50,0 \20,40 Z6116,6136 "), "{t}");
     let t = text(&j, &cameo4(), [-2.0, -1.0]);
     assert!(t.contains(r"TB50,0 \0,0 Z6076,6056 "), "{t}");
+}
+
+/// C4.15: a dashed line cut once goes whole under the machine's line type (`L3` for half of each
+/// pitch, the pitch as `B` in units), then `L0`; its dashes aren't sent. Cut twice, the dashes
+/// go as they are. A dashed line that doesn't fit the job is refused.
+#[test]
+fn a_dashed_line_is_dashed_by_the_machine() {
+    use vectorcraft_cutjob::MachineDash;
+    let dashes = vec![
+        path(0, false, &[[10.0, 10.0], [12.0, 10.0]]),
+        path(0, false, &[[14.0, 10.0], [16.0, 10.0]]),
+        path(0, false, &[[18.0, 10.0], [20.0, 10.0]]),
+    ];
+    let mut paths = dashes.clone();
+    paths.push(path(0, false, &[[30.0, 30.0], [40.0, 30.0]]));
+    let mut j = job(vec![Operation { kind: OpKind::Cut, tool: tool(0.5, 100.0, 1, 0.0) }], paths, "silhouette.12x12");
+    j.dashes =
+        vec![MachineDash { start: 0, count: 3, closed: false, points: vec![[10.0, 10.0], [21.0, 10.0]], curve: None, pitch_mm: 4.0, share: 0.5 }];
+    let text = |j: &CutJob| String::from_utf8_lossy(&Silhouette.encode(j, &cameo4()).unwrap().chunks.concat()).replace('\u{3}', " ");
+    let t = text(&j);
+    let cuts = t.split_once("FC18,1,1 ").unwrap().1;
+    assert!(cuts.starts_with("L3 B80 M200,200 D200,420 L0 M600,600 D600,800 @"), "{cuts}");
+    // 25/32 and 1/8 of the pitch: L4 and L2.
+    for (share, code) in [(25.0 / 32.0, "L4 "), (0.125, "L2 ")] {
+        j.dashes[0].share = share;
+        assert!(text(&j).contains(code), "{share}");
+    }
+    // Two passes: the dashes, twice each.
+    j.operations[0].tool.passes = 2;
+    let t = text(&j);
+    assert!(!t.contains(" L3 ") && t.contains("M200,200 D200,240 M200,200 D200,240 M200,280"), "{t}");
+    j.operations[0].tool.passes = 1;
+    // Out of the paths, a share without a line type, off the area: refused.
+    for bad in [
+        MachineDash { count: 5, ..j.dashes[0].clone() },
+        MachineDash { share: 0.3, ..j.dashes[0].clone() },
+        MachineDash { points: vec![[10.0, 10.0], [400.0, 10.0]], ..j.dashes[0].clone() },
+        MachineDash { pitch_mm: f64::NAN, ..j.dashes[0].clone() },
+    ] {
+        let mut b = j.clone();
+        b.dashes = vec![bad.clone()];
+        assert!(Silhouette.encode(&b, &cameo4()).is_err(), "{bad:?}");
+    }
 }

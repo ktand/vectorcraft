@@ -349,6 +349,17 @@ proptest! {
                 let _ = sim.at_fraction(0.5);
                 let _ = job.stats();
                 prop_assert!(vectorcraft_cutting::preview::to_svg(&job).ends_with("</svg>\n"));
+                // C4.15: each line the machine may dash stands for its own run of the paths, in
+                // order, apart from the others, its dashes cut alike, within one group.
+                let mut next = 0;
+                for m in &job.dashes {
+                    let run = job.paths.get(m.start..m.start + m.count).unwrap_or_default();
+                    prop_assert!(m.start >= next && m.count > 0 && run.len() == m.count, "{:?}", m);
+                    prop_assert!(run.iter().all(|p| p.op == run[0].op && p.source == run[0].source));
+                    prop_assert!(!job.groups.iter().any(|g| g.start > m.start && g.start < m.start + m.count));
+                    prop_assert!(vectorcraft_cutjob::MACHINE_DASH_SHARES.iter().any(|s| (s - m.share).abs() < 1e-9) && m.pitch_mm.is_finite());
+                    next = m.start + m.count;
+                }
             }
             Err(e) => {
                 if std::env::var_os("FUZZ_COUNT").is_some() {

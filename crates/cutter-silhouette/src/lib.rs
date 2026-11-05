@@ -390,6 +390,52 @@ impl Commands {
         self.cmd(&format!("Z{down},{across}"));
     }
 
+    /// Path `p` cut as `tool` says, each pass: as `native` when it has one (C4.9, C4.14), a closed
+    /// one's overcut too.
+    fn path(&mut self, p: &vectorcraft_cutjob::Toolpath, native: Option<&Native>, tool: &ToolSettings) {
+        if let Some(n) = native {
+            for _ in 0..tool.passes.max(1) {
+                self.native(n, p.closed, tool.overcut_mm);
+            }
+            return;
+        }
+        let Some(&first) = p.points.first() else { return };
+        for _ in 0..tool.passes.max(1) {
+            self.to(false, first);
+            for &q in p.points.iter().skip(1) {
+                self.to(true, q);
+            }
+            if p.closed {
+                self.to(true, first);
+                for q in overcut(&p.points, tool.overcut_mm) {
+                    self.to(true, q);
+                }
+            }
+        }
+    }
+
+    /// C4.15: dashed line `d` cut whole under the machine's line type `code`, from a blade-up move
+    /// to its start (as its curve when it has one), then solid lines again: the machine cuts the
+    /// dashes, the pitch given in units.
+    fn dashed(&mut self, d: &vectorcraft_cutjob::MachineDash, code: u8) {
+        self.cmd(&format!("L{code}"));
+        self.cmd(&format!("B{}", units(d.pitch_mm)));
+        match (&d.curve, d.points.split_first()) {
+            (Some(n), _) => self.native(n, d.closed, 0.0),
+            (None, Some((&first, rest))) => {
+                self.to(false, first);
+                for &q in rest {
+                    self.to(true, q);
+                }
+                if d.closed {
+                    self.to(true, first);
+                }
+            }
+            (None, None) => {}
+        }
+        self.cmd("L0");
+    }
+
     /// Packed into chunks of at most [`CHUNK_BYTES`], split only between commands, at each
     /// pause, which becomes "before chunk n", and at each check, "after chunk n".
     fn chunks(self) -> Packed {
@@ -464,27 +510,80 @@ fn check_native(job: &CutJob, native: &[Option<Native>]) -> Result<(), String> {
     if native.len() > job.paths.len() {
         return Err(format!("{} native curves for {} paths", native.len(), job.paths.len()));
     }
-    let area = job.mat.cut_area_mm;
-    let on = |q: &[f64; 2]| {
-        q.iter().all(|v| v.is_finite()) && q[0] >= area.x0 - 1e-6 && q[0] <= area.x1 + 1e-6 && q[1] >= area.y0 - 1e-6 && q[1] <= area.y1 + 1e-6
-    };
     for (i, n) in native.iter().enumerate() {
-        let ok = match n {
-            None => true,
-            Some(Native::Bezier(pieces)) => !pieces.is_empty() && pieces.len() <= MAX_NATIVE_PIECES && pieces.iter().flatten().all(on),
-            Some(n @ Native::Path { pieces, .. }) => !pieces.is_empty() && pieces.len() <= MAX_NATIVE_PIECES && n.points().iter().all(on),
-            Some(Native::Circle { centre, radius_mm }) => {
-                radius_mm.is_finite()
-                    && *radius_mm > 0.0
-                    && on(&[centre[0] - radius_mm, centre[1] - radius_mm])
-                    && on(&[centre[0] + radius_mm, centre[1] + radius_mm])
-            }
-        };
-        if !ok {
+        if !n.as_ref().is_none_or(|n| native_fits(n, job.mat.cut_area_mm)) {
             return Err(format!("path {i}'s curve is empty, too long or off the cut area"));
         }
     }
     Ok(())
+}
+
+/// Whether mat point `q` is finite and on `area`.
+fn on_area(q: &[f64; 2], area: vectorcraft_cutjob::RectMm) -> bool {
+    q.iter().all(|v| v.is_finite()) && q[0] >= area.x0 - 1e-6 && q[0] <= area.x1 + 1e-6 && q[1] >= area.y0 - 1e-6 && q[1] <= area.y1 + 1e-6
+}
+
+/// `n` isn't empty or too long, and lies on `area`.
+fn native_fits(n: &Native, area: vectorcraft_cutjob::RectMm) -> bool {
+    let on = |q: &[f64; 2]| on_area(q, area);
+    match n {
+        Native::Bezier(pieces) => !pieces.is_empty() && pieces.len() <= MAX_NATIVE_PIECES && pieces.iter().flatten().all(on),
+        Native::Path { pieces, .. } => !pieces.is_empty() && pieces.len() <= MAX_NATIVE_PIECES && n.points().iter().all(on),
+        Native::Circle { centre, radius_mm } => {
+            radius_mm.is_finite()
+                && *radius_mm > 0.0
+                && on(&[centre[0] - radius_mm, centre[1] - radius_mm])
+                && on(&[centre[0] + radius_mm, centre[1] + radius_mm])
+        }
+    }
+}
+
+/// C4.15: the machine's line type that cuts `share` of each pitch (protocol notes › More of
+/// GP-GL, [HW] 2026-11-04).
+fn line_type(share: f64) -> Option<u8> {
+    [(0.5, 3), (25.0 / 32.0, 4), (0.125, 2)].into_iter().find(|(s, _)| (share - s).abs() < 1e-6).map(|(_, t)| t)
+}
+
+/// C4.15: the pitches the machine is given, mm.
+const DASH_PITCH_MM: (f64, f64) = (0.5, 100.0);
+
+/// What a path is to a dashed line the machine cuts by itself (C4.15).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Dashed {
+    /// Not one.
+    No,
+    /// The first dash: the line is sent here, with this line type.
+    Start(usize, u8),
+    /// A later dash: sent with the first.
+    Later,
+}
+
+/// C4.15: each of `job`'s paths as part of a dashed line or not; an error where a dashed line
+/// doesn't fit the job (out of its paths, over another or a group's start, its dashes cut with
+/// different settings, a share the machine has no line type for, its line off the cut area).
+fn dashed(job: &CutJob) -> Result<Vec<Dashed>, String> {
+    let mut role = vec![Dashed::No; if job.dashes.is_empty() { 0 } else { job.paths.len() }];
+    let area = job.mat.cut_area_mm;
+    for (i, d) in job.dashes.iter().enumerate() {
+        let end = d.start.checked_add(d.count).filter(|&e| d.count > 0 && e <= job.paths.len()).unwrap_or(d.start);
+        let paths = job.paths.get(d.start..end).unwrap_or_default();
+        let op = paths.first().map(|p| p.op);
+        let fits = !paths.is_empty()
+            && paths.iter().all(|p| Some(p.op) == op)
+            && !job.groups.iter().any(|g| g.start > d.start && g.start < end)
+            && role.get(d.start..end).is_some_and(|r| r.iter().all(|r| *r == Dashed::No))
+            && !d.points.is_empty()
+            && d.points.len() <= vectorcraft_cutjob::MAX_POINTS
+            && d.points.iter().all(|q| on_area(q, area))
+            && d.curve.as_ref().is_none_or(|n| native_fits(n, area))
+            && d.pitch_mm.is_finite()
+            && (DASH_PITCH_MM.0..=DASH_PITCH_MM.1).contains(&d.pitch_mm);
+        let code = line_type(d.share).filter(|_| fits).ok_or_else(|| format!("dashed line {i} doesn't fit the job"))?;
+        for (k, r) in role.get_mut(d.start..end).unwrap_or_default().iter_mut().enumerate() {
+            *r = if k == 0 { Dashed::Start(i, code) } else { Dashed::Later };
+        }
+    }
+    Ok(role)
 }
 
 /// The Silhouette driver.
@@ -521,6 +620,7 @@ impl Silhouette {
         // The curves given, else the job's own (C4.14).
         let native = if native.is_empty() { job.curves.as_slice() } else { native };
         check_native(job, native)?;
+        let dashes = dashed(job)?;
         let area = job.mat.cut_area_mm;
         if area.x1 > width_mm + 1e-6 {
             return Err(format!("the job is {:.1} mm wide; this cutter cuts {width_mm:.1} mm", area.x1));
@@ -638,26 +738,20 @@ impl Silhouette {
                     c.cmd(&format!("TJ{accel}"));
                 }
                 for (k, p) in in_group.iter().enumerate().filter(|(_, p)| p.op == op_index) {
-                    // C4.9, C4.14: the machine's own curves, each pass, a closed one's overcut too.
-                    if let Some(Some(n)) = native.get(start + k) {
-                        for _ in 0..op.tool.passes.max(1) {
-                            c.native(n, p.closed, op.tool.overcut_mm);
-                        }
-                        continue;
-                    }
-                    let Some(&first) = p.points.first() else { continue };
-                    for _ in 0..op.tool.passes.max(1) {
-                        c.to(false, first);
-                        for &q in p.points.iter().skip(1) {
-                            c.to(true, q);
-                        }
-                        if p.closed {
-                            c.to(true, first);
-                            for q in overcut(&p.points, op.tool.overcut_mm) {
-                                c.to(true, q);
+                    // C4.15: a dashed line cut once is sent whole, its dashes cut by the machine;
+                    // cut more than once, as its dashes (whether the machine's dashes start again
+                    // at each pass isn't known).
+                    match dashes.get(start + k) {
+                        Some(&Dashed::Start(d, code)) if op.tool.passes <= 1 => {
+                            if let Some(d) = job.dashes.get(d) {
+                                c.dashed(d, code);
                             }
+                            continue;
                         }
+                        Some(Dashed::Later) if op.tool.passes <= 1 => continue,
+                        _ => {}
                     }
+                    c.path(p, native.get(start + k).and_then(Option::as_ref), &op.tool);
                 }
             }
         }

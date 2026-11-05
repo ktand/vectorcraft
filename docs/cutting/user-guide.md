@@ -174,9 +174,15 @@ Enhancing** (on a Cameo 4 with a mat it made no visible difference in our tests;
 objects set to Perforate), **Slow Details**, **Send Curves** and **Cut Order**.
 
 **Send Curves** (on at first) sends the curves of your design to the machine as curves, which it cuts smoother
-and rounder than the short straight lines they are otherwise broken into. A path that is perforated, cut up to
-the mat's edge (Clip to Mat) or given corner runs (**Corners**) is still sent as straight lines. Turn it off to cut
-everything as straight lines, as earlier versions did. The preview looks the same either way.
+and rounder than the short straight lines they are otherwise broken into. A path cut up to the mat's edge (Clip to
+Mat) or given corner runs (**Corners**) is still sent as straight lines. Turn it off to cut everything as straight
+lines, as earlier versions did. The preview looks the same either way.
+
+With Send Curves on, the machine also perforates by itself where it can: it knows three kinds of dashes, a cut of
+1/2, 25/32 or 1/8 of each repeat. A perforation whose cut is within 0.15 mm of one of those is sent as the whole
+line, cut once, and the machine makes the dashes; the job's dashes are then made to the machine's lengths, so the
+preview shows what it cuts. The usual 3 mm and 1 mm becomes 3.125 mm and 0.875 mm (25/32 of 4 mm); 2 mm and 2 mm
+stays as it is (1/2). Other lengths, and a perforation cut more than once (**Passes**), are sent as dashes.
 
 **Cut Order** decides the order the lines are cut in. Scoring always comes before cutting, and with the first two
 choices a shape inside another (the counter of an O) is cut before it, so the piece around it stays held:

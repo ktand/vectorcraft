@@ -35,6 +35,7 @@ control is and what it does: the [user guide](user-guide.md).
 | 17 | Cutting from the roll | | |
 | 18 | Curves sent to the machine | Pass | All three rows cut; the `BZ` and `W` circles rounder than the straight moves (2026-11-04) |
 | 19 | The cut area each job sets | | |
+| 20 | Perforation by the machine | | |
 
 ## Before you start
 
@@ -363,3 +364,21 @@ the area was seen on 2026-11-04 (protocol notes › More of GP-GL).
 
 If the large area isn't taken (a later job, or Studio's, is cut short), the note goes here and the encoder puts
 back a smaller one, or stops setting the area.
+
+## Step 20: perforation by the machine (C4.15)
+
+With **Send Curves** on, a perforation of 3 mm and 1 mm (the default) or 2 mm and 2 mm is sent as the whole
+line under the machine's own dash type (`L4` or `L3`, the repeat as `B`) and the machine makes the dashes. On
+paper on the mat:
+
+- A 50 mm circle and a 60 mm straight line, both set to **Perforate**, with the default lengths. Send. Do the
+  dashes come out about 3.1 mm cut and 0.9 mm uncut, all round the circle? Does the first dash start where the
+  preview's does (at the line's start), or with a gap?
+- Cut Settings › Advanced › Perforate 2 mm and 2 mm; send again: 2 mm and 2 mm?
+- Then the same with **Send Curves** off (the dashes sent one by one, as before): do the two look alike, and is
+  one quicker?
+- After a perforated job, cut a plain square: it must be cut solid (the job ends with `L0`).
+
+Note: the dash and gap lengths, where the first dash began, and whether the square after was solid. If the
+dashes start with a gap rather than a cut, the preview is off by a gap at each line's start: the notes say so
+and the encoder will start the line a gap later.

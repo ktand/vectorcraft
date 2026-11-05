@@ -21,6 +21,9 @@ pub struct Polyline {
     /// Fork (C4.14): the curve the points were flattened from, for a machine that cuts curves;
     /// `None` once a step changes the points other than by starting or reversing them.
     pub curve: Option<Box<Curve>>,
+    /// Fork (C4.15): cut in dashes of this cut and gap, mm, from its start, by a machine that
+    /// dashes by itself where it can: kept whole until the job is made, then cut into its dashes.
+    pub dash: Option<[f64; 2]>,
 }
 
 /// Fork (C4.14): a polyline's curve, and where its pieces start among the points.
@@ -286,7 +289,7 @@ fn tidy(o: &Outline, points: Vec<[f64; 2]>) -> Option<Polyline> {
         }
     }
     let length: f64 = kept.windows(2).map(|w| dist(w[0], w[1])).sum();
-    (kept.len() >= 2 && length >= SAME_MM).then_some(Polyline { op: o.op, source: o.source, closed, points: kept, curve: None })
+    (kept.len() >= 2 && length >= SAME_MM).then_some(Polyline { op: o.op, source: o.source, closed, points: kept, curve: None, dash: None })
 }
 
 /// The parts of segment `a`–`b` inside `r` (Liang–Barsky): its ends there, or `None`.
@@ -355,7 +358,7 @@ fn clip(p: &Polyline, r: RectMm) -> Vec<Polyline> {
     pieces
         .into_iter()
         .filter(|pc| pc.windows(2).map(|w| dist(w[0], w[1])).sum::<f64>() >= SAME_MM)
-        .map(|points| Polyline { op: p.op, source: p.source, closed: false, points, curve: None })
+        .map(|points| Polyline { op: p.op, source: p.source, closed: false, points, curve: None, dash: None })
         .collect()
 }
 

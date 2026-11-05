@@ -24,8 +24,8 @@ mod settings;
 mod simulate;
 
 pub use job::{
-    CutJob, JOB_VERSION, JobError, JobGroup, JobMat, JobRegistration, JobStats, JobWarning, MAX_PATHS, MAX_POINTS, OpKind, Operation, SourceRef,
-    Toolpath,
+    CutJob, JOB_VERSION, JobError, JobGroup, JobMat, JobRegistration, JobStats, JobWarning, MACHINE_DASH_SHARES, MAX_PATHS, MAX_POINTS, MachineDash,
+    OpKind, Operation, SourceRef, Toolpath,
 };
 pub use marks::{Mark, MarkLayout};
 pub use mat::{MAT_PRESETS, MatGeometry, ROLL, RectMm};

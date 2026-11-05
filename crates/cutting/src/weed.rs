@@ -56,7 +56,7 @@ pub fn weeding(paths: &[Polyline], area: RectMm, s: &CuttingSettings) -> (Vec<Po
     }
     if s.weed_box {
         let corners = vec![[boxed.x0, boxed.y0], [boxed.x1, boxed.y0], [boxed.x1, boxed.y1], [boxed.x0, boxed.y1]];
-        out.push(Polyline { op: OpKind::Cut, source: SOURCE, closed: true, points: corners, curve: None });
+        out.push(Polyline { op: OpKind::Cut, source: SOURCE, closed: true, points: corners, curve: None, dash: None });
     }
     (out, warnings)
 }
@@ -117,7 +117,14 @@ fn lines_across(paths: &[Polyline], at: f64, lo: f64, hi: f64, horizontal: bool)
         }
     }
     let point = |along: f64| if horizontal { [along, at] } else { [at, along] };
-    let line = |from: f64, to: f64| Polyline { op: OpKind::Cut, source: SOURCE, closed: false, points: vec![point(from), point(to)], curve: None };
+    let line = |from: f64, to: f64| Polyline {
+        op: OpKind::Cut,
+        source: SOURCE,
+        closed: false,
+        points: vec![point(from), point(to)],
+        curve: None,
+        dash: None,
+    };
     if !first.is_finite() {
         return vec![line(lo, hi)];
     }
@@ -144,6 +151,7 @@ mod tests {
             closed: true,
             points: vec![[x0, y0], [x0 + side, y0], [x0 + side, y0 + side], [x0, y0 + side]],
             curve: None,
+            dash: None,
         }
     }
 

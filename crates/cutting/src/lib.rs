@@ -109,9 +109,29 @@ fn with_tool(setup: &vectorcraft_cutjob::ToolSettings, document: &vectorcraft_cu
 /// inch, and art drawn at 96 px/in (most SVGs with no units) cuts a third larger than meant.
 pub const PIXELS_WARNING: &str = "the document is measured in pixels, cut at 72 per inch: art drawn at 96 px/in cuts a third larger than meant";
 
+/// Fork (C4.15): how far a perforation's cut length may be from a machine's own share of its
+/// pitch for the machine to cut it (the dashes are then made to the machine's share), mm.
+const MACHINE_DASH_MM: f64 = 0.15;
+/// The pitches a machine is given to dash by itself, mm.
+const MACHINE_PITCH_MM: (f64, f64) = (0.5, 100.0);
+
+/// Fork (C4.15): `pattern` as the cut and gap of a machine's own line type, where one dash and gap
+/// repeat and the cut is within [`MACHINE_DASH_MM`] of one of its shares of the pitch.
+fn machine_dash(pattern: &[(f64, f64)]) -> Option<[f64; 2]> {
+    let &(cut, gap) = pattern.first()?;
+    let pitch = cut + gap;
+    if pattern.iter().any(|&q| q != (cut, gap)) || gap <= 0.0 || !(MACHINE_PITCH_MM.0..=MACHINE_PITCH_MM.1).contains(&pitch) {
+        return None;
+    }
+    let share = vectorcraft_cutjob::MACHINE_DASH_SHARES.into_iter().find(|s| (cut - s * pitch).abs() <= MACHINE_DASH_MM)?;
+    Some([share * pitch, (1.0 - share) * pitch])
+}
+
 /// `polylines` with those of the objects set to Perforate (C14.4) cut in dashes: the object's
 /// stroke's dash pattern when it has one (points, as mm on the mat), else the settings' lengths.
-fn perforated(d: &Document, s: &CuttingSettings, items: &[select::Item], polylines: Vec<prepare::Polyline>) -> Vec<prepare::Polyline> {
+/// With `machine` (C4.15), a pattern the machine can dash by itself is kept whole, marked with
+/// its dash, and cut into dashes once it is ordered.
+fn perforated(d: &Document, s: &CuttingSettings, items: &[select::Item], polylines: Vec<prepare::Polyline>, machine: bool) -> Vec<prepare::Polyline> {
     let mut patterns = std::collections::HashMap::new();
     for item in items.iter().filter(|i| i.perforate) {
         let own = d.node(item.id).and_then(|n| n.appearance.stroke().and_then(|k| k.dash.clone())).filter(|dash| dash.is_dashed());
@@ -128,10 +148,15 @@ fn perforated(d: &Document, s: &CuttingSettings, items: &[select::Item], polylin
     }
     let mut out = Vec::with_capacity(polylines.len());
     for p in polylines {
-        match patterns.get(&p.source.node) {
+        let pattern = patterns.get(&p.source.node);
+        if let Some(dash) = pattern.filter(|_| machine).and_then(|q| machine_dash(q)) {
+            out.push(prepare::Polyline { dash: Some(dash), ..p });
+            continue;
+        }
+        match pattern {
             Some(pattern) => {
                 for points in perforate::dashes(&p.points, p.closed, pattern) {
-                    out.push(prepare::Polyline { op: p.op, source: p.source, closed: false, points, curve: None });
+                    out.push(prepare::Polyline { op: p.op, source: p.source, closed: false, points, curve: None, dash: None });
                 }
             }
             None => out.push(p),
@@ -163,7 +188,7 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     }
     let (polylines, more) = prepare::prepare(&outlines, &cut_on, s.tolerance_mm, s.clip_to_mat).map_err(BuildError::Prepare)?;
     warnings.extend(more);
-    let polylines = perforated(d, &s, &items, polylines);
+    let polylines = perforated(d, &s, &items, polylines, s.send_curves);
     // C18.2: what usually spoils a cut, said before it is sent.
     warnings.extend(checks::checks(&polylines));
     if d.units == vectorcraft_doc::Unit::Pixels && !polylines.is_empty() {
@@ -209,8 +234,19 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     }
     // Each group's own setup (C7.4), if it has one; else the document's.
     let setups: Vec<Option<vectorcraft_cutjob::GroupSetup>> = names.iter().map(|n| setups::setup_of(d, &s, n)).collect();
-    // The paths in order, each with the group whose setup it is cut with (none: the document's).
-    let mut ordered: Vec<(prepare::Polyline, Option<usize>)> = vec![];
+    // C18.7: a small detail is cut as an operation of its own, slower.
+    let detail = |p: &prepare::Polyline| {
+        s.detail_slow && {
+            let (lo, hi) = p.points.iter().fold(([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]), |(lo, hi), q| {
+                ([lo[0].min(q[0]), lo[1].min(q[1])], [hi[0].max(q[0]), hi[1].max(q[1])])
+            });
+            hi[0] - lo[0] <= s.detail_size_mm && hi[1] - lo[1] <= s.detail_size_mm
+        }
+    };
+    // The paths in order, each with the group whose setup it is cut with (none: the document's)
+    // and whether it is a small detail; the lines a machine may dash by itself (C4.15).
+    let mut ordered: Vec<(prepare::Polyline, Option<usize>, bool)> = vec![];
+    let mut dashes: Vec<vectorcraft_cutjob::MachineDash> = vec![];
     let mut groups = vec![];
     let mut at = [area.x0, area.y0];
     for (g, bucket) in buckets.into_iter().enumerate() {
@@ -238,19 +274,31 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
             at = *last;
         }
         let slot = setup.map(|_| g);
-        ordered.extend(these.into_iter().map(|p| (p, slot)));
-    }
-    // C18.7: a small detail is cut as an operation of its own, slower.
-    let detail = |p: &prepare::Polyline| {
-        s.detail_slow && {
-            let (lo, hi) = p.points.iter().fold(([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]), |(lo, hi), q| {
-                ([lo[0].min(q[0]), lo[1].min(q[1])], [hi[0].max(q[0]), hi[1].max(q[1])])
+        for p in these {
+            let small = detail(&p);
+            // C4.15: a line kept whole for the machine is cut into its dashes here, once its start
+            // and direction are chosen, all of them with the line's operation.
+            let Some([cut, gap]) = p.dash else {
+                ordered.push((p, slot, small));
+                continue;
+            };
+            let pieces = perforate::dashes(&p.points, p.closed, &[(cut, gap)]);
+            dashes.push(vectorcraft_cutjob::MachineDash {
+                start: ordered.len(),
+                count: pieces.len(),
+                closed: p.closed,
+                points: p.points.clone(),
+                curve: p.curve.as_ref().map(|c| c.native.clone()),
+                pitch_mm: cut + gap,
+                share: cut / (cut + gap),
             });
-            hi[0] - lo[0] <= s.detail_size_mm && hi[1] - lo[1] <= s.detail_size_mm
+            for points in pieces {
+                ordered.push((prepare::Polyline { op: p.op, source: p.source, closed: false, points, curve: None, dash: None }, slot, small));
+            }
         }
-    };
+    }
     // One operation for each kind, setup and pace the job uses, scored first.
-    let mut keys: Vec<(OpKind, Option<usize>, bool)> = ordered.iter().map(|(p, slot)| (p.op, *slot, detail(p))).collect();
+    let mut keys: Vec<(OpKind, Option<usize>, bool)> = ordered.iter().map(|(p, slot, small)| (p.op, *slot, *small)).collect();
     keys.sort();
     keys.dedup();
     let operations: Vec<Operation> = keys
@@ -270,11 +318,11 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
         .collect();
     // C4.14: each path's curve, for a machine that cuts curves, when the settings send them.
     let curves: Vec<Option<vectorcraft_cutjob::Native>> =
-        if s.send_curves { ordered.iter().map(|(p, _)| p.curve.as_ref().map(|c| c.native.clone())).collect() } else { vec![] };
+        if s.send_curves { ordered.iter().map(|(p, _, _)| p.curve.as_ref().map(|c| c.native.clone())).collect() } else { vec![] };
     let paths = ordered
         .into_iter()
-        .map(|(p, slot)| Toolpath {
-            op: keys.iter().position(|k| *k == (p.op, slot, detail(&p))).unwrap_or(0),
+        .map(|(p, slot, small)| Toolpath {
+            op: keys.iter().position(|k| *k == (p.op, slot, small)).unwrap_or(0),
             source: p.source,
             closed: p.closed,
             points: p.points,
@@ -290,6 +338,7 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
         groups,
         registration,
         curves,
+        dashes,
     };
     // A path the corner overcut adds to is cut as its points: the curve doesn't have the runs.
     let before: Vec<usize> = job.paths.iter().map(|p| p.points.len()).collect();
@@ -304,6 +353,8 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     if job.curves.iter().all(Option::is_none) {
         job.curves.clear();
     }
+    // Nor a dashed line one of whose dashes it added to.
+    job.dashes.retain(|m| (m.start..m.start + m.count).all(|i| before.get(i) == job.paths.get(i).map(|p| p.points.len()).as_ref()));
     job.validate().map_err(BuildError::Invalid)?;
     Ok(job)
 }

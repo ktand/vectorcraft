@@ -121,6 +121,7 @@ mod tests {
             track_enhancing: false,
             registration: None,
             curves: vec![],
+            dashes: vec![],
             groups: vec![],
         }
     }

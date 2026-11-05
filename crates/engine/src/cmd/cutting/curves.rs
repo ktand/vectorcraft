@@ -162,6 +162,7 @@ fn curve_job(s: &Session, p: &Value, cmd: &str) -> Result<(CutJob, Vec<Option<Na
         groups: vec![],
         registration: None,
         curves: vec![],
+        dashes: vec![],
     };
     job.validate().map_err(|e| bad(cmd, e.to_string()))?;
     Ok((job, native, rows))
