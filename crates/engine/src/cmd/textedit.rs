@@ -1149,6 +1149,99 @@ fn glyph_target(t: &TextObject, p: &Value, c: &str) -> Result<(char, std::ops::R
     Err(bad(c, format!("no character at byte {start}")))
 }
 
+/// The glyph of `face` that `lay` draws for the character `ch` at `bytes` of `plain`, the laid-out
+/// text; `None` when the character is not laid out (overflowing text). A character that starts a
+/// longer grapheme (a letter and its combining marks) is drawn in the grapheme's cluster. Of a
+/// cluster of several glyphs (a mark, a vowel sign drawn before the letter), the character's glyph
+/// is the first in cluster order that is its default glyph or one of its alternates and not the
+/// default glyph of another character of the grapheme; else the first that is its default glyph or
+/// one of its alternates; else the first glyph that is not the default glyph or an alternate of
+/// another character of the grapheme (a ligature of the letter and a mark). `Some(None)` when the
+/// cluster holds none of these.
+fn own_glyph(
+    plain: &str,
+    lay: &vectorcraft_text::TextLayout,
+    ch: char,
+    bytes: &std::ops::Range<usize>,
+    face: &vectorcraft_text::FontFace,
+) -> Option<Option<u32>> {
+    lay.glyphs.iter().find(|g| g.byte <= bytes.start && bytes.start < g.byte.saturating_add(g.len))?;
+    let grapheme = edit::next_cluster(plain, bytes.start).max(bytes.end) - bytes.start;
+    let cluster: Vec<u32> = lay
+        .glyphs
+        .iter()
+        .filter(|g| g.byte == bytes.start && [bytes.len(), grapheme].contains(&g.len) && g.font_id == face.id())
+        .map(|g| g.gid)
+        .collect();
+    Some(match cluster[..] {
+        [one] => Some(one),
+        _ => {
+            // The glyphs of each character are looked up once: a grapheme can repeat a mark.
+            let glyphs_of = |c: char| face.alternates(c).iter().map(|a| a.gid).chain([face.glyph_for(c)]).collect::<Vec<u32>>();
+            // In cluster order: a conjunct's half form comes before the default glyph of its
+            // second consonant, which can be the same character. A glyph drawn for another
+            // character (a vowel sign drawn first) is skipped even when the font lists it as an
+            // alternate of this one.
+            let own = glyphs_of(ch);
+            let mut others: Vec<char> = plain.get(bytes.end..bytes.start + grapheme).unwrap_or_default().chars().filter(|&c| c != ch).collect();
+            others.sort_unstable();
+            others.dedup();
+            let their_defaults: Vec<u32> = others.iter().map(|&c| face.glyph_for(c)).collect();
+            cluster
+                .iter()
+                .copied()
+                .find(|g| own.contains(g) && !their_defaults.contains(g))
+                .or_else(|| cluster.iter().copied().find(|g| own.contains(g)))
+                .or_else(|| {
+                    let theirs: Vec<u32> = others.iter().flat_map(|&c| glyphs_of(c)).collect();
+                    cluster.iter().copied().find(|g| !theirs.contains(g))
+                })
+        }
+    })
+}
+
+/// The glyph of `face` drawn for the character `ch` at `bytes` of `t` when the character is shaped
+/// alone in the writing direction of `t` and the direction its paragraph sets it in, with the rest
+/// of its grapheme in the grapheme's own styles: the glyph of a character that is not laid out
+/// (overflowing text). Also the glyph drawn for the character in whatever face draws it
+/// ([`drawn_glyph`]).
+fn shaped_alone(t: &TextObject, ch: char, bytes: &std::ops::Range<usize>, face: &vectorcraft_text::FontFace) -> (Option<u32>, Option<u32>) {
+    use vectorcraft_doc::ParaDirection;
+    let plain = t.plain_text();
+    let end = edit::next_cluster(&plain, bytes.start).max(bytes.end);
+    let mut single = TextObject::point(Point::ZERO, "", CharStyle::default());
+    single.runs = edit::slice_runs(&t.runs, bytes.start, end);
+    single.vertical = t.vertical;
+    // The bidi level of the character in its paragraph (a parenthesis is mirrored at an odd one).
+    let before = plain.get(..bytes.start).unwrap_or_default();
+    let (paragraph, start) = (before.matches('\n').count(), before.rfind('\n').map_or(0, |i| i + 1));
+    let stop = plain.get(bytes.start..).and_then(|after| after.find('\n')).map_or(plain.len(), |i| bytes.start + i);
+    let rtl = vectorcraft_text::char_is_rtl(plain.get(start..stop).unwrap_or_default(), t.para_at(paragraph).direction, bytes.start - start);
+    single.para.direction = Some(if rtl { ParaDirection::RightToLeft } else { ParaDirection::LeftToRight });
+    let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), &single);
+    let (alone, at) = (single.plain_text(), 0..bytes.len());
+    (own_glyph(&alone, &lay, ch, &at, face).flatten(), drawn_glyph(&alone, &lay, ch, &at, face))
+}
+
+/// The glyph `lay` draws for the character `ch` at `bytes` of `plain` in whatever face draws it:
+/// the glyph of `face` ([`own_glyph`]); else, when a fallback face draws the character, that face's
+/// glyph for it by the same rule (its vowel sign drawn first is not reported); else the first glyph
+/// drawn for the character. `None` when the character is not laid out.
+fn drawn_glyph(
+    plain: &str,
+    lay: &vectorcraft_text::TextLayout,
+    ch: char,
+    bytes: &std::ops::Range<usize>,
+    face: &vectorcraft_text::FontFace,
+) -> Option<u32> {
+    if let Some(own) = own_glyph(plain, lay, ch, bytes, face).flatten() {
+        return Some(own);
+    }
+    let first = lay.glyphs.iter().find(|g| g.byte <= bytes.start && bytes.start < g.byte.saturating_add(g.len))?;
+    let fallback = (first.font_id != face.id()).then(|| vectorcraft_text::FontDb::global().face_by_id(first.font_id)).flatten();
+    fallback.and_then(|f| own_glyph(plain, lay, ch, bytes, &f).flatten()).or(Some(first.gid))
+}
+
 fn set_glyph_alternate(s: &mut Session, p: &Value) -> Result<Value> {
     const C: &str = "text.setGlyphAlternate";
     let id = id_param(p, "id").ok_or_else(|| bad(C, "missing `id`"))?;
@@ -1160,15 +1253,6 @@ fn set_glyph_alternate(s: &mut Session, p: &Value) -> Result<Value> {
     let t = text_ref(s, id)?;
     let (ch, bytes, face) = glyph_target(&t, p, C)?;
     let default = face.glyph_for(ch);
-    let choice = match gid.filter(|g| *g != default) {
-        None => None,
-        Some(g) if face.alternates(ch).iter().any(|a| a.gid == g) => Some(face.choice(ch, g)),
-        Some(g) => return Err(bad(C, format!("glyph {g} is not an alternate of {ch} in {} {}", face.family, face.style))),
-    };
-    let drawn = choice.as_ref().map_or(default, |c| c.gid);
-    // The run holding the character. The request changes nothing when the choice is the one the
-    // character's run holds and that run holds the character alone; otherwise the edit splits the
-    // run, so that the following text does not take the character into a ligature.
     let holder = t
         .runs
         .iter()
@@ -1178,22 +1262,42 @@ fn set_glyph_alternate(s: &mut Session, p: &Value) -> Result<Value> {
             Some((start..*at, r))
         })
         .find(|(bytes_of_run, _)| bytes_of_run.contains(&bytes.start));
+    let styled =
+        holder.as_ref().is_some_and(|(_, r)| r.style.all_caps || (r.style.small_caps.is_some() && ch.is_lowercase()) || r.style.digits.map(ch) != ch);
+    // The glyph the character is drawn with when it holds no choice, drawn alone in its face: a
+    // feature of its style (`salt`, a stylistic set) can draw another glyph than the default one.
+    // The default glyph is then kept as a choice, so that it is drawn. A character that is not laid
+    // out (overflowing text) is shaped alone in its writing direction, with the rest of its grapheme
+    // in the grapheme's own styles.
+    let plain = t.plain_text();
+    let unchosen = holder.as_ref().filter(|_| !styled).and_then(|_| {
+        let mut probe = t.clone();
+        edit::style_range(&mut probe.runs, bytes.start, bytes.end, |st| st.glyph_alternate = None);
+        let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), &probe);
+        own_glyph(&plain, &lay, ch, &bytes, &face).unwrap_or_else(|| shaped_alone(&probe, ch, &bytes, &face).0)
+    });
+    let substituted = unchosen.is_some_and(|g| g != default);
+    let choice = match gid.filter(|g| *g != default || substituted) {
+        None => None,
+        Some(g) if g == default || face.alternates(ch).iter().any(|a| a.gid == g) => Some(face.choice(ch, g)),
+        Some(g) => return Err(bad(C, format!("glyph {g} is not an alternate of {ch} in {} {}", face.family, face.style))),
+    };
+    let drawn = choice.as_ref().map_or(unchosen.unwrap_or(default), |c| c.gid);
+    // The run holding the character. The request changes nothing when the choice is the one the
+    // character's run holds and that run holds the character alone; otherwise the edit splits the
+    // run, so that the following text does not take the character into a ligature.
     let held = holder.as_ref().filter(|(bytes_of_run, _)| bytes_of_run.start == bytes.start).and_then(|(_, r)| r.style.glyph_alternate.clone());
     let alone = holder.as_ref().is_some_and(|(bytes_of_run, _)| *bytes_of_run == bytes);
     // A choice that the character's style keeps from being drawn (All Caps, Small Caps, another
     // numeral system) is an error, not an edit that leaves the page as it was. The style decides
     // for a character outside its frame too; one that is laid out is checked in the layout.
     if let Some(c) = &choice {
-        let styled = holder
-            .as_ref()
-            .is_some_and(|(_, r)| r.style.all_caps || (r.style.small_caps.is_some() && ch.is_lowercase()) || r.style.digits.map(ch) != ch);
         let shown = || {
             let mut probe = t.clone();
             edit::style_range(&mut probe.runs, bytes.start, bytes.end, |st| st.glyph_alternate = Some(c.clone()));
-            let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), &probe);
-            lay.glyphs.iter().find(|g| g.byte <= bytes.start && bytes.start < g.byte.saturating_add(g.len)).map(|g| g.gid)
+            own_glyph(&plain, &vectorcraft_text::layout(vectorcraft_text::FontDb::global(), &probe), ch, &bytes, &face)
         };
-        if styled || shown().is_some_and(|g| g != c.gid) {
+        if styled || shown().is_some_and(|g| g != Some(c.gid)) {
             return Err(bad(
                 C,
                 format!("glyph {} is not drawn for {ch} with the character's style (such as All Caps, Small Caps or a numeral system)", c.gid),
@@ -1219,7 +1323,10 @@ fn glyph_alternates(s: &mut Session, p: &Value) -> Result<Value> {
     let (ch, bytes, face) = glyph_target(&t, p, C)?;
     let default = face.glyph_for(ch);
     let lay = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), &t);
-    let chosen = lay.glyphs.iter().find(|g| g.byte <= bytes.start && bytes.start < g.byte.saturating_add(g.len)).map_or(default, |g| g.gid);
+    // A character that is not laid out (overflowing text) reports the glyph it is drawn with when
+    // it is shaped alone, as `text.setGlyphAlternate` finds it; a fallback face's glyph when it is
+    // drawn in one.
+    let chosen = drawn_glyph(&t.plain_text(), &lay, ch, &bytes, &face).or_else(|| shaped_alone(&t, ch, &bytes, &face).1).unwrap_or(default);
     let alternates: Vec<Value> = face.alternates(ch).iter().map(|a| json!({"gid": a.gid, "feature": String::from_utf8_lossy(&a.feature)})).collect();
     Ok(json!({"char": ch.to_string(), "font": face.family, "style": face.style, "default": default, "chosen": chosen, "alternates": alternates}))
 }

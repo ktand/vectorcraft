@@ -54,11 +54,13 @@ impl VectorcraftApp {
         // ([`place::place_from_cursor`]).
         session.place_cursor_requests = true;
         let views = session.documents().iter().map(View::of).collect();
+        let view_uids = session.documents().iter().map(|d| d.uid).collect();
         let known = session.documents().iter().map(|d| d.uid).collect();
         Self {
             session,
             ui: UiState::default(),
             views,
+            view_uids,
             services,
             canvas: CanvasCache {
                 renderer: vectorcraft_render::Renderer::new(),
@@ -102,6 +104,8 @@ impl VectorcraftApp {
             clipboard_publishing: Default::default(),
             pending_url: None,
             control_rx: None,
+            deferred_control: None,
+            synthetic_dropped_before: 0,
             pending_screenshots: vec![],
             queued_screenshots: vec![],
             screenshot_token: 0,
@@ -276,6 +280,7 @@ impl VectorcraftApp {
         let now = now_secs();
         self.perf.fps = self.frame_rate.frame(now, self.perf.frame_ms / 1000.0);
         self.sync_views();
+        self.refresh_replace_font_warning(false);
         updates_ui::tick(self, ctx);
         // Read the system clipboard only when that alone decides whether Paste is enabled. A
         // background thread reads it where the host installs one (an unresponsive owner must never
@@ -311,6 +316,7 @@ impl VectorcraftApp {
         placing::poll(self);
         #[cfg(not(target_arch = "wasm32"))]
         self.tick_link_updates(ctx, now);
+        crate::addons::select::link_status::refresh(self, now);
         if !self.background.jobs.is_empty()
             || !self.opening.pending.is_empty()
             || !self.plugin_runs.running.is_empty()

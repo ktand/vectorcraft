@@ -345,6 +345,18 @@ impl Dialog {
     }
 }
 
+/// The last Replace Font request whose warning the status bar shows, to refresh it as the
+/// document changes.
+#[derive(Clone, Debug)]
+pub struct ReplaceFontWarning {
+    pub document_uid: u64,
+    pub revision: u64,
+    pub request: serde_json::Value,
+    pub selection: Option<Vec<u64>>,
+    pub text: String,
+    pub styles: Vec<(String, String)>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiState {
@@ -386,6 +398,10 @@ pub struct UiState {
     /// starts under the selection at every launch.
     #[serde(skip)]
     pub task_bar_place: TaskBarPlace,
+    /// The Pathfinder panel's Shape Mode buttons make a compound shape on a click, and give the
+    /// permanent Pathfinder result on Alt-click (off, the default: the other way round).
+    #[serde(default)]
+    pub shape_modes_compound: bool,
     /// The locked objects under the pointer at the last right-click on the canvas, with the
     /// document's `uid`: the context menu's Unlock submenu lists them while the menu is open. Not
     /// saved.
@@ -398,6 +414,11 @@ pub struct UiState {
     /// is open. Not saved.
     #[serde(skip)]
     pub context_intertwine: Option<(u64, vectorcraft_doc::NodeId, vectorcraft_geom::Point, vectorcraft_doc::NodeId)>,
+    /// Which link statuses the active document's images and placed documents have, for Select ›
+    /// Linked, Embedded, Missing and Modified to be on only when some do (refreshed by
+    /// [`crate::addons::select::link_status::refresh`]). Not saved.
+    #[serde(skip)]
+    pub link_statuses: crate::addons::select::link_status::Present,
     /// Last tool shown in each toolbar slot (keyed by the slot's first tool id).
     #[serde(default)]
     pub slot_tool: std::collections::BTreeMap<String, String>,
@@ -472,6 +493,9 @@ pub struct UiState {
     /// Last tool shown for each toolbar group (flyout selection sticks).
     pub group_tool: Vec<String>,
     pub status: String,
+    /// The Replace Font request behind the status bar's warning ([`ReplaceFontWarning`]). Not saved.
+    #[serde(skip)]
+    pub replace_font_warning: Option<ReplaceFontWarning>,
     pub palette_open: bool,
     pub palette_query: String,
     /// Screen mode: 0 normal, 1 full screen with menu, 2 full screen, 3 presentation. Not saved:
@@ -955,8 +979,10 @@ impl Default for UiState {
             toolbar_advanced: false,
             task_bar: true,
             task_bar_place: TaskBarPlace::default(),
+            shape_modes_compound: false,
             context_locked: None,
             context_intertwine: None,
+            link_statuses: Default::default(),
             slot_tool: Default::default(),
             floating_flyouts: vec![],
             toolbar_edits: ToolbarEdits::default(),
@@ -983,6 +1009,7 @@ impl Default for UiState {
             flyout: None,
             group_tool: vectorcraft_tools::TOOL_GROUPS.iter().map(|g| g[0].id.to_string()).collect(),
             status: String::new(),
+            replace_font_warning: None,
             palette_open: false,
             palette_query: String::new(),
             screen_mode: 0,

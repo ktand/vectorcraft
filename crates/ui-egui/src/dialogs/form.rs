@@ -64,6 +64,24 @@ pub(crate) fn length_within(
     true
 }
 
+/// [`length_within`] for a value the selected objects may not share: with no value the field reads
+/// `empty` ("Mixed"), and typing a distance sets it.
+pub(crate) fn length_mixed(
+    ui: &mut egui::Ui,
+    d: &mut Dialog,
+    key: &str,
+    unit: Unit,
+    width: f32,
+    range: Option<std::ops::RangeInclusive<f64>>,
+    empty: &str,
+) -> bool {
+    let value = d.fields.contains_key(key).then(|| d.f64(key, 0.0));
+    let bounds = range.unwrap_or(crate::widgets::ANY);
+    let Some(v) = crate::widgets::num_field_within_empty(ui, ("dlg-len", key), value, empty, unit, width, bounds) else { return false };
+    d.fields.insert(key.into(), json!(v));
+    true
+}
+
 /// What [`length`] shows for `d.fields[key]`, as the screen-reader value of a rail over `range`
 /// (in points) beside it: the number in `unit` and the field's text. `None` while the field is
 /// blank.
@@ -409,6 +427,16 @@ pub(super) fn param_fields(
                     changed |= length_within(ui, d, &k, unit, 140.0, range);
                     return;
                 }
+                // A size in pixels of the raster effects resolution (Color Halftone's Max Radius)
+                // stays in pixels whatever the document's units, within its documented range.
+                if let Some(range) = vectorcraft_effects::raster_px_range(&d.str("__effect"), &k) {
+                    let x = v.as_f64().unwrap_or(*range.start());
+                    if let Some(x) = crate::widgets::range_field_named(ui, ("fx-px", &k), None, x, range, &unit_suffix("px"), 2, 140.0) {
+                        d.fields.insert(k.clone(), typed_number(x));
+                        changed = true;
+                    }
+                    return;
+                }
                 if let Some(options) = choices(&k) {
                     let cur = v.as_str().unwrap_or_default();
                     let label = options.iter().find(|(_, value)| *value == cur).map_or(cur, |(l, _)| choice_label(l));
@@ -638,12 +666,14 @@ fn value_field(ui: &mut egui::Ui, k: &str, label: &str, spec: &ParamSpec, cur: &
 }
 
 /// A plug-in `color` parameter's button, showing `cur` (a color object or hex) and opening the color
-/// picker → the color picked, as the color object the plug-in gets.
+/// picker → the color picked, as the color object the plug-in gets: the picker's display sRGB in the
+/// working RGB space, so the color shows as it was picked whatever the working profile.
 pub(crate) fn plugin_color_button(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debug, cur: &Value) -> Option<Value> {
     let [r, g, b, _] = vectorcraft_plugins::manifest::color_value(cur).unwrap_or_default().to_rgba8(1.0);
     let mut rgb = [r, g, b];
     let changed = ui.push_id(id, |ui| ui.color_edit_button_srgb(&mut rgb).changed()).inner;
-    changed.then(|| serde_json::to_value(vectorcraft_color::Color::rgb8(rgb[0], rgb[1], rgb[2])).unwrap_or_default())
+    let picked = || crate::screen_color::sampled(&vectorcraft_color::cms::active(), rgb.map(|v| f32::from(v) / 255.0));
+    changed.then(|| serde_json::to_value(picked()).unwrap_or_default())
 }
 
 /// A `numberList` value as its field shows it: "45, 135".
@@ -881,15 +911,30 @@ pub(super) fn preview_result(
     cmd: &str,
     params: Value,
 ) -> Option<Value> {
-    const LAST: &str = PREVIEWED;
     ui.add_space(8.0);
-    let mut on = d.bool("preview");
+    preview_check(ui, d);
+    preview_or_rollback(app, d, label, cmd, params)
+}
+
+/// The Preview checkbox (field `preview`), for a dialog that draws it in its button row
+/// (`DialogSpec::footer_left`) instead of through [`preview`].
+pub(crate) fn preview_check(ui: &mut egui::Ui, d: &mut Dialog) {
+    let on = d.bool("preview");
     if crate::widgets::check(ui, tl!("Preview"), on, true) {
-        on = !on;
-        d.fields.insert("preview".into(), json!(on));
+        d.fields.insert("preview".into(), json!(!on));
     }
-    if !on {
-        if d.fields.remove(LAST).is_some() {
+}
+
+/// [`preview`] without its checkbox, which the dialog draws itself ([`preview_check`]): the preview
+/// runs while the field is on and rolls back when it is off.
+pub(crate) fn preview_without_check(app: &mut crate::VectorcraftApp, d: &mut Dialog, label: &str, cmd: &str, params: Value) {
+    let _ = preview_or_rollback(app, d, label, cmd, params);
+}
+
+/// [`preview_now`] while Preview is on; off, it rolls the preview back.
+fn preview_or_rollback(app: &mut crate::VectorcraftApp, d: &mut Dialog, label: &str, cmd: &str, params: Value) -> Option<Value> {
+    if !d.bool("preview") {
+        if d.fields.remove(PREVIEWED).is_some() {
             let _ = app.session.cancel_interaction();
         }
         return None;
