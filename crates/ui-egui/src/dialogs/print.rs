@@ -547,6 +547,10 @@ fn art_texture(app: &mut VectorcraftApp, ctx: &egui::Context, layers: PrintLayer
     }
     // The artboards' background colors print behind the art.
     let mut doc = st.doc.with_artboard_fills(0..st.doc.artboards.len()).unwrap_or_else(|| (*st.doc).clone());
+    // Fork (cutting): as file.print prints it, without Print & Cut's hairline cut lines.
+    if let Some(printed) = vectorcraft_cutting::printed::for_print(&doc) {
+        doc = printed;
+    }
     vectorcraft_pdf::keep_layers(&mut doc.layers, layers);
     let tex = widgets::region_texture(ctx, &mut app.canvas.renderer, "print-preview-art", &doc, area, px);
     ctx.data_mut(|m| m.insert_temp(key, (stamp, tex.clone())));

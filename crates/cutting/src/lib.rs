@@ -46,6 +46,7 @@ pub mod placement;
 pub mod popup;
 pub mod prepare;
 pub mod preview;
+pub mod printed;
 pub mod puzzle;
 pub mod quote;
 pub mod select;

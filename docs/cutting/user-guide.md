@@ -474,6 +474,11 @@ printed objects the bleed isn't remade on every change: the job says when to pre
 to the marks' line, and a square round each mark. The machine's sensor looks there for the marks, so anything printed or cut there can stop it
 finding them. The job warns about each object that comes into one, and nesting keeps pieces out of them.
 
+**Cut lines that don't print.** With Print & Cut on, a stroke 0.25 pt wide or thinner (a hairline, about
+0.09 mm) on an object that is cut or scored isn't printed, in File › Print and its preview: give a shape a
+hairline stroke to see where it's cut, and a cut that lands a little off doesn't leave a printed line beside
+it. The object's fill and any wider stroke print as usual, and the hairline stays on the canvas.
+
 A contour (section 5) is the usual cut line for printed stickers.
 
 ## 8. Checking the job before you cut

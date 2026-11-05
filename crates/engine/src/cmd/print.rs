@@ -176,6 +176,8 @@ fn print(s: &mut Session, p: &Value) -> Result<Value> {
     }
     // Placed documents print their files' art.
     let (full, _) = super::place::document::full_documents(doc);
+    // Fork (cutting): with Print & Cut, the cut lines' hairline strokes don't print.
+    let full = vectorcraft_cutting::printed::for_print(&full).map_or(full, std::borrow::Cow::Owned);
     // The artboards' background colors print behind the art.
     let filled = super::fileio::with_artboard_fills(&full, p, 0..full.artboards.len()).map_err(|e| bad(PRINT, e))?;
     let doc = &*filled;
