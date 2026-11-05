@@ -255,8 +255,8 @@ fn machine_advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let ops = &info["settings"]["operations"];
     egui::Grid::new(("cutting", "advanced")).num_columns(3).spacing([8.0, 3.0]).show(ui, |ui| {
         table_heading(ui);
-        tool_row(ui, "Accel.", "The machine's acceleration steps, 1–3; 0: the machine's own.", |ui, op| {
-            if let Some(v) = cell(ui, op, "accel", "Accel.", ops[op]["accel"].as_f64().unwrap_or(0.0), "", 0, 1.0, 0.0) {
+        tool_row(ui, "Accel.", "The machine's acceleration steps, 1–3; Auto: none sent, the machine keeps the one it was last given.", |ui, op| {
+            if let Some(v) = optional_cell(ui, op, "accel", "Accel.", ops[op]["accel"].as_f64(), 3) {
                 set_optional(app, op, "accel", v, 3.0);
             }
         });
@@ -372,6 +372,17 @@ fn tool_row(ui: &mut Ui, label: &str, hover: &str, mut add: impl FnMut(&mut Ui, 
 fn cell(ui: &mut Ui, op: &'static str, key: &'static str, row: &str, v: f64, suffix: &str, decimals: usize, step: f64, min: f64) -> Option<f64> {
     let name = format!("{} {}", if op == "cut" { tl!("Cut") } else { tl!("Score") }, tl!(row));
     widgets::spin_plain_named(ui, ("cutting", op, key), Some(&name), v, suffix, decimals, CELL_W, step, min, &[])
+}
+
+/// A setting the machine keeps when it isn't sent (blade depth, acceleration): Auto, or 1 to
+/// `hi`. What was chosen, 0 for Auto.
+fn optional_cell(ui: &mut Ui, op: &'static str, key: &'static str, row: &str, v: Option<f64>, hi: u8) -> Option<f64> {
+    let name = format!("{} {}", if op == "cut" { tl!("Cut") } else { tl!("Score") }, tl!(row));
+    let steps: Vec<String> = (1..=hi).map(|n| n.to_string()).collect();
+    let mut names: Vec<&str> = vec![tl!("Auto")];
+    names.extend(steps.iter().map(String::as_str));
+    let shown = v.filter(|v| *v >= 1.0).map_or_else(|| tl!("Auto").to_string(), |v| format!("{}", v.round()));
+    widgets::dropdown_names_named(ui, ("cutting", op, key), Some(&name), &shown, &names, CELL_W).map(|i| i as f64)
 }
 
 /// 0: the machine's own setting, sent as nothing.
@@ -656,10 +667,14 @@ fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
                 set_tool(app, op, "overcutMm", (v.clamp(0.0, 5.0) * 10.0).round() / 10.0);
             }
         });
-        tool_row(ui, "Blade depth", "The AutoBlade's depth setting, 1–10; 0: the machine's own. Other tools take none.", |ui, op| {
+        tool_row(
+            ui,
+            "Blade depth",
+            "The AutoBlade's depth setting, 1–10; Auto: none sent, the blade stays at the depth it was last set to (by the last job, or Silhouette Studio). A material can set one. Other tools take none.",
+            |ui, op| {
             if kind(op).is_some_and(|t| !t.autoblade) {
                 widgets::dim_label(ui, "—");
-            } else if let Some(v) = cell(ui, op, "depth", "Blade depth", get(op, "depth", 0.0), "", 0, 1.0, 0.0) {
+            } else if let Some(v) = optional_cell(ui, op, "depth", "Blade depth", ops[op]["depth"].as_f64(), 10) {
                 set_optional(app, op, "depth", v, 10.0);
             }
         });
@@ -742,6 +757,18 @@ mod tests {
     }
 
     /// What [`tool_settings`] draws (C14.8: the Send window's), as the panel's texts are read.
+    /// A blade depth not set shows as Auto (nothing is sent), not as a depth of 0; set, as itself.
+    #[test]
+    fn an_unset_depth_is_auto() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        let after = |texts: Vec<String>| texts.iter().skip_while(|t| *t != "Blade depth").skip(1).take(2).cloned().collect::<Vec<_>>();
+        assert_eq!(after(tool_texts(&mut app, &ctx)), ["Auto", "Auto"]);
+        app.run("cutting.settings.set", json!({"operations": {"cut": {"depth": 3}}})).unwrap();
+        assert_eq!(after(tool_texts(&mut app, &ctx)), ["3", "Auto"]);
+    }
+
     fn tool_texts(app: &mut VectorcraftApp, ctx: &egui::Context) -> Vec<String> {
         let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 2400.0))), ..Default::default() };
         let mut out = ctx.run_ui(raw, |ui| tool_settings(app, ui));

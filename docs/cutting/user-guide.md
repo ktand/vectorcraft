@@ -160,7 +160,7 @@ they belong to what is on the mat today: test, adjust, test again, then send, wi
 | **Speed** | In the machine's own steps (1–30). |
 | **Passes** | How many times each line is cut (1–10). |
 | **Overcut** | How far a closed shape's cut runs on past its start, so it lifts out cleanly. |
-| **Blade depth** | The AutoBlade's depth (1–10; 0 leaves the machine's own). Other tools show "—". |
+| **Blade depth** | The AutoBlade's depth, 1–10, or **Auto**: no depth is sent and the blade stays where it was last set (by the last job, or Silhouette Studio). Choosing a material sets its depth. Other tools show "—". |
 
 **Cut Mirrored** cuts the design flipped left to right, for material cut from the back such as heat transfer
 vinyl (iron-on). Your art stays as you drew it, and the canvas's toolpaths stay on it; the Send window's mat
