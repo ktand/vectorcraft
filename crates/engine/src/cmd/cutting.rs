@@ -43,6 +43,8 @@ mod puzzle;
 mod template;
 // Papercraft from a 3D model (C15.6).
 mod papercraft;
+// The calibration sheet (C4.12).
+mod calibration;
 // A sticker sheet in one step (C18.5).
 mod stickers;
 // Moving a piece to another sheet (C18.13).
@@ -72,6 +74,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(popup::specs());
     v.extend(template::specs());
     v.extend(papercraft::specs());
+    v.extend(calibration::specs());
     v.extend(stickers::specs());
     v.extend(sheets::specs());
     v.extend(tile::specs());

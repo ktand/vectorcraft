@@ -541,6 +541,11 @@ it larger.
   - the test cut (section 4);
   - **History** (section 10).
 
+**Add Calibration Sheet** (in the **Curve Test** fold) adds a sheet of lines and shapes to measure your machine by:
+100 mm lines both ways, a square and a circle that must close, and small sharp corners; with Print & Cut on,
+rings round printed crosses to show how well the cut lines up with the print. The
+[hardware checks](hardware-validation.md#step-21-the-calibration-sheet-c412) say what to measure.
+
 Closing the window doesn't stop a cut. Cut Settings shows how far it has got, and opening the window again shows
 it in full.
 

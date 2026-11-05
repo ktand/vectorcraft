@@ -312,3 +312,27 @@ fn a_designs_job_reads_back_from_the_bytes() {
         assert!((a[0] - b[0]).abs() < reach && (a[1] - b[1]).abs() < reach, "path {i}: {a:?} {b:?}");
     }
 }
+
+/// C4.12: the calibration sheet comes in as one group centred on the artboard, one undo step;
+/// its job cuts the eight shapes, the 100 mm lines 100 mm on the mat; with Print & Cut, four
+/// rings more and the crosses left out.
+#[test]
+fn the_calibration_sheet_cuts_what_it_measures() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 600, "height": 600})).unwrap();
+    let r = s.execute("cutting.calibration", &json!({"printAndCut": false})).unwrap();
+    assert_eq!((r["parts"].clone(), r["printAndCut"].clone()), (json!(8), json!(false)));
+    let job = vectorcraft_cutting::build_job(&s.active().unwrap().doc).unwrap();
+    assert_eq!(job.paths.len(), 8, "{:?}", job.paths.len());
+    let length = |p: &vectorcraft_cutjob::Toolpath| p.points.windows(2).map(|w| (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1])).sum::<f64>();
+    let open: Vec<f64> = job.paths.iter().filter(|p| !p.closed).map(length).collect();
+    assert_eq!(open.len(), 2);
+    assert!(open.iter().all(|l| (l - 100.0).abs() < 1e-6), "{open:?}");
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert!(vectorcraft_cutting::build_job(&s.active().unwrap().doc).map_or(true, |j| j.paths.is_empty()));
+    let r = s.execute("cutting.calibration", &json!({"printAndCut": true})).unwrap();
+    assert_eq!(r["parts"], json!(16));
+    let job = vectorcraft_cutting::build_job(&s.active().unwrap().doc).unwrap();
+    assert_eq!(job.paths.len(), 12, "the rings cut, the crosses not");
+    assert!(s.execute("cutting.calibration", &json!({"printAndCut": 3})).is_err());
+}

@@ -36,6 +36,7 @@ control is and what it does: the [user guide](user-guide.md).
 | 18 | Curves sent to the machine | Pass | All three rows cut; the `BZ` and `W` circles rounder than the straight moves (2026-11-04) |
 | 19 | The cut area each job sets | | |
 | 20 | Perforation by the machine | | |
+| 21 | The calibration sheet | | |
 
 ## Before you start
 
@@ -382,3 +383,25 @@ paper on the mat:
 Note: the dash and gap lengths, where the first dash began, and whether the square after was solid. If the
 dashes start with a gap rather than a cut, the preview is off by a gap at each line's start: the notes say so
 and the encoder will start the line a gap later.
+
+## Step 21: the calibration sheet (C4.12)
+
+A sheet of our own to measure the machine by. Send window › **Curve Test** › **Add Calibration Sheet** (or
+`cutting.calibration`) puts a 112 mm square group in the artboard's middle; send it like any design, on paper or
+thin card, with the force from step 4. Measure with a steel ruler and, where you can, calipers:
+
+| Part | Measure | Should be | Tells |
+|---|---|---|---|
+| **Scale Across** (the line along the top) | end to end | 100.0 mm (± 0.2) | the scale across (the carriage) |
+| **Scale Down** (the line down the left) | end to end | 100.0 mm (± 0.2) | the scale down (the rollers) |
+| **Closing Square** (20 mm) | its sides; does it drop out? | 20.0 mm; drops out, no tag at its start | the scale on short runs; the overcut |
+| **Closing Circle** (20 mm) | across, both ways; does it drop out? | 20.0 mm both ways, round; drops out | the circle closing; the curves (step 18) |
+| **Star**, **Square 5 mm**, **Square 2 mm**, **Triangle** | the corners, with a magnifier | sharp, no rounding or loops | the blade offset (step 7) |
+
+With **Print & Cut** on (or `{"printAndCut": true}`), print the page with its marks first: four printed crosses
+get an 8 mm ring cut round each. Measure, at each, how far the cross's centre is from the ring's: up to 0.5 mm
+is good. The same offset at all four is a shift (the marks' anchor); different ones, a turn or a scale.
+
+Note: the two 100 mm lengths, the square's sides, the circle's two diameters, which shapes dropped out, the
+corners, and (Print & Cut) the four offsets with their directions. A scale off by more than 0.2 mm in 100, or a
+consistent Print & Cut shift, is worth a correction setting: say which.

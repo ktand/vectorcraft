@@ -579,6 +579,16 @@ fn curve_test_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, device: Option<S
             Err(e) => (true, e),
         });
     }
+    // C4.12: the sheet to measure the machine by, added to the document to cut as any design.
+    let sheet = ui.button(tl!("Add Calibration Sheet")).on_hover_text(tl!(
+        "Adds a 112 mm sheet to the artboard's middle: 100 mm lines to measure the scale, a square and a circle that must close, and small sharp corners; with Print & Cut, rings round printed crosses. Cut it, then measure (hardware checks, step 21)."
+    ));
+    if sheet.clicked() {
+        *note = Some(match app.run("cutting.calibration", json!({})) {
+            Ok(_) => (false, tl!("The calibration sheet is on the artboard: send it, then measure it.").to_string()),
+            Err(e) => (true, e),
+        });
+    }
     crate::panels::set_pstate(&ctx, "cutting-curves-row", row);
 }
 
