@@ -251,6 +251,14 @@ fn band(at: P, long: f64, high: f64, tab: f64) -> (SubPath, Vec<SubPath>, Vec<Su
 /// its tabs folded in and glued under a heart-shaped floor; the lid's heart larger by the walls'
 /// thickness and the clearance each side. Our own geometry.
 fn heart_box(v: &Values) -> Result<Net, String> {
+    wrapped_box(v, &|w| heart(w, 120), false)
+}
+
+/// A box made as a hat box is, for the box and its lid: a wall band as long as `floor`'s outline
+/// (`floor(width)`, its top-left at the origin), its tabs folded in under that floor; the lid's
+/// floor wider by the walls' thickness and the clearance each side. With `creases`, the band is
+/// scored where it turns each of the floor's corners.
+fn wrapped_box(v: &Values, floor_of: &dyn Fn(f64) -> Vec<P>, creases: bool) -> Result<Net, String> {
     let (w, h, lh, c, t, tab) =
         (v.get("widthMm"), v.get("heightMm"), v.get("lidHeightMm"), v.get("clearanceMm"), v.get("thicknessMm"), v.get("tabMm"));
     let perimeter = |pts: &[P]| {
@@ -265,11 +273,20 @@ fn heart_box(v: &Values) -> Result<Net, String> {
     let mut y = 0.0;
     let mut face = None;
     for (width, high) in [(w, h), (w + 2.0 * (2.0 * t + c), lh)] {
-        let floor = heart(width, 120);
+        let floor = floor_of(width);
         let fh = floor.iter().map(|p| p.1).fold(0.0, f64::max);
         let (o, f, g) = band((0.0, y), perimeter(&floor) + t, high, tab);
         cut.push(o);
         folds.extend(f);
+        if creases {
+            // Where the band turns each corner after the first, which its start meets.
+            let mut along = 0.0;
+            for i in 1..floor.len() {
+                let (a, b) = (floor[i - 1], floor[i]);
+                along += (b.0 - a.0).hypot(b.1 - a.1);
+                folds.push(line((along, y), (along, y + high)));
+            }
+        }
         glue.extend(g);
         y += high + tab + GAP_MM;
         let shifted: Vec<P> = floor.iter().map(|p| (p.0, p.1 + y)).collect();
@@ -428,6 +445,151 @@ fn party_hat(v: &Values) -> Result<Net, String> {
     Ok(Net { cut: PathData::new(cut), folds: PathData::single(line(s0, c)), glue: PathData::single(polygon(&[s0, p1, p2, c])), face: None })
 }
 
+pub(super) const STAR: Kind = Kind {
+    id: "star",
+    name: "Star Box",
+    family: "Boxes",
+    params: &[
+        Param { key: "widthMm", label: "Width", unit: Unit::Mm, default: 100.0, min: 40.0, max: 400.0, help: "across the star" },
+        Param { key: "points", label: "Points", unit: Unit::Count, default: 5.0, min: 4.0, max: 12.0, help: "the star's points" },
+        Param {
+            key: "innerPct",
+            label: "Inner Radius",
+            unit: Unit::Count,
+            default: 50.0,
+            min: 30.0,
+            max: 80.0,
+            help: "how far in the corners between the points come, % of the points' reach",
+        },
+        Param { key: "heightMm", label: "Height", unit: Unit::Mm, default: 40.0, min: 10.0, max: 300.0, help: "the box's wall" },
+        Param { key: "lidHeightMm", label: "Lid Height", unit: Unit::Mm, default: 20.0, min: 5.0, max: 300.0, help: "how far the lid comes down" },
+        Param {
+            key: "clearanceMm",
+            label: "Clearance",
+            unit: Unit::Mm,
+            default: 1.0,
+            min: 0.0,
+            max: 5.0,
+            help: "the play between the box and the lid",
+        },
+        THICKNESS,
+        Param { key: "tabMm", label: "Glue Tab", unit: Unit::Mm, default: 8.0, min: 3.0, max: 20.0, help: "the tabs that fold in under the floor" },
+    ],
+    sized: false,
+    fit: None,
+    make: star_box,
+};
+
+/// A star of `n` points `w` wide, the corners between them `inner` of the points' reach in, its
+/// first point straight up, its top-left at the origin.
+fn star(w: f64, n: usize, inner: f64) -> Vec<P> {
+    let raw: Vec<P> = (0..2 * n)
+        .map(|i| {
+            let a = PI * i as f64 / n as f64;
+            let r = if i % 2 == 0 { 1.0 } else { inner };
+            (r * a.sin(), -r * a.cos())
+        })
+        .collect();
+    let (x0, x1) = raw.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| (a.min(p.0), b.max(p.0)));
+    let y0 = raw.iter().map(|p| p.1).fold(f64::INFINITY, f64::min);
+    let s = w / (x1 - x0);
+    raw.iter().map(|p| ((p.0 - x0) * s, (p.1 - y0) * s)).collect()
+}
+
+/// The star box: built as the heart box is, its wall band scored at each of the star's corners.
+fn star_box(v: &Values) -> Result<Net, String> {
+    let (n, inner) = (v.get("points") as usize, v.get("innerPct") / 100.0);
+    wrapped_box(v, &|w| star(w, n, inner), true)
+}
+
+pub(super) const MAILER: Kind = Kind {
+    id: "mailer",
+    name: "Mailer (0427)",
+    family: "Boxes",
+    params: &[
+        Param { key: "lengthMm", label: "Length", unit: Unit::Mm, default: 200.0, min: 40.0, max: 600.0, help: "inside, side to side" },
+        Param { key: "widthMm", label: "Width", unit: Unit::Mm, default: 150.0, min: 30.0, max: 600.0, help: "inside, front to back" },
+        Param { key: "heightMm", label: "Height", unit: Unit::Mm, default: 50.0, min: 10.0, max: 200.0, help: "inside, the depth" },
+        Param {
+            key: "thicknessMm",
+            label: "Thickness",
+            unit: Unit::Mm,
+            default: 1.5,
+            min: 0.0,
+            max: 8.0,
+            help: "the board's thickness, taken up at each fold",
+        },
+    ],
+    sized: true,
+    fit: Some(("lengthMm", "widthMm")),
+    make: mailer,
+};
+
+/// A one-piece mailer in the style FEFCO numbers 0427 (only its number and name come from the
+/// code; the geometry is ours). Down the middle: the lid's tuck flap, the lid, the back wall, the
+/// base and the front wall; the lid has dust flaps at its sides. The back and front walls carry
+/// ears at their ends, which fold in along the sides; each side wall is double, its inner half
+/// folding over the top and down inside, trapping the ears. A relief notch, a thickness wide (at
+/// least 1 mm), keeps each ear clear of the side it folds against.
+fn mailer(v: &Values) -> Result<Net, String> {
+    let t = v.get("thicknessMm");
+    let (mut l, mut w, mut h) = (v.get("lengthMm"), v.get("widthMm"), v.get("heightMm"));
+    if v.outside {
+        (l, w, h) = (l - 2.0 * t, w - 2.0 * t, h - 2.0 * t);
+        if l <= 0.0 || w <= 0.0 || h <= 0.0 {
+            return Err("the outside sizes are too small for the thickness".to_string());
+        }
+    }
+    let inner = h - t;
+    if inner <= 1.0 {
+        return Err("the box is too shallow for the board's thickness".to_string());
+    }
+    let (l, w, h) = (l + t, w + t, h + t);
+    let lid = w + t;
+    let side = h + inner;
+    let notch = t.max(1.0);
+    // The ears meet in the middle of each side; the lid's flaps reach down inside the walls.
+    let ear = (w / 2.0 - t).max(3.0);
+    let dust = inner.min(lid / 3.0);
+    let tuck = (inner * 0.8).min(lid / 2.0);
+    let taper = |reach: f64, along: f64| reach.min(along / 4.0);
+    let (x0, x1) = (side, side + l);
+    let y_lid = tuck;
+    let y_back = y_lid + lid;
+    let y_base = y_back + h;
+    let y_front = y_base + w;
+    let y_end = y_front + h;
+    let tt = taper(tuck, l);
+    let td = taper(dust, lid);
+    let te = taper(ear, h);
+    let mut o = Edge::from((x0 + tt, 0.0));
+    o.to((x1 - tt, 0.0)).to((x1, y_lid));
+    // Down the right: the lid's dust flap, the back wall's ear, the side, the front wall's ear.
+    o.to((x1 + dust, y_lid + td)).to((x1 + dust, y_back - td)).to((x1, y_back));
+    o.to((x1 + ear, y_back + te)).to((x1 + ear, y_base - notch)).to((x1, y_base - notch)).to((x1, y_base));
+    o.to((x1 + side, y_base)).to((x1 + side, y_front)).to((x1, y_front));
+    o.to((x1, y_front + notch)).to((x1 + ear, y_front + notch)).to((x1 + ear, y_end - te)).to((x1, y_end));
+    // Along the front wall's bottom, then up the left, the same mirrored.
+    o.to((x0, y_end));
+    o.to((x0 - ear, y_end - te)).to((x0 - ear, y_front + notch)).to((x0, y_front + notch)).to((x0, y_front));
+    o.to((x0 - side, y_front)).to((x0 - side, y_base)).to((x0, y_base));
+    o.to((x0, y_base - notch)).to((x0 - ear, y_base - notch)).to((x0 - ear, y_back + te)).to((x0, y_back));
+    o.to((x0 - dust, y_back - td)).to((x0 - dust, y_lid + td)).to((x0, y_lid));
+    let mut folds = vec![];
+    for y in [y_lid, y_back, y_base, y_front] {
+        folds.push(line((x0, y), (x1, y)));
+    }
+    for x in [x0, x1] {
+        folds.push(line((x, y_lid), (x, y_back)));
+        folds.push(line((x, y_back), (x, y_base - notch)));
+        folds.push(line((x, y_base), (x, y_front)));
+        folds.push(line((x, y_front + notch), (x, y_end)));
+    }
+    folds.push(line((x0 - h, y_base), (x0 - h, y_front)));
+    folds.push(line((x1 + h, y_base), (x1 + h, y_front)));
+    Ok(Net { cut: PathData::single(o.closed()), folds: PathData::new(folds), glue: PathData::default(), face: Some([x0, y_lid, x1, y_back]) })
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::tests::{simple, values};
@@ -480,6 +642,40 @@ mod tests {
         for s in &net.cut.subpaths {
             assert!(simple(&PathData::single(s.clone())));
         }
+    }
+
+    /// The mailer: the lid, back, base and front down the middle, each the box's size plus a
+    /// thickness; double sides; one outline that doesn't cross itself.
+    #[test]
+    fn the_mailer_folds_round_its_base() {
+        let v = values(&MAILER, &[("lengthMm", 200.0), ("widthMm", 150.0), ("heightMm", 50.0), ("thicknessMm", 1.0)], false).unwrap();
+        let net = MAILER.make(&v).unwrap();
+        let (w, h) = net.size();
+        // Across: two sides (51 + 49) and the base (201); down: the tuck (49 × 0.8), the lid
+        // (152), the back (51), the base (151) and the front (51).
+        assert!((w - (2.0 * 100.0 + 201.0)).abs() < 1e-9, "{w}");
+        assert!((h - (49.0 * 0.8 + 152.0 + 51.0 + 151.0 + 51.0)).abs() < 1e-9, "{h}");
+        assert_eq!(net.folds.subpaths.len(), 4 + 8 + 2);
+        assert!(simple(&net.cut));
+        // Outside sizes smaller than the board takes up: refused.
+        assert!(MAILER.make(&values(&MAILER, &[("heightMm", 10.0), ("thicknessMm", 8.0)], true).unwrap()).is_err());
+    }
+
+    /// The star box: a star of the points asked for, its band as long as the star round and
+    /// scored at every corner but the first.
+    #[test]
+    fn the_star_box_is_scored_at_its_corners() {
+        let v = values(&STAR, &[("widthMm", 100.0), ("points", 5.0)], false).unwrap();
+        let net = STAR.make(&v).unwrap();
+        assert_eq!(net.cut.subpaths.len(), 4, "band, floor, lid band, lid floor");
+        assert_eq!(net.cut.subpaths[1].anchors.len(), 10);
+        // Each band: its two folds (the tabs' line and the seam) and nine corners.
+        assert_eq!(net.folds.subpaths.len(), 2 * (2 + 9));
+        for s in &net.cut.subpaths {
+            assert!(simple(&PathData::single(s.clone())));
+        }
+        let six = STAR.make(&values(&STAR, &[("points", 6.0), ("innerPct", 70.0)], false).unwrap()).unwrap();
+        assert_eq!(six.cut.subpaths[1].anchors.len(), 12);
     }
 
     /// Bunting gives one pennant per flag, with a fold each; the lantern one slit per spacing;

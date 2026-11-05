@@ -170,6 +170,8 @@ pub const KINDS: &[Kind] = &[
     more::DRAWER,
     gable::GABLE,
     more::HEART,
+    more::STAR,
+    more::MAILER,
     cards::ENVELOPE,
     cards::POINTED_ENVELOPE,
     cards::PLACE_CARD,
