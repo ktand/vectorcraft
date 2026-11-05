@@ -490,9 +490,14 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     } else if current.as_deref().is_some_and(|c| list.iter().any(|(n, b)| n == c && *b)) {
         widgets::dim_label(ui, tl!("A starting point: make a test cut first."));
     }
+    // C18.14: a blade set by hand: how deep the material says to set it (never sent).
+    if let Some(d) = current.as_deref().and_then(|c| info["materials"].as_array()?.iter().find(|m| m["name"] == c)?["handDepthMm"].as_f64()) {
+        widgets::dim_label(ui, &hand_depth_note(d));
+    }
     // The name field only once Save as Material… is clicked (C9.1).
     let mut saving: Option<String> = super::pstate(&ctx, "cutting-material-saving");
     let mut error: Option<String> = super::pstate(&ctx, "cutting-material-error");
+    let mut imported: Option<String> = super::pstate(&ctx, "cutting-material-imported");
     ui.horizontal(|ui| {
         if let Some(name) = &mut saving {
             let field = ui.add(egui::TextEdit::singleline(name).hint_text(tl!("Material name")).desired_width(120.0));
@@ -532,7 +537,32 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         {
             error = app.run("cutting.material.delete", json!({ "name": c })).err();
         }
+        // C18.14: the materials of a list exported from Silhouette Studio, as the user's own.
+        let pick = crate::FilePick { filters: crate::FilePick::filters([("Material list (CSV)", &["csv"][..])]), ..Default::default() };
+        if crate::picks::can(app, &crate::picks::PickRequest::Open(pick.clone()))
+            && ui
+                .small_button(tl!("Import…"))
+                .on_hover_text(tl!("Add the materials of a list exported from Silhouette Studio (their Cameo 4 settings, the AutoBlade's depth too)"))
+                .clicked()
+            && let Some(path) = crate::picks::open(app, &pick)
+        {
+            match app.run("cutting.material.import", json!({ "path": path })) {
+                Ok(r) => {
+                    error = None;
+                    imported = Some(import_note(&r));
+                }
+                Err(e) => error = Some(e),
+            }
+        }
     });
+    if let Some(note) = imported.clone() {
+        ui.horizontal_wrapped(|ui| {
+            widgets::dim_label(ui, &note);
+            if ui.small_button("\u{2715}").on_hover_text(tl!("Dismiss")).clicked() {
+                imported = None;
+            }
+        });
+    }
     // C18.3: a material of the user's has a price, for the job's quote.
     if let Some(c) = &current
         && let Some(m) = info["materials"].as_array().into_iter().flatten().find(|m| m["name"] == *c && m["builtin"] == false)
@@ -608,6 +638,22 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     }
     super::set_pstate(&ctx, "cutting-material-saving", saving);
     super::set_pstate(&ctx, "cutting-material-error", error);
+    super::set_pstate(&ctx, "cutting-material-imported", imported);
+}
+
+/// The depth to set a hand-adjusted blade to, for material `d` mm.
+fn hand_depth_note(d: f64) -> String {
+    format!("{} {d:.1} mm.", tl!("Set the blade by hand to"))
+}
+
+/// What an import (`cutting.material.import`'s answer) did, in a line: how many were added and
+/// which were skipped, and why.
+fn import_note(r: &Value) -> String {
+    let n = r["imported"].as_array().map_or(0, Vec::len);
+    let skipped: Vec<String> =
+        r["skipped"].as_array().into_iter().flatten().filter_map(|k| Some(format!("{} ({})", k["name"].as_str()?, k["reason"].as_str()?))).collect();
+    let added = if n == 1 { tl!("1 material added.").to_string() } else { format!("{n} {}", tl!("materials added.")) };
+    if skipped.is_empty() { added } else { format!("{added} {} {}", tl!("Skipped:"), skipped.join("; ")) }
 }
 
 /// How each operation drives the blade: force and speed in the machine's own steps (C5.2),
@@ -888,6 +934,31 @@ mod tests {
         assert!(texts.iter().any(|t| t == "Cut Order") && texts.iter().any(|t| t == "Shortest Travel"), "{texts:?}");
         app.run("cutting.settings.set", json!({"ordering": "rollers"})).unwrap();
         assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Fewest Roller Moves"));
+    }
+
+    /// C18.14: Import… shows only where a file can be picked; the note says what was added and
+    /// what was skipped, and why.
+    #[test]
+    fn materials_are_imported_from_a_list() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        assert!(!tool_texts(&mut app, &ctx).iter().any(|t| t == "Import…"), "no open dialog here");
+        app.services.pick_open = Some(Box::new(|_: &crate::FilePick| None));
+        assert!(tool_texts(&mut app, &ctx).iter().any(|t| t == "Import…"));
+        let r = json!({"imported": ["A", "B"], "skipped": [{"name": "Felt", "reason": "only rotary_cut, which VectorCraft doesn't cut"}]});
+        assert_eq!(import_note(&r), "2 materials added. Skipped: Felt (only rotary_cut, which VectorCraft doesn't cut)");
+        assert_eq!(import_note(&json!({"imported": ["A"], "skipped": []})), "1 material added.");
+        super::super::set_pstate(&ctx, "cutting-material-imported", Some("1 material added.".to_string()));
+        assert!(tool_texts(&mut app, &ctx).iter().any(|t| t == "1 material added."));
+        // A material for a blade set by hand says how deep to set it.
+        let list = "full_name,cutter_class_id,(force.pressure),(speed),(tool.type),(blade_depth),category,uuid,parent_uuid,action\n\
+                    UI Board,desktop,1,1,x,0,group,g,r,\nUI Board for M,cameo4,12,3,kraft2,0.9,leaf,l,g,kraft_cut\n";
+        app.run("cutting.material.import", json!({"text": list})).unwrap();
+        app.run("cutting.material.apply", json!({"name": "UI Board (Kraft Blade)"})).unwrap();
+        let texts = tool_texts(&mut app, &ctx);
+        app.run("cutting.material.delete", json!({"name": "UI Board (Kraft Blade)"})).unwrap();
+        assert!(texts.iter().any(|t| t == "Set the blade by hand to 0.9 mm."), "{texts:?}");
     }
 
     /// C9.1: cut and score side by side, one row each setting, no range squeezed into a field; the

@@ -224,6 +224,13 @@ starting points only: make a test cut before trusting them.
   "name (copy)".
 - **Update "name"** saves your changes into one of your own materials in one click.
 - **Delete** removes one of your own.
+- **Import…** adds the materials of a list you exported from Silhouette Studio (a CSV file): the Cameo 4's cut
+  and score settings for each, as materials of your own. Materials it can't use (only a rotary blade or a punch,
+  none for the Cameo 4) and names you already have are skipped, and the line under the buttons says which and
+  why. The AutoBlade's depth comes from the file too (Studio gives it in millimetres; each step of the 1–10 is
+  0.1 mm). For a blade you set by hand (Kraft, Deep-Cut, ratchet; the material's name says which), the panel
+  says how deep to set it under the material, for example "Set the blade by hand to 0.9 mm." Make a test cut
+  before trusting a material.
 
 Some materials are cut from the back, such as **Heat Transfer Vinyl** (iron-on): choosing one turns **Cut
 Mirrored** on, and choosing another turns it off. When you press **Send** with such a material, a dialog asks

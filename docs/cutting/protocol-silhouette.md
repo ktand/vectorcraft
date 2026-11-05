@@ -238,6 +238,34 @@ here: machine units, down first, then across.
 | `TF`d`,1` (AutoBlade depth) with a 0.5 mm cut after it | The AutoBlade's dial read 3 after `TF3,1`, then 7 after `TF7,1` | The depth setting works as sent (step 6) |
 | A command the machine doesn't know (`` `1 ``) | Ignored without an answer; the commands after it ran | Mistakes in what we send aren't reported: our own check before sending (C4.11, `cutter-silhouette/src/check.rs`) is the one there is |
 
+## Material lists
+
+Silhouette Studio can export its material list as a CSV file. VectorCraft reads one the user exported themselves
+(C18.14, `cutter-silhouette/src/studio.rs`); no such list is part of VectorCraft or its tests. The layout below
+is from the owner's own export (2026-11-05), read locally and never committed; values are only described, not
+copied.
+
+- The first row names the columns; the settings' columns have their names in brackets, such as
+  `(force.pressure)`, `(speed)`, `(tool.type)`, `(blade_depth)`, `(nth_pass)`, `(force.acceleration)` and
+  `(overcut.end_point_length)`. Some names appear twice; the first is read. A second row gives display names
+  and has no category, so it is passed over.
+- `category` is `group` for a material and `leaf` for one of its settings; a leaf's `parent_uuid` is its
+  material's `uuid` (ids in either case). A group's `name_resolved` (else `full_name`) is the material's name.
+  The same name can appear for two groups.
+- A leaf's `cutter_class_id` is the machine it is for (`cameo4`, `cameo5`, `cameo5_base`, `curio2`,
+  `celite-50`, or `desktop` for any), and `action` what it does: `cut`, `kraft_cut`, `score`, `sketch`,
+  `stipple`, `emboss`, `rotary_cut`, `punch` and others. One material has several leaves for a machine,
+  sometimes the same action twice.
+- Force is 1–33 and speed 1–30, the steps `FX` and `!` take ([A job](#a-job)); a few rows have a speed below 1.
+  Passes count from 1; acceleration is 1–3, 5 on some punch rows.
+- `(tool.type)` names the tool: `autoadjust` (the AutoBlade), `adjustable`, `kraft`/`kraft2` (Kraft Blade),
+  `deepcut`, `pen2`, `rotary`, `puncher` and others.
+- `(blade_depth)` is in millimetres. The AutoBlade cuts at most 1 mm deep (the owner, 2026-11-05), and in their
+  list every AutoBlade row is 0.1–1.0 (0.1 for vinyl, 0.3 for card), while the deeper values (to 2.0) are all
+  for the Deep-Cut and Kraft blades. The AutoBlade's 1–10 is therefore 0.1 mm a step, and an import sets it from
+  the file; for blades set by hand (`adjustable`, the ratchet blade, Kraft, Deep-Cut) it is kept as the depth to
+  set them to and never sent; **to confirm** with a test cut ([hardware-validation.md](hardware-validation.md) step 22).
+
 ## Checks on the machine
 
 To do when the Cameo 4 is attached (C4.2 and C4.6), each on a scrap sheet:

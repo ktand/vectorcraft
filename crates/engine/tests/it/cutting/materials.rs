@@ -61,6 +61,55 @@ fn prices(s: &mut Session) {
     s.execute("cutting.settings.set", &json!({"mat": "silhouette.12x12"})).unwrap();
 }
 
+/// C18.14: a material list in the layout the maker's software exports (made-up materials):
+/// the machine's materials become the user's; built-in names and the user's own skipped unless
+/// replaced; a preview keeps nothing.
+fn imports(s: &mut Session, file: &std::path::Path) {
+    let list = [
+        "full_name,cutter_class_id,(force.pressure),(speed),(tool.type),(blade_depth),(nth_pass),(force.acceleration),name_resolved,category,uuid,parent_uuid,action",
+        "Test Board,desktop,15,5,adjustable,0.3,1,1,Test Board,group,g1,root,",
+        "Test Board for M,cameo4,25,3,autoadjust,0.4,2,1,M,leaf,l1,g1,cut",
+        "Vinyl,desktop,15,5,adjustable,0.3,1,1,Vinyl,group,g2,root,",
+        "Vinyl for M,cameo4,10,5,autoadjust,0.1,1,3,M,leaf,l2,g2,cut",
+        "My card,desktop,15,5,adjustable,0.3,1,1,My card,group,g3,root,",
+        "My card for M,cameo4,9,5,autoadjust,0.1,1,3,M,leaf,l3,g3,cut",
+    ]
+    .join("\n");
+    for bad in [json!({}), json!({"text": "a,b\n1,2"}), json!({"text": list, "depth": "deep"}), json!({"path": "/no/such/file.csv"})] {
+        assert!(s.execute("cutting.material.import", &bad).is_err(), "{bad}");
+    }
+    let before = std::fs::read(file).unwrap();
+    let r = s.execute("cutting.material.import", &json!({"text": list, "preview": true})).unwrap();
+    assert_eq!(r["imported"], json!(["Test Board"]));
+    let reasons: Vec<String> =
+        r["skipped"].as_array().unwrap().iter().map(|k| format!("{}: {}", k["name"].as_str().unwrap(), k["reason"].as_str().unwrap())).collect();
+    assert_eq!(reasons, ["Vinyl: the name of a built-in material", "My card: already one of yours"]);
+    assert_eq!(r["machines"], json!(["cameo4"]));
+    assert!(!names(&r).contains(&"Test Board".to_string()), "a preview keeps nothing");
+    assert_eq!(std::fs::read(file).unwrap(), before);
+
+    let path = file.with_file_name("Studio.csv");
+    std::fs::write(&path, &list).unwrap();
+    let r = s.execute("cutting.material.import", &json!({"path": path.to_string_lossy()})).unwrap();
+    let board = r["materials"].as_array().unwrap().iter().find(|m| m["name"] == "Test Board").unwrap().clone();
+    assert_eq!(
+        (board["builtin"].clone(), board["cut"]["passes"].clone(), board["cut"]["depth"].clone()),
+        (json!(false), json!(2), json!(4)),
+        "0.4 mm deep"
+    );
+    let kept: Value = serde_json::from_slice(&std::fs::read(file).unwrap()).unwrap();
+    assert!(kept.as_array().unwrap().iter().any(|m| m["name"] == "Test Board"), "{kept}");
+    // Replaced: the settings are the file's, the price stays.
+    let r = s.execute("cutting.material.import", &json!({"text": list, "replace": true, "depth": "auto"})).unwrap();
+    assert_eq!(r["imported"], json!(["Test Board", "My card"]));
+    let card = r["materials"].as_array().unwrap().iter().find(|m| m["name"] == "My card").unwrap().clone();
+    assert_eq!((card["cut"]["accel"].clone(), card["price"]["amount"].clone()), (json!(3), json!(1.25)));
+    let board = r["materials"].as_array().unwrap().iter().find(|m| m["name"] == "Test Board").unwrap().clone();
+    assert_eq!(board["cut"]["depth"], Value::Null, "auto: left to the machine");
+    s.execute("cutting.material.delete", &json!({"name": "Test Board"})).unwrap();
+    let _ = std::fs::remove_file(path);
+}
+
 #[test]
 fn materials_are_applied_saved_and_kept() {
     let dir = std::env::temp_dir().join(format!("vectorcraft-materials-{}", std::process::id()));
@@ -126,6 +175,7 @@ fn materials_are_applied_saved_and_kept() {
     s.execute("cutting.material.delete", &json!({"name": "My iron-on"})).unwrap();
 
     prices(&mut s);
+    imports(&mut s, &file);
 
     // Built-in names and unknown ones are refused; the user's own can go.
     assert!(s.execute("cutting.material.save", &json!({"name": "Vinyl"})).is_err());

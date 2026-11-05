@@ -405,3 +405,17 @@ is good. The same offset at all four is a shift (the marks' anchor); different o
 Note: the two 100 mm lengths, the square's sides, the circle's two diameters, which shapes dropped out, the
 corners, and (Print & Cut) the four offsets with their directions. A scale off by more than 0.2 mm in 100, or a
 consistent Print & Cut shift, is worth a correction setting: say which.
+
+## Step 22: materials from Silhouette Studio (C18.14)
+
+In Studio, export the material list. In VectorCraft, Cut Settings › Material › **Import…** and pick the file.
+The line under the buttons says how many were added and which were skipped.
+
+1. Choose an imported material you know well (a vinyl or a card you cut often) and compare its Force, Speed and
+   Passes in the Send window with what Studio shows for it on the Cameo 4: they should be the same numbers.
+2. Blade depth: Studio's file has it in millimetres (0.1 for vinyl, 0.3 for card), imported as 0.1 mm a step of
+   the AutoBlade's 1–10. Make a test cut with an imported vinyl, then a card, and read the dial: 1 and 3.
+3. Make a test cut with the material and look at it as with any setting.
+
+Note: which material you compared, whether the numbers matched, and the dial's readings. If the dial is off,
+`{"depth": "auto"}` imports without depths until the conversion is fixed.

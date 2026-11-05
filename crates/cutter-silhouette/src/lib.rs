@@ -16,6 +16,8 @@
 pub mod check;
 // Fork (C4.10): reading back what is sent.
 pub mod decode;
+// Fork (C18.14): materials from the maker's software's export.
+pub mod studio;
 
 use vectorcraft_cutjob::Piece;
 use vectorcraft_cutjob::{CutJob, ToolSettings};

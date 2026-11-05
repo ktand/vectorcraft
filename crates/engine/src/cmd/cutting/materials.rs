@@ -81,7 +81,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Materials",
             [],
             None,
-            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, mirror: cut from the back (Send asks whether to cut mirrored), price: {amount, per: sheet|metre, wastePct} or null (C18.3), rollLeftMm: what's left of its roll, mm, or null (C18.11), press: {tempC, seconds, pressure, peel} or null (C18.8), cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since}",
+            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, mirror: cut from the back (Send asks whether to cut mirrored), price: {amount, per: sheet|metre, wastePct} or null (C18.3), rollLeftMm: what's left of its roll, mm, or null (C18.11), press: {tempC, seconds, pressure, peel} or null (C18.8), handDepthMm: how deep to set a blade adjusted by hand, mm, or null (C18.14; never sent), cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since}",
             has_doc,
             list
         ),
@@ -131,6 +131,15 @@ pub fn specs() -> Vec<CommandSpec> {
             press_cmd
         ),
         cmd!(
+            "cutting.material.import",
+            "Import Cutting Materials",
+            [],
+            None,
+            "{path? | text?: a material list exported from Silhouette Studio (CSV, at most 8 MB), machine?: the file's cutter class (default cameo4), depth?: file|auto (default file: the AutoBlade's depth from the file's mm, 0.1 mm a step of 1–10; auto: left to the machine; other blades' depth is set by hand: kept as the material's handDepthMm, never sent), replace?: bool (default false: a material of yours of the same name is skipped), preview?: bool (nothing kept)} the list's materials for the machine as the user's own (C18.14): a cut row (automatic, Kraft or Deep-Cut blade) and its score row each; force and speed the machine's steps as they are → as cutting.materials, and imported: [names], skipped: [{name, reason}], machines: [the file's cutter classes]",
+            has_doc,
+            import_cmd
+        ),
+        cmd!(
             "cutting.material.delete",
             "Delete Cutting Material",
             [],
@@ -146,7 +155,7 @@ fn listing(s: &Session) -> Result<Value> {
     let settings = vectorcraft_cutting::settings(&s.doc()?.doc);
     let materials: Vec<Value> = all()
         .iter()
-        .map(|m| json!({"name": m.name, "builtin": m.builtin, "mirror": m.mirror, "price": m.price.map(|p| p.to_value()), "rollLeftMm": m.roll_left_mm, "press": m.press.map(|p| p.to_value()), "cut": m.cut.to_value(), "score": m.score.to_value()}))
+        .map(|m| json!({"name": m.name, "builtin": m.builtin, "mirror": m.mirror, "price": m.price.map(|p| p.to_value()), "rollLeftMm": m.roll_left_mm, "press": m.press.map(|p| p.to_value()), "handDepthMm": m.hand_depth_mm, "cut": m.cut.to_value(), "score": m.score.to_value()}))
         .collect();
     Ok(json!({"materials": materials, "current": settings.material, "changed": changed(&settings)}))
 }
@@ -324,6 +333,7 @@ fn save_cmd(s: &mut Session, p: &Value) -> Result<Value> {
         price: find(&name).and_then(|old| old.price),
         roll_left_mm: find(&name).and_then(|old| old.roll_left_mm),
         press: find(&name).and_then(|old| old.press),
+        hand_depth_mm: find(&name).and_then(|old| old.hand_depth_mm),
     };
     {
         let mut st = store().lock().map_err(|_| bad(CMD, "the materials are damaged"))?;
@@ -340,6 +350,74 @@ fn save_cmd(s: &mut Session, p: &Value) -> Result<Value> {
     }
     set_material(s, &m, "Save Material")?;
     listing(s)
+}
+
+/// C18.14: materials from a list the user exported from the maker's software (only the file
+/// given is read).
+fn import_cmd(s: &mut Session, p: &Value) -> Result<Value> {
+    use vectorcraft_cutter_silhouette::studio;
+    const CMD: &str = "cutting.material.import";
+    let text = match (str_param(p, "path"), str_param(p, "text")) {
+        (Some(path), None) => {
+            let len = std::fs::metadata(path).map_err(|e| bad(CMD, format!("{path}: {e}")))?.len();
+            if len > studio::MAX_BYTES as u64 {
+                return Err(bad(CMD, format!("{path}: larger than {} MB", studio::MAX_BYTES >> 20)));
+            }
+            let bytes = std::fs::read(path).map_err(|e| bad(CMD, format!("{path}: {e}")))?;
+            String::from_utf8_lossy(&bytes).into_owned()
+        }
+        (None, Some(text)) => text.to_string(),
+        _ => return Err(bad(CMD, "give path or text")),
+    };
+    let machine = str_param(p, "machine").unwrap_or(studio::DEFAULT_MACHINE);
+    let depth = match str_param(p, "depth") {
+        None | Some("file") => studio::Depth::File,
+        Some("auto") => studio::Depth::Auto,
+        Some(other) => return Err(bad(CMD, format!("depth is file or auto, not {other:?}"))),
+    };
+    let flag = |key: &str| p.get(key).and_then(Value::as_bool).unwrap_or(false);
+    let (replace, preview) = (flag("replace"), flag("preview"));
+    let got = studio::import(&text, machine, depth).map_err(|e| bad(CMD, e))?;
+    let mut skipped: Vec<Value> = got.skipped.iter().map(|k| json!({"name": k.name, "reason": k.reason})).collect();
+    let mut imported = vec![];
+    {
+        let mut st = store().lock().map_err(|_| bad(CMD, "the materials are damaged"))?;
+        let mut user = st.user.clone();
+        for mut m in got.materials {
+            if builtin_materials().iter().any(|b| b.name.eq_ignore_ascii_case(&m.name)) {
+                skipped.push(json!({"name": m.name, "reason": "the name of a built-in material"}));
+                continue;
+            }
+            let full = user.len() >= vectorcraft_cutjob::MAX_MATERIALS;
+            match user.iter_mut().find(|u| u.name.eq_ignore_ascii_case(&m.name)) {
+                Some(_) if !replace => skipped.push(json!({"name": m.name, "reason": "already one of yours"})),
+                Some(u) => {
+                    // Its price, roll and pressing stay, as when it is saved again.
+                    (m.price, m.roll_left_mm, m.press, m.mirror) = (u.price, u.roll_left_mm, u.press, u.mirror);
+                    imported.push(m.name.clone());
+                    *u = m;
+                }
+                None if full => {
+                    skipped.push(json!({"name": m.name, "reason": format!("at most {} materials are kept", vectorcraft_cutjob::MAX_MATERIALS)}));
+                }
+                None => {
+                    imported.push(m.name.clone());
+                    user.push(m);
+                }
+            }
+        }
+        if !preview && !imported.is_empty() {
+            st.user = user;
+            save(&st).map_err(|e| bad(CMD, format!("the materials are kept until VectorCraft closes, but couldn't be saved: {e}")))?;
+        }
+    }
+    let mut out = listing(s)?;
+    if let Some(o) = out.as_object_mut() {
+        o.insert("imported".into(), json!(imported));
+        o.insert("skipped".into(), Value::Array(skipped));
+        o.insert("machines".into(), json!(got.machines));
+    }
+    Ok(out)
 }
 
 fn delete(s: &mut Session, p: &Value) -> Result<Value> {

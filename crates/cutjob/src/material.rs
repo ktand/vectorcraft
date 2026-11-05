@@ -32,7 +32,13 @@ pub struct Material {
     pub roll_left_mm: Option<f64>,
     /// How it is pressed onto what it decorates (C18.8), for the job sheet; none: not given.
     pub press: Option<Press>,
+    /// How deep to set a blade adjusted by hand (Kraft, Deep-Cut, ratchet), mm (C18.14): shown
+    /// with the material, never sent; none: not given.
+    pub hand_depth_mm: Option<f64>,
 }
+
+/// The deepest a blade set by hand is said to be set, mm.
+pub const MAX_HAND_DEPTH_MM: f64 = 5.0;
 
 /// How hard a heat press is closed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -158,6 +164,7 @@ pub fn builtin_materials() -> Vec<Material> {
         price: None,
         roll_left_mm: None,
         press: None,
+        hand_depth_mm: None,
     };
     vec![
         m("Paper (light)", tool(0.2, 100.0, 1), tool(0.08, 100.0, 1)),
@@ -189,6 +196,9 @@ impl Material {
         if let (Some(p), Some(m)) = (self.press, v.as_object_mut()) {
             m.insert("press".into(), p.to_value());
         }
+        if let (Some(d), Some(m)) = (self.hand_depth_mm, v.as_object_mut()) {
+            m.insert("handDepthMm".into(), json!(d));
+        }
         v
     }
 
@@ -207,6 +217,7 @@ impl Material {
             price: m.get("price").and_then(Price::from_value),
             press: m.get("press").and_then(Press::from_value),
             roll_left_mm: m.get("rollLeftMm").and_then(Value::as_f64).filter(|l| l.is_finite()).map(|l| l.clamp(0.0, MAX_ROLL_MM)),
+            hand_depth_mm: m.get("handDepthMm").and_then(Value::as_f64).filter(|d| d.is_finite()).map(|d| d.clamp(0.0, MAX_HAND_DEPTH_MM)),
         })
     }
 }
@@ -299,13 +310,18 @@ mod tests {
             price: None,
             roll_left_mm: None,
             press: None,
+            hand_depth_mm: None,
         };
         let file = json!([user.to_value()]);
         assert_eq!(read_materials(&file), std::slice::from_ref(&user));
         assert!(file[0].get("mirror").is_none(), "only a mark is written");
         // C14.12: cut from the back, kept.
-        let iron_on = Material { name: "My iron-on".into(), mirror: true, ..user };
+        let iron_on = Material { name: "My iron-on".into(), mirror: true, ..user.clone() };
         assert_eq!(read_materials(&json!([iron_on.to_value()])), [iron_on]);
+        // C18.14: a hand-set blade's depth, kept; read within range.
+        let board = Material { name: "Board".into(), hand_depth_mm: Some(0.9), ..user };
+        assert_eq!(read_materials(&json!([board.to_value()])), [board]);
+        assert_eq!(read_materials(&json!([{"name": "x", "handDepthMm": 99}]))[0].hand_depth_mm, Some(MAX_HAND_DEPTH_MM));
         assert!(!read_materials(&json!([{"name": "x", "mirror": "yes"}]))[0].mirror, "read leniently");
     }
 
@@ -322,6 +338,7 @@ mod tests {
             price: None,
             roll_left_mm: None,
             press: None,
+            hand_depth_mm: None,
         };
         let back = read_materials(&json!([user.to_value()]));
         assert_eq!(back, std::slice::from_ref(&user));
