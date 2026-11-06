@@ -512,7 +512,13 @@ mod tests {
             let sq = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(x, 50.0, x + 60.0, 110.0)), Appearance::default());
             d.insert(Some(layer), usize::MAX, sq).unwrap();
         }
-        let s = CuttingSettings { grouping: vectorcraft_cutjob::Grouping::Layer, weed_box: true, weed_lines: true, ..CuttingSettings::default() };
+        let s = CuttingSettings {
+            grouping: vectorcraft_cutjob::Grouping::Layer,
+            weed_box: true,
+            weed_lines: true,
+            weed_lines_smart: false,
+            ..CuttingSettings::default()
+        };
         set_settings(&mut d, &s);
         let job = build_job(&d).unwrap();
         // Each group: its square, four weed lines, its box.

@@ -8,6 +8,10 @@
 //!   design so they never cut into it, so the waste comes off in strips. One from the middle of
 //!   each side, or one every `weedLineSpacingMm` along them; a line that meets nothing on its way
 //!   (it passes between shapes) runs across the box.
+//! - **Smart weed lines** (C18.24, the default): the box's waste split into strips no larger than
+//!   the spacing (50 mm when it is 0), each split a line right across the strip through a gap in
+//!   the design, as near its middle as there is one, never closer than a millimetre to the design;
+//!   where a strip has no such gap, lines in from both sides to the design, as above.
 
 use vectorcraft_cutjob::{CuttingSettings, JobWarning, OpKind, RectMm, SourceRef};
 
@@ -21,6 +25,14 @@ const MIN_LINE_MM: f64 = 1.0;
 const MAX_LINES_PER_SIDE: usize = 60;
 /// Most line-against-segment tests weeding makes for one group, so a huge design can't stall it.
 const MAX_WORK: usize = 50_000_000;
+/// Smart lines: the largest strip when the spacing is 0, mm.
+pub const STRIP_MM: f64 = 50.0;
+/// Smart lines: no strip narrower than this is split off, mm.
+const MIN_STRIP_MM: f64 = 5.0;
+/// Smart lines: how close a line may come to the design, mm.
+const CLEAR_MM: f64 = 1.0;
+/// Smart lines: most lines for one group.
+const MAX_SMART_LINES: usize = 200;
 
 /// The source weeding's toolpaths name: no object of the document.
 pub const SOURCE: SourceRef = SourceRef { node: 0, subpath: 0 };
@@ -39,7 +51,14 @@ pub fn weeding(paths: &[Polyline], area: RectMm, s: &CuttingSettings) -> (Vec<Po
     }
     let mut out = vec![];
     let mut warnings = vec![];
-    if s.weed_lines {
+    if s.weed_lines && s.weed_lines_smart {
+        let strip = if s.weed_line_spacing_mm > 0.0 { s.weed_line_spacing_mm.max(2.0 * MIN_STRIP_MM) } else { STRIP_MM };
+        let mut budget = MAX_WORK;
+        out.extend(smart_lines(paths, boxed, strip, &mut budget));
+        if budget == 0 {
+            warnings.push(JobWarning { source: None, message: "the design is too large for all its weed lines: some were left out".into() });
+        }
+    } else if s.weed_lines {
         let segments: usize = paths.iter().map(|p| p.points.len()).sum();
         let xs = positions(boxed.x0, boxed.x1, s.weed_line_spacing_mm);
         let ys = positions(boxed.y0, boxed.y1, s.weed_line_spacing_mm);
@@ -87,6 +106,137 @@ fn positions(lo: f64, hi: f64, spacing: f64) -> Vec<f64> {
     // Centred: the same room left at both ends.
     let start = lo + ((hi - lo) - spacing * (n as f64 - 1.0)) / 2.0;
     (0..n).map(|k| start + spacing * k as f64).collect()
+}
+
+/// Smart weed lines (C18.24) in `boxed`: each strip larger than `strip` split by a line across it
+/// through a gap in the design, as near its middle as there is one; a strip with no gap gets lines
+/// in from both sides to the design. Every test of a line against a segment uses up `budget`.
+fn smart_lines(paths: &[Polyline], boxed: RectMm, strip: f64, budget: &mut usize) -> Vec<Polyline> {
+    let mut out = vec![];
+    let mut todo = vec![boxed];
+    while let Some(r) = todo.pop() {
+        if out.len() >= MAX_SMART_LINES || *budget == 0 {
+            break;
+        }
+        let (w, h) = (r.width(), r.height());
+        if w <= strip && h <= strip {
+            continue;
+        }
+        // The longer side first: a vertical line (not horizontal) splits the width.
+        let order = if w >= h { [false, true] } else { [true, false] };
+        let mut split = false;
+        for horizontal in order {
+            let (lo, hi, a0, a1) = if horizontal { (r.y0, r.y1, r.x0, r.x1) } else { (r.x0, r.x1, r.y0, r.y1) };
+            if hi - lo <= strip {
+                continue;
+            }
+            if let Some(at) = free_line(paths, lo, hi, a0, a1, horizontal, budget) {
+                out.push(segment(at, a0, a1, horizontal));
+                if horizontal {
+                    todo.push(RectMm { y1: at, ..r });
+                    todo.push(RectMm { y0: at, ..r });
+                } else {
+                    todo.push(RectMm { x1: at, ..r });
+                    todo.push(RectMm { x0: at, ..r });
+                }
+                split = true;
+                break;
+            }
+        }
+        if !split {
+            // No gap: lines in from both sides to the design, across the longer side's middle.
+            let horizontal = h > w;
+            let (lo, hi, a0, a1) = if horizontal { (r.y0, r.y1, r.x0, r.x1) } else { (r.x0, r.x1, r.y0, r.y1) };
+            *budget = budget.saturating_sub(paths.iter().map(|p| p.points.len()).sum());
+            out.extend(lines_across(paths, (lo + hi) / 2.0, a0, a1, horizontal));
+        }
+    }
+    out
+}
+
+/// Where a line across from `a0` to `a1` (at a place between `lo` and `hi`) clears the design,
+/// the nearest to the middle; none when every place meets it.
+fn free_line(paths: &[Polyline], lo: f64, hi: f64, a0: f64, a1: f64, horizontal: bool, budget: &mut usize) -> Option<f64> {
+    let mid = (lo + hi) / 2.0;
+    let half = (hi - lo) / 2.0 - MIN_STRIP_MM;
+    if !half.is_finite() || half < 0.0 {
+        return None;
+    }
+    let step = ((hi - lo) / 120.0).max(0.5);
+    let n = (half / step).floor().min(1000.0) as usize;
+    for k in 0..=n {
+        for side in [1.0, -1.0] {
+            if k == 0 && side < 0.0 {
+                continue;
+            }
+            let at = mid + side * step * k as f64;
+            let band = if horizontal {
+                RectMm { x0: a0, x1: a1, y0: at - CLEAR_MM, y1: at + CLEAR_MM }
+            } else {
+                RectMm { x0: at - CLEAR_MM, x1: at + CLEAR_MM, y0: a0, y1: a1 }
+            };
+            if clear(paths, band, budget) {
+                return Some(at);
+            }
+            if *budget == 0 {
+                return None;
+            }
+        }
+    }
+    None
+}
+
+/// Whether no part of the design comes into `band`.
+fn clear(paths: &[Polyline], band: RectMm, budget: &mut usize) -> bool {
+    for p in paths {
+        let n = p.points.len();
+        let count = if p.closed { n } else { n.saturating_sub(1) };
+        for k in 0..count {
+            if *budget == 0 {
+                return false;
+            }
+            *budget -= 1;
+            let (Some(a), Some(b)) = (p.points.get(k), p.points.get((k + 1) % n.max(1))) else { continue };
+            if meets(*a, *b, band) {
+                return false;
+            }
+        }
+        // A single point (a dot) has no segment.
+        if n == 1 && p.points.first().is_some_and(|q| q[0] >= band.x0 && q[0] <= band.x1 && q[1] >= band.y0 && q[1] <= band.y1) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Whether the segment `a`–`b` meets `r` (clipped to it, Liang–Barsky).
+fn meets(a: [f64; 2], b: [f64; 2], r: RectMm) -> bool {
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let (mut t0, mut t1) = (0.0f64, 1.0f64);
+    for (p, q) in [(-dx, a[0] - r.x0), (dx, r.x1 - a[0]), (-dy, a[1] - r.y0), (dy, r.y1 - a[1])] {
+        if p == 0.0 {
+            if q < 0.0 {
+                return false;
+            }
+        } else {
+            let t = q / p;
+            if p < 0.0 {
+                t0 = t0.max(t);
+            } else {
+                t1 = t1.min(t);
+            }
+            if t0 > t1 {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// A weed line at `at` from `a0` to `a1`.
+fn segment(at: f64, a0: f64, a1: f64, horizontal: bool) -> Polyline {
+    let point = |along: f64| if horizontal { [along, at] } else { [at, along] };
+    Polyline { op: OpKind::Cut, source: SOURCE, closed: false, points: vec![point(a0), point(a1)], curve: None, dash: None }
 }
 
 /// The weed lines along `at` (x of a vertical line, or y of a horizontal one when `horizontal`)
@@ -157,8 +307,67 @@ mod tests {
 
     const MAT: RectMm = RectMm { x0: 0.0, y0: 0.0, x1: 300.0, y1: 300.0 };
 
+    /// Evenly spaced weed lines, as before C18.24.
     fn on(weed_box: bool, weed_lines: bool) -> CuttingSettings {
-        CuttingSettings { weed_box, weed_lines, ..CuttingSettings::default() }
+        CuttingSettings { weed_box, weed_lines, weed_lines_smart: false, ..CuttingSettings::default() }
+    }
+
+    fn smart(spacing: f64) -> CuttingSettings {
+        CuttingSettings { weed_box: true, weed_lines: true, weed_line_spacing_mm: spacing, ..CuttingSettings::default() }
+    }
+
+    /// Whether `l` keeps `CLEAR_MM` (less a hair) from every segment of `design`.
+    fn keeps_clear(l: &Polyline, design: &[Polyline]) -> bool {
+        let (a, b) = (l.points[0], l.points[1]);
+        let band = RectMm { x0: a[0].min(b[0]) - 0.99, y0: a[1].min(b[1]) - 0.99, x1: a[0].max(b[0]) + 0.99, y1: a[1].max(b[1]) + 0.99 };
+        let mut budget = usize::MAX;
+        clear(design, band, &mut budget)
+    }
+
+    /// C18.24: a row of squares in a long box: smart lines run right across through the gaps,
+    /// splitting the waste into strips no wider than the spacing, never near a square.
+    #[test]
+    fn smart_lines_split_the_waste_through_the_gaps() {
+        let design: Vec<Polyline> = (0..6).map(|k| square(20.0 + 30.0 * f64::from(k), 50.0, 20.0)).collect();
+        let (out, w) = weeding(&design, MAT, &smart(40.0));
+        assert!(w.is_empty());
+        let lines: Vec<&Polyline> = out.iter().filter(|l| !l.closed).collect();
+        assert!(!lines.is_empty());
+        // Every line runs from the box's top to its bottom (through a gap) and keeps clear.
+        for l in &lines {
+            assert_eq!((l.points[0][1], l.points[1][1]), (47.0, 73.0), "{l:?}");
+            assert!(keeps_clear(l, &design), "{l:?}");
+        }
+        // The strips between them are no wider than 40 mm.
+        let mut xs: Vec<f64> = lines.iter().map(|l| l.points[0][0]).chain([17.0, 193.0]).collect();
+        xs.sort_by(f64::total_cmp);
+        assert!(xs.windows(2).all(|p| p[1] - p[0] <= 40.0 + 1e-9), "{xs:?}");
+        assert!(out.last().is_some_and(|p| p.closed), "the box last");
+    }
+
+    /// One large shape with no gap: lines come in from both sides and stop short of it; a small
+    /// box needs no lines at all.
+    #[test]
+    fn without_a_gap_smart_lines_stop_short() {
+        let design = [square(50.0, 50.0, 150.0)];
+        let (out, _) = weeding(&design, MAT, &smart(0.0));
+        let lines: Vec<&Polyline> = out.iter().filter(|l| !l.closed).collect();
+        assert!(lines.len() >= 2, "{out:?}");
+        for l in &lines {
+            let inside = |q: [f64; 2]| q[0] > 50.0 && q[0] < 200.0 && q[1] > 50.0 && q[1] < 200.0;
+            assert!(!inside(l.points[0]) && !inside(l.points[1]), "{l:?}");
+        }
+        let (small, _) = weeding(&[square(50.0, 50.0, 20.0)], MAT, &smart(0.0));
+        assert_eq!(small.len(), 1, "the box alone: its waste comes off in one piece");
+    }
+
+    /// A design of very many segments stops at the budget with a warning, not a stall.
+    #[test]
+    fn a_huge_design_is_bounded() {
+        let mut budget = 10;
+        let design: Vec<Polyline> = (0..50).map(|k| square(10.0 + 5.0 * f64::from(k), 10.0, 2.0)).collect();
+        let _ = smart_lines(&design, RectMm { x0: 0.0, y0: 0.0, x1: 300.0, y1: 300.0 }, 20.0, &mut budget);
+        assert_eq!(budget, 0);
     }
 
     #[test]

@@ -46,13 +46,30 @@ fn weeding_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         set(app, json!({ "weedLines": !lines }));
     }
     if lines {
+        // C18.24: smart lines through the design's gaps (the default), or evenly spaced.
+        let smart = s["weedLinesSmart"].as_bool() != Some(false);
+        ui.indent(("cutting", "weed-lines"), |ui| {
+            if super::check_hint(
+                ui,
+                "Smart Placement",
+                smart,
+                "Lines right across the waste through the gaps between the design's pieces, splitting it into strips no larger than Strip Size; off: evenly spaced lines in to the design.",
+            ) {
+                set(app, json!({ "weedLinesSmart": !smart }));
+            }
+        });
         let spacing = s["weedLineSpacingMm"].as_f64().unwrap_or(0.0);
-        widgets::label_row(ui, tl!("Spacing"), LABEL_W, |ui| {
+        let label = if smart { tl!("Strip Size") } else { tl!("Spacing") };
+        widgets::label_row(ui, label, LABEL_W, |ui| {
             if let Some(v) = mm_field(ui, "weed-spacing", spacing, 0.0) {
                 set(app, json!({ "weedLineSpacingMm": v.clamp(0.0, 200.0) }));
             }
         });
-        widgets::dim_label(ui, tl!("Spacing 0: one line in from the middle of each side."));
+        if smart {
+            widgets::dim_label(ui, tl!("Strip Size 0: strips up to 50 mm. Weeding Map… in Send to Cutter shows the strips."));
+        } else {
+            widgets::dim_label(ui, tl!("Spacing 0: one line in from the middle of each side."));
+        }
     }
 }
 
@@ -232,7 +249,14 @@ mod tests {
         assert!(!texts.iter().any(|t| t == "Margin" || t == "Spacing"), "off: no numbers");
         app.run("cutting.settings.set", json!({"weedBox": true, "weedLines": true, "weedMarginMm": 5})).unwrap();
         let texts = panel_texts(&mut app, &ctx, show_weeding);
-        assert!(texts.iter().any(|t| t == "Margin") && texts.iter().any(|t| t == "Spacing"), "{texts:?}");
+        // C18.24: smart placement at first, its strip size; off, the even spacing.
+        assert!(
+            texts.iter().any(|t| t == "Margin") && texts.iter().any(|t| t == "Strip Size") && texts.iter().any(|t| t == "Smart Placement"),
+            "{texts:?}"
+        );
+        app.run("cutting.settings.set", json!({"weedLinesSmart": false})).unwrap();
+        let texts = panel_texts(&mut app, &ctx, show_weeding);
+        assert!(texts.iter().any(|t| t == "Spacing") && !texts.iter().any(|t| t == "Strip Size"), "{texts:?}");
         assert!(app.run("cutting.settings.set", json!({"weedMarginMm": 80})).is_err(), "out of range");
     }
 

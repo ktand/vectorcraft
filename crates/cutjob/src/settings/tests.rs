@@ -51,7 +51,8 @@ fn the_defaults_round_trip_as_documented() {
             "alignMarks": false,
             "sendCurves": true,
             "weedLines": false,
-            "weedLineSpacingMm": 0.0
+            "weedLineSpacingMm": 0.0,
+            "weedLinesSmart": true
         })
     );
     assert_eq!(read(v), d);
@@ -101,6 +102,7 @@ fn every_setting_round_trips() {
         weed_margin_mm: 5.5,
         weed_lines: true,
         weed_line_spacing_mm: 25.0,
+        weed_lines_smart: false,
         knockout: true,
         knockout_overlap_mm: 1.5,
         detail_slow: true,

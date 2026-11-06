@@ -551,8 +551,15 @@ own and the pen in that group's setup).
 In the **Weeding** panel, for vinyl and heat-transfer material, where the waste around the design is peeled away:
 
 - **Weed Box:** a box cut round the design, **Margin** mm out.
-- **Weed Lines:** lines from the box in towards the design, stopping just short of it, so the waste comes off in
-  strips. **Spacing** sets how far apart they are (0: one from the middle of each side).
+- **Weed Lines:** cuts across the waste so it comes off in strips instead of one sheet.
+  - **Smart Placement** (on at first) lays each line right across the waste through a gap between the design's
+    pieces, never closer than a millimetre to them, until no strip is larger than **Strip Size** (0: 50 mm).
+    Where there's no gap to go through, lines come in from both sides and stop just short of the design.
+  - Off, the lines are evenly spaced, each from the box in towards the design, stopping just short of it:
+    **Spacing** sets how far apart they are (0: one from the middle of each side).
+
+**Weeding Map…** in the Send window shows what to pull away: the waste inside the weed box grey, the pieces that
+stay white, and the weed lines dashed, so you can see the strips.
 
 When cutting in groups, each group gets its own box and lines.
 

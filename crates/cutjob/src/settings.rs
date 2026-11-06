@@ -421,6 +421,9 @@ pub struct CuttingSettings {
     /// (spacing 0), or one every this many mm.
     pub weed_lines: bool,
     pub weed_line_spacing_mm: f64,
+    /// Smart weed lines (C18.24): placed through the gaps between the design's pieces, splitting
+    /// the waste into strips no larger than the spacing (0: 50 mm), instead of evenly spaced.
+    pub weed_lines_smart: bool,
     /// Knockout for layered vinyl (C18.1): in a grouped job, each object cut back to what shows
     /// of it under the other groups painted above, running this far under their edges, mm.
     pub knockout: bool,
@@ -472,6 +475,7 @@ impl Default for CuttingSettings {
             weed_margin_mm: 3.0,
             weed_lines: false,
             weed_line_spacing_mm: 0.0,
+            weed_lines_smart: true,
             knockout: false,
             knockout_overlap_mm: 0.5,
             detail_slow: false,
@@ -490,7 +494,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 36] = [
+    const KEYS: [&'static str; 37] = [
         "version",
         "mat",
         "customMatMm",
@@ -520,6 +524,7 @@ impl CuttingSettings {
         "weedMarginMm",
         "weedLines",
         "weedLineSpacingMm",
+        "weedLinesSmart",
         "knockout",
         "knockoutOverlapMm",
         "detailSlow",
@@ -604,6 +609,7 @@ impl CuttingSettings {
             weed_margin_mm: num(m, "weedMarginMm", Self::WEED_MARGIN_MM.0, Self::WEED_MARGIN_MM.1, d.weed_margin_mm),
             weed_lines: flag(m, "weedLines", d.weed_lines),
             weed_line_spacing_mm: num(m, "weedLineSpacingMm", Self::WEED_LINE_SPACING_MM.0, Self::WEED_LINE_SPACING_MM.1, d.weed_line_spacing_mm),
+            weed_lines_smart: flag(m, "weedLinesSmart", d.weed_lines_smart),
             knockout: flag(m, "knockout", d.knockout),
             knockout_overlap_mm: num(m, "knockoutOverlapMm", Self::KNOCKOUT_MM.0, Self::KNOCKOUT_MM.1, d.knockout_overlap_mm),
             detail_slow: flag(m, "detailSlow", d.detail_slow),
@@ -652,6 +658,7 @@ impl CuttingSettings {
         m.insert("weedMarginMm".into(), json!(self.weed_margin_mm));
         m.insert("weedLines".into(), json!(self.weed_lines));
         m.insert("weedLineSpacingMm".into(), json!(self.weed_line_spacing_mm));
+        m.insert("weedLinesSmart".into(), json!(self.weed_lines_smart));
         m.insert("knockout".into(), json!(self.knockout));
         m.insert("knockoutOverlapMm".into(), json!(self.knockout_overlap_mm));
         m.insert("detailSlow".into(), json!(self.detail_slow));
