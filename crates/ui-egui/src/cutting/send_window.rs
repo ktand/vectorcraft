@@ -162,7 +162,7 @@ fn tools_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, m: &mut Machines, dev
         Ok(a) if a["answered"] != true => {
             ui.horizontal(|ui| {
                 widgets::dim_label(ui, tl!("The cutter didn't say which tools are fitted."));
-                ask_again = !sending && ui.small_button(tl!("Check Tools")).clicked();
+                ask_again = !sending && ui.button(tl!("Check Tools")).clicked();
             });
         }
         Ok(a) => {
@@ -182,7 +182,7 @@ fn tools_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, m: &mut Machines, dev
                 .collect();
             ui.horizontal_wrapped(|ui| {
                 widgets::dim_label(ui, &line.join(" · "));
-                ask_again = !sending && ui.small_button(tl!("Check Tools")).clicked();
+                ask_again = !sending && ui.button(tl!("Check Tools")).clicked();
             });
             let holders = fitted(a);
             let job = crate::cutting::job(app, ui.ctx());
@@ -195,7 +195,7 @@ fn tools_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, m: &mut Machines, dev
         Err(e) => {
             ui.horizontal_wrapped(|ui| {
                 ui.label(egui::RichText::new(e).color(t.text_dim));
-                ask_again = !sending && ui.small_button(tl!("Check Tools")).clicked();
+                ask_again = !sending && ui.button(tl!("Check Tools")).clicked();
             });
         }
     }
@@ -377,7 +377,7 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
                 // C18.8: a page to print for the machine and the press.
                 ui.horizontal(|ui| {
                     if ui
-                        .small_button(tl!("Job Sheet…"))
+                        .button(tl!("Job Sheet…"))
                         .on_hover_text(tl!("Save a page listing each group, its material, settings and pressing"))
                         .clicked()
                     {
@@ -385,7 +385,7 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
                     }
                     // C18.9: what to pull away after the cut.
                     if ui
-                        .small_button(tl!("Weeding Map…"))
+                        .button(tl!("Weeding Map…"))
                         .on_hover_text(tl!("Save a page showing what to pull away (grey) and what stays (white)"))
                         .clicked()
                     {
@@ -491,7 +491,7 @@ fn history_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
             ui.label(egui::RichText::new(format!("{material} · {shown}{took}")).color(if bad { t.bleed } else { t.text_dim }));
             ui.horizontal(|ui| {
                 if let Some(i) = e["index"].as_u64()
-                    && ui.small_button(tl!("Use Settings")).clicked()
+                    && ui.button(tl!("Use Settings")).clicked()
                 {
                     let _ = app.run("cutting.history.apply", json!({ "index": i }));
                 }
@@ -519,7 +519,7 @@ fn history_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
             });
         }
     });
-    if ui.small_button(tl!("Clear History")).clicked() {
+    if ui.button(tl!("Clear History")).clicked() {
         let _ = app.run("cutting.history.clear", json!({}));
     }
 }
@@ -715,10 +715,10 @@ fn sheet_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     ui.horizontal(|ui| {
         ui.label(egui::RichText::new(format!("{} {} {} {}: {name}", tl!("Sheet"), at + 1, tl!("of"), names.len())).strong());
         let sending = status["sending"].as_bool() == Some(true);
-        if at > 0 && !sending && ui.small_button(tl!("Previous Sheet")).clicked() {
+        if at > 0 && !sending && ui.button(tl!("Previous Sheet")).clicked() {
             let _ = app.run("cutting.settings.set", json!({ "artboard": at - 1 }));
         }
-        if at + 1 < names.len() && !sending && ui.small_button(tl!("Next Sheet")).clicked() {
+        if at + 1 < names.len() && !sending && ui.button(tl!("Next Sheet")).clicked() {
             let _ = app.run("cutting.settings.set", json!({ "artboard": at + 1 }));
         }
     });
@@ -770,8 +770,7 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
             }
         }
         // C18.18: beside the machine it looks for, not beside Send.
-        if !sending
-            && ui.small_button(tl!("Find Cutters")).on_hover_text(tl!("Look again for cutters, after plugging one in or switching it on")).clicked()
+        if !sending && ui.button(tl!("Find Cutters")).on_hover_text(tl!("Look again for cutters, after plugging one in or switching it on")).clicked()
         {
             m.found = None;
             m.chosen = 0;

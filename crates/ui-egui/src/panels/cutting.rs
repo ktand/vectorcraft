@@ -603,11 +603,11 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         if changed
             && own
             && let Some(c) = &current
-            && ui.small_button(format!("{} \u{201C}{c}\u{201D}", tl!("Update"))).on_hover_text(tl!("Keep these settings in the material")).clicked()
+            && ui.button(format!("{} \u{201C}{c}\u{201D}", tl!("Update"))).on_hover_text(tl!("Keep these settings in the material")).clicked()
         {
             error = app.run("cutting.material.save", json!({ "name": c })).err();
         }
-        if ui.small_button(tl!("Save as Material…")).clicked() {
+        if ui.button(tl!("Save as Material…")).clicked() {
             let copy = match &current {
                 Some(c) if changed && !own => format!("{c} ({})", tl!("copy")),
                 _ => String::new(),
@@ -615,7 +615,7 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             saving = Some(copy);
         }
         if own
-            && ui.small_button(tl!("Delete")).clicked()
+            && ui.button(tl!("Delete")).clicked()
             && let Some(c) = &current
         {
             error = app.run("cutting.material.delete", json!({ "name": c })).err();
@@ -624,7 +624,7 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         let pick = crate::FilePick { filters: crate::FilePick::filters([("Material list (CSV)", &["csv"][..])]), ..Default::default() };
         if crate::picks::can(app, &crate::picks::PickRequest::Open(pick.clone()))
             && ui
-                .small_button(tl!("Import…"))
+                .button(tl!("Import…"))
                 .on_hover_text(tl!("Add the materials of a list exported from Silhouette Studio (their Cameo 4 settings, the AutoBlade's depth too)"))
                 .clicked()
             && let Some(path) = crate::picks::open(app, &pick)
@@ -646,15 +646,15 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             widgets::dim_label(ui, tl!("Replacing also merges the ones an earlier import named after their blade into one material each."));
         }
         ui.horizontal_wrapped(|ui| {
-            if ui.small_button(tl!("Replace Mine")).on_hover_text(tl!("Use the list's settings; their price, pressing and roll stay")).clicked() {
+            if ui.button(tl!("Replace Mine")).on_hover_text(tl!("Use the list's settings; their price, pressing and roll stay")).clicked() {
                 (imported, error) = import_now(app, &ask.path, true);
                 asking = None;
             }
-            if ui.small_button(tl!("Keep Mine")).on_hover_text(tl!("Add only the materials you don't have yet")).clicked() {
+            if ui.button(tl!("Keep Mine")).on_hover_text(tl!("Add only the materials you don't have yet")).clicked() {
                 (imported, error) = import_now(app, &ask.path, false);
                 asking = None;
             }
-            if ui.small_button(tl!("Cancel")).clicked() {
+            if ui.button(tl!("Cancel")).clicked() {
                 asking = None;
             }
         });
