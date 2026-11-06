@@ -881,6 +881,13 @@ mod tests {
     /// Two frames of the window on its own (a window sizes itself on its first); the texts drawn.
     /// The window's texts on a screen tall enough for its whole column (C14.8: the tool settings
     /// made it taller than most screens, where it scrolls).
+    /// The send in progress is the process's (the cutter registry), so a test that sends would
+    /// change what the others' windows show (no Find Cutters, no Send): they take turns.
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        SERIAL.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
     fn window_texts(app: &mut VectorcraftApp, ctx: &egui::Context) -> Vec<String> {
         window_texts_on(app, ctx, egui::vec2(1200.0, 1600.0))
     }
@@ -907,6 +914,7 @@ mod tests {
     /// old fixed 320 × 440 px preview, and its content stays inside it.
     #[test]
     fn the_window_opens_large() {
+        let _serial = serial();
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
@@ -922,6 +930,7 @@ mod tests {
     /// C18.18: a cut's length as a person reads it.
     #[test]
     fn durations_read_as_minutes_and_hours() {
+        let _serial = serial();
         assert_eq!(duration(7.4), "7 s");
         assert_eq!(duration(200.0), "3 min 20 s");
         assert_eq!(duration(120.0), "2 min");
@@ -933,6 +942,7 @@ mod tests {
     /// C18.18: Send stays in sight on a screen too short for the column, which scrolls above it.
     #[test]
     fn send_stays_at_the_foot_of_a_short_window() {
+        let _serial = serial();
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
@@ -975,6 +985,7 @@ mod tests {
     /// document); closed, it draws nothing.
     #[test]
     fn the_command_opens_the_window() {
+        let _serial = serial();
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         assert!(window_texts(&mut app, &ctx).is_empty());
@@ -998,6 +1009,7 @@ mod tests {
     /// The window lists the job's warnings, and says why there is no job.
     #[test]
     fn the_window_shows_the_warnings_and_why_there_is_no_job() {
+        let _serial = serial();
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 612, "height": 792})).unwrap();
@@ -1015,6 +1027,7 @@ mod tests {
     /// C12.5: a Print & Cut job says so, with how far apart the marks it looks for are.
     #[test]
     fn a_print_and_cut_job_says_so() {
+        let _serial = serial();
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         let mm = 72.0 / 25.4;
@@ -1033,6 +1046,7 @@ mod tests {
     /// C8.1: the test cut's choices show, and say ahead when the test would land on the design.
     #[test]
     fn the_window_offers_a_test_cut() {
+        let _serial = serial();
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
@@ -1071,6 +1085,7 @@ mod tests {
     /// C8.6: with several sheets, the window says which is on the mat and moves to the next.
     #[test]
     fn the_window_steps_through_the_sheets() {
+        let _serial = serial();
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
@@ -1094,6 +1109,7 @@ mod tests {
     /// installs machines.
     #[test]
     fn a_send_pauses_continues_and_finishes() {
+        let _serial = serial();
         let quick = SimulatedMachine {
             info: vectorcraft_cutter::DeviceInfo {
                 id: format!("{SIMULATED_ID_PREFIX}quick"),
@@ -1161,6 +1177,7 @@ mod tests {
     /// with Print & Cut; Cut Mirrored and As Is set the switch before the send, Cancel sends nothing.
     #[test]
     fn a_material_cut_from_the_back_asks_whether_to_mirror() {
+        let _serial = serial();
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
         app.run("cutting.material.apply", json!({"name": "Vinyl"})).unwrap();
