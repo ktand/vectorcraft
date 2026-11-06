@@ -141,6 +141,15 @@ pub fn specs() -> Vec<CommandSpec> {
             save_cmd
         ),
         cmd!(
+            "cutting.material.group",
+            "Set Cutting Material Group",
+            [],
+            None,
+            "{name, group: a name of 1–64 characters or null (the one its name suggests: Vinyl / Paper / Card & Board…)} the group the user's material `name` is listed under (C18.17; built-in ones are listed as Starting Points) → as cutting.materials, each material with group (its group) and groupSet (set by the user)",
+            has_doc,
+            group_cmd
+        ),
+        cmd!(
             "cutting.material.price",
             "Set Cutting Material Price",
             [],
@@ -198,7 +207,7 @@ fn listing(s: &Session) -> Result<Value> {
                 .iter()
                 .map(|(id, t)| (id.clone(), json!({"settings": t.settings.to_value(), "handDepthMm": t.hand_depth_mm})))
                 .collect();
-            json!({"name": m.name, "builtin": m.builtin, "mirror": m.mirror, "price": m.price.map(|p| p.to_value()), "rollLeftMm": m.roll_left_mm, "press": m.press.map(|p| p.to_value()), "handDepthMm": m.hand_depth_mm, "cutTool": m.cut_tool, "tools": tools, "cut": m.cut.to_value(), "score": m.score.to_value()})
+            json!({"name": m.name, "builtin": m.builtin, "mirror": m.mirror, "price": m.price.map(|p| p.to_value()), "rollLeftMm": m.roll_left_mm, "press": m.press.map(|p| p.to_value()), "handDepthMm": m.hand_depth_mm, "cutTool": m.cut_tool, "tools": tools, "group": m.group_name(), "groupSet": m.group.is_some(), "cut": m.cut.to_value(), "score": m.score.to_value()})
         })
         .collect();
     // C18.15: what the current material gives each operation with its tool.
@@ -250,6 +259,33 @@ fn apply(s: &mut Session, p: &Value) -> Result<Value> {
     let name = name_param(p, CMD)?;
     let m = find(&name).ok_or_else(|| bad(CMD, format!("no material {name:?}")))?;
     set_material(s, &m, "Apply Material")?;
+    listing(s)
+}
+
+/// C18.17: the group a material of the user's is listed under.
+fn group_cmd(s: &mut Session, p: &Value) -> Result<Value> {
+    const CMD: &str = "cutting.material.group";
+    let name = name_param(p, CMD)?;
+    let group = match p.get("group") {
+        Some(Value::Null) => None,
+        Some(v) => Some(
+            v.as_str().and_then(valid_name).ok_or_else(|| bad(CMD, format!("group is 1 to {} characters, or null", vectorcraft_cutjob::MAX_NAME)))?,
+        ),
+        None => return Err(bad(CMD, "group is required (null: the one its name suggests)")),
+    };
+    if builtin_materials().iter().any(|m| m.name.eq_ignore_ascii_case(&name)) {
+        return Err(bad(CMD, format!("{name:?} is a built-in material: save it as your own to group it")));
+    }
+    {
+        let mut st = store().lock().map_err(|_| bad(CMD, "the materials are damaged"))?;
+        let m = st
+            .user
+            .iter_mut()
+            .find(|u| u.name.eq_ignore_ascii_case(&name))
+            .ok_or_else(|| bad(CMD, format!("no material of yours named {name:?}")))?;
+        m.group = group;
+        save(&st).map_err(|e| bad(CMD, format!("the group is kept until VectorCraft closes, but couldn't be saved: {e}")))?;
+    }
     listing(s)
 }
 
@@ -419,6 +455,7 @@ fn saved(name: String, old: Option<Material>, settings: &CuttingSettings) -> Mat
             // A new material's cut is for the tool it was cut with.
             cut_tool: cut_tool.map(str::to_string),
             tools: Default::default(),
+            group: None,
         },
     };
     if cut_tool == m.cut_tool.as_deref() {
@@ -502,6 +539,7 @@ fn import_cmd(s: &mut Session, p: &Value) -> Result<Value> {
                 // name's first, else the earlier import's.
                 if let Some(u) = user.iter().find(|u| same(u)).or_else(|| user.iter().find(|u| old(u))) {
                     (m.price, m.roll_left_mm, m.press, m.mirror) = (u.price, u.roll_left_mm, u.press, u.mirror);
+                    m.group.clone_from(&u.group);
                 }
                 let at = user.iter().position(|u| same(u) || old(u)).unwrap_or(user.len());
                 user.retain(|u| !(same(u) || old(u)));

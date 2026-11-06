@@ -19,6 +19,7 @@ use crate::widgets;
 pub mod lines;
 pub mod mat;
 pub mod patterns;
+mod picker;
 pub mod popup;
 pub mod print;
 pub mod templates;
@@ -176,7 +177,7 @@ fn group_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         return;
     }
     let choices = group_choices(app);
-    let names: Vec<&str> = choices.iter().map(String::as_str).collect();
+    let entries = picker::entries(&app.session.execute("cutting.materials", &json!({})).unwrap_or_default());
     let doc_cut = &info["settings"]["operations"]["cut"];
     let mut error = None;
     // Each group a block: its name with whether it is cut and whether the machine pauses before
@@ -219,8 +220,14 @@ fn group_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         ui.add_enabled_ui(on, |ui| {
             ui.indent(("cutting", "group-rows", i), |ui| {
                 widgets::label_row(ui, tl!("Material"), LABEL_W - 14.0, |ui| {
-                    if let Some(k) = widgets::dropdown_names(ui, ("cutting", "group", i, "material"), shown, &names, CHOICE_W) {
-                        error = choose_group_material(app, name, &choices, k).err();
+                    if let Some(p) =
+                        picker::picker(ui, ("cutting", "group", i, "material"), shown, choices.first().map(String::as_str), &entries, CHOICE_W)
+                    {
+                        let k = match p {
+                            picker::Picked::First => Some(0),
+                            picker::Picked::Material(m) => choices.iter().skip(1).position(|c| *c == m).map(|k| k + 1),
+                        };
+                        error = k.map_or_else(|| Err("no such material".to_string()), |k| choose_group_material(app, name, &choices, k)).err();
                     }
                 });
                 widgets::label_row(ui, tl!("Force"), LABEL_W - 14.0, |ui| {
@@ -543,12 +550,11 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         .map(|a| a.iter().filter_map(|m| Some((m["name"].as_str()?.to_string(), m["builtin"].as_bool()?))).collect())
         .unwrap_or_default();
     let current = info["current"].as_str().map(str::to_string);
-    let names: Vec<&str> = list.iter().map(|(n, _)| n.as_str()).collect();
     let shown = current.as_deref().unwrap_or(tl!("None"));
+    // C18.17: under their groups, with a filter.
+    let entries = picker::entries(&info);
     widgets::label_row(ui, tl!("Material"), LABEL_W, |ui| {
-        if let Some(i) = widgets::dropdown_names(ui, ("cutting", "material"), shown, &names, 150.0)
-            && let Some((name, _)) = list.get(i)
-        {
+        if let Some(picker::Picked::Material(name)) = picker::picker(ui, ("cutting", "material"), shown, None, &entries, 150.0) {
             let _ = app.run("cutting.material.apply", json!({ "name": name }));
         }
     });
@@ -665,6 +671,13 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     // own, closed at first: they are about the material, not how it is cut.
     let own = current.as_deref().and_then(|c| info["materials"].as_array()?.iter().find(|m| m["name"] == c && m["builtin"] == false)).cloned();
     let details = own.is_some() && fold(ui, "cutting-material-details", tl!("Material Details"));
+    // C18.17: the group it is listed under.
+    if details
+        && let Some(c) = &current
+        && let Some(m) = &own
+    {
+        group_row(app, ui, c, m, &entries, &mut error);
+    }
     // C18.3: a material of the user's has a price, for the job's quote.
     if details
         && let Some(c) = &current
@@ -761,6 +774,59 @@ fn hand_depth_note(d: f64) -> String {
 fn no_tool_note(material: &str, tool: &str, score: bool) -> String {
     let used = if score { tl!("its score settings are used.") } else { tl!("its cut settings are used.") };
     format!("{material}: {} {tool}; {used}", tl!("no settings for the"))
+}
+
+/// C18.17: Material Details' Group: the one its name suggests unless the user chose one: the
+/// suggested groups, the user's own in use, or a new one typed in.
+fn group_row(app: &mut VectorcraftApp, ui: &mut Ui, name: &str, m: &Value, entries: &[picker::Entry], error: &mut Option<String>) {
+    let ctx = ui.ctx().clone();
+    let group = m["group"].as_str().unwrap_or(vectorcraft_cutjob::OTHER_GROUP);
+    let set = m["groupSet"].as_bool() == Some(true);
+    let mut typing: Option<String> = super::pstate(&ctx, "cutting-material-new-group");
+    // The suggested groups, then the user's own in use, then a new one.
+    let mut groups: Vec<&str> = vectorcraft_cutjob::GROUPS.iter().map(|(g, _)| *g).chain([vectorcraft_cutjob::OTHER_GROUP]).collect();
+    for e in entries.iter().filter(|e| !e.builtin) {
+        if !groups.contains(&e.group.as_str()) {
+            groups.push(&e.group);
+        }
+    }
+    let by_name = tl!("By its name");
+    let new = tl!("New Group…");
+    let shown: Vec<&str> = std::iter::once(by_name).chain(groups.iter().map(|g| picker::group_label(g))).chain([new]).collect();
+    widgets::label_row(ui, tl!("Group"), LABEL_W, |ui| {
+        let current = if set { picker::group_label(group).to_string() } else { format!("{} ({})", picker::group_label(group), tl!("by name")) };
+        let picked = widgets::dropdown_names(ui, ("cutting", "material-group"), &current, &shown, CHOICE_W);
+        let value = match picked {
+            Some(0) => Some(Value::Null),
+            Some(k) if k == shown.len() - 1 => {
+                typing = Some(String::new());
+                None
+            }
+            Some(k) => groups.get(k - 1).map(|g| json!(g)),
+            None => None,
+        };
+        if let Some(v) = value {
+            *error = app.run("cutting.material.group", json!({ "name": name, "group": v })).err();
+        }
+    });
+    if let Some(text) = &mut typing {
+        let mut done = false;
+        ui.horizontal(|ui| {
+            ui.add_space(LABEL_W);
+            let field = ui.add(egui::TextEdit::singleline(text).hint_text(tl!("Group name")).desired_width(110.0));
+            let entered = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if (ui.add_enabled(!text.trim().is_empty(), egui::Button::new(tl!("Save"))).clicked() || entered) && !text.trim().is_empty() {
+                *error = app.run("cutting.material.group", json!({ "name": name, "group": text.trim() })).err();
+                done = error.is_none();
+            } else if ui.button(tl!("Cancel")).clicked() {
+                done = true;
+            }
+        });
+        if done {
+            typing = None;
+        }
+    }
+    super::set_pstate(&ctx, "cutting-material-new-group", typing);
 }
 
 /// C18.19: an import waiting for the user to say what becomes of the materials already theirs.
@@ -1144,8 +1210,17 @@ mod tests {
         let open = tool_texts(&mut app, &ctx);
         app.run("cutting.material.press", json!({"name": "UI Details", "tempC": 150})).unwrap();
         let pressed = tool_texts(&mut app, &ctx);
+        // C18.17: its group, by its name until one is chosen; a new one typed in.
+        app.run("cutting.material.group", json!({"name": "UI Details", "group": "UI Shop"})).unwrap();
+        let grouped = tool_texts(&mut app, &ctx);
+        super::super::set_pstate(&ctx, "cutting-material-new-group", Some("Bags".to_string()));
+        let typing = tool_texts(&mut app, &ctx);
+        super::super::set_pstate(&ctx, "cutting-material-new-group", None::<String>);
         super::super::set_pstate(&ctx, "cutting-material-details", false);
         app.run("cutting.material.delete", json!({"name": "UI Details"})).unwrap();
+        assert!(open.iter().any(|t| t == "Group") && open.iter().any(|t| t == "Other (by name)"), "{open:?}");
+        assert!(grouped.iter().any(|t| t == "UI Shop"), "{grouped:?}");
+        assert!(typing.iter().any(|t| t == "Bags") && typing.iter().any(|t| t == "Cancel"), "{typing:?}");
         assert!(closed.iter().any(|t| t == "Material Details") && !closed.iter().any(|t| t == "Price" || t == "Pressing"), "{closed:?}");
         assert!(open.iter().any(|t| t == "Price") && open.iter().any(|t| t == "Heat press"), "{open:?}");
         assert!(pressed.iter().any(|t| t == "peel warm"), "{pressed:?}");

@@ -43,6 +43,9 @@ pub struct Material {
     /// Settings for other tools, by a driver's tool id (C18.15): an operation cut with one of
     /// them (the pen's sketch, the punch, a Kraft blade) takes these instead of `cut`.
     pub tools: BTreeMap<String, ForTool>,
+    /// The group it is listed under (C18.17), as the user set it; none: [`suggested_group`] of
+    /// its name.
+    pub group: Option<String>,
 }
 
 /// A material's settings for one tool (C18.15).
@@ -205,6 +208,7 @@ pub fn builtin_materials() -> Vec<Material> {
         hand_depth_mm: None,
         cut_tool: None,
         tools: BTreeMap::new(),
+        group: None,
     };
     vec![
         m("Paper (light)", tool(0.2, 100.0, 1), tool(0.08, 100.0, 1)),
@@ -220,7 +224,44 @@ pub fn valid_name(name: &str) -> Option<String> {
     (!n.is_empty() && n.chars().count() <= MAX_NAME).then(|| n.to_string())
 }
 
+/// The groups a material's name suggests (C18.17), in the order they are listed, each with the
+/// words in a name that put it there (the first group with one wins: "Sticker Paper" is a
+/// sticker, "Corrugated Paper" a board).
+pub const GROUPS: [(&str, &[&str]); 11] = [
+    ("Vinyl", &["vinyl", "htv", "flock", "heat transfer"]),
+    ("Sticker & Label", &["sticker", "label", "tattoo", "decal"]),
+    ("Magnet", &["magnet"]),
+    ("Film & Foil", &["foil", "film", "acetate", "transparency", "mylar"]),
+    ("Plastic", &["plastic", "shrink", "polypropylene", "polyester sheet", "stencil"]),
+    ("Fabric", &["fabric", "canvas", "cotton", "felt", "denim", "silk", "linen", "burlap", "fleece", "suede", "polyester"]),
+    ("Leather", &["leather"]),
+    ("Wood & Cork", &["wood", "balsa", "veneer", "cork"]),
+    ("Foam & Rubber", &["foam", "rubber", "neoprene", "silicone"]),
+    ("Card & Board", &["card", "board", "corrugated", "poster"]),
+    ("Paper", &["paper", "vellum", "parchment", "tissue", "crepe", "washi"]),
+];
+/// The group of a material no word of [`GROUPS`] places.
+pub const OTHER_GROUP: &str = "Other";
+/// The group the built-in materials are listed under.
+pub const BUILTIN_GROUP: &str = "Starting Points";
+
+/// The group `name` suggests (C18.17): [`GROUPS`]' first with one of its words in it, else
+/// [`OTHER_GROUP`].
+pub fn suggested_group(name: &str) -> &'static str {
+    let n = name.to_lowercase();
+    GROUPS.iter().find(|(_, words)| words.iter().any(|w| n.contains(w))).map_or(OTHER_GROUP, |(g, _)| g)
+}
+
 impl Material {
+    /// The group it is listed under (C18.17): the built-in ones under [`BUILTIN_GROUP`], the
+    /// user's under theirs, else the one its name suggests.
+    pub fn group_name(&self) -> String {
+        if self.builtin {
+            return BUILTIN_GROUP.to_string();
+        }
+        self.group.clone().unwrap_or_else(|| suggested_group(&self.name).to_string())
+    }
+
     /// As kept in the user's file.
     pub fn to_value(&self) -> Value {
         let mut v = json!({"name": self.name, "cut": self.cut.to_value(), "score": self.score.to_value()});
@@ -241,6 +282,9 @@ impl Material {
         }
         if let (Some(t), Some(m)) = (&self.cut_tool, v.as_object_mut()) {
             m.insert("cutTool".into(), json!(t));
+        }
+        if let (Some(g), Some(m)) = (&self.group, v.as_object_mut()) {
+            m.insert("group".into(), json!(g));
         }
         if let (false, Some(m)) = (self.tools.is_empty(), v.as_object_mut()) {
             let tools: serde_json::Map<String, Value> = self
@@ -296,6 +340,7 @@ impl Material {
             roll_left_mm: m.get("rollLeftMm").and_then(Value::as_f64).filter(|l| l.is_finite()).map(|l| l.clamp(0.0, MAX_ROLL_MM)),
             hand_depth_mm: read_hand_depth(m.get("handDepthMm")),
             cut_tool: m.get("cutTool").and_then(Value::as_str).and_then(tool_id),
+            group: m.get("group").and_then(Value::as_str).and_then(valid_name),
             tools: m
                 .get("tools")
                 .and_then(Value::as_object)
@@ -401,6 +446,36 @@ mod tests {
         assert_eq!(Material::from_value(&m.to_value()).and_then(|m| m.price), Some(p));
     }
 
+    /// C18.17: a name's group, the first that has one of its words; the user's own kept, an
+    /// empty or too long one read as none.
+    #[test]
+    fn materials_are_grouped() {
+        for (name, group) in [
+            ("Copy Paper. Medium (20lb)", "Paper"),
+            ("Sticker Paper", "Sticker & Label"),
+            ("Corrugated Paper", "Card & Board"),
+            ("Chipboard (Thick)", "Card & Board"),
+            ("Cotton Canvas. Printable", "Fabric"),
+            ("Heat Transfer Vinyl. Flock", "Vinyl"),
+            ("Cork Sheets", "Wood & Cork"),
+            ("Printable Magnet", "Magnet"),
+            ("Gift Wrap", OTHER_GROUP),
+        ] {
+            assert_eq!(suggested_group(name), group, "{name}");
+        }
+        let built = builtin_materials();
+        assert!(built.iter().all(|m| m.group_name() == BUILTIN_GROUP));
+        let mine = Material { builtin: false, ..built[0].clone() };
+        assert_eq!(mine.group_name(), "Paper");
+        let set = Material { group: Some("Shop".into()), ..mine.clone() };
+        assert_eq!(Material::from_value(&set.to_value()).unwrap().group_name(), "Shop");
+        for bad in [json!(""), json!("x".repeat(MAX_NAME + 1)), json!(3)] {
+            let mut v = mine.to_value();
+            v["group"] = bad;
+            assert_eq!(Material::from_value(&v).unwrap().group, None);
+        }
+    }
+
     #[test]
     fn materials_round_trip_through_their_file() {
         let user = Material {
@@ -415,6 +490,7 @@ mod tests {
             hand_depth_mm: None,
             cut_tool: None,
             tools: BTreeMap::new(),
+            group: None,
         };
         let file = json!([user.to_value()]);
         assert_eq!(read_materials(&file), std::slice::from_ref(&user));
@@ -485,6 +561,7 @@ mod tests {
             hand_depth_mm: None,
             cut_tool: None,
             tools: BTreeMap::new(),
+            group: None,
         };
         let back = read_materials(&json!([user.to_value()]));
         assert_eq!(back, std::slice::from_ref(&user));

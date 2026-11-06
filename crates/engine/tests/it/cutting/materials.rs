@@ -137,6 +137,23 @@ fn earlier_import(s: &mut Session) {
     let board = r["materials"].as_array().unwrap().iter().find(|m| m["name"] == "Old Board").unwrap().clone();
     assert!(board["cutTool"].as_str().is_some_and(|t| t.starts_with("kraft")), "{board}");
     assert_eq!(board["price"]["amount"], json!(2.5), "the earlier one's price stays");
+    // C18.17: grouped by name until the user says otherwise; kept when replaced again.
+    let group = |r: &Value, n: &str| r["materials"].as_array().unwrap().iter().find(|m| m["name"] == n).unwrap()["group"].clone();
+    assert_eq!(group(&r, "Old Board"), json!("Card & Board"));
+    assert_eq!(group(&r, "Vinyl"), json!("Starting Points"));
+    for bad in [
+        json!({"name": "Old Board"}),
+        json!({"name": "Old Board", "group": ""}),
+        json!({"name": "Vinyl", "group": "Mine"}),
+        json!({"name": "Nope", "group": "Mine"}),
+    ] {
+        assert!(s.execute("cutting.material.group", &bad).is_err(), "{bad}");
+    }
+    s.execute("cutting.material.group", &json!({"name": "Old Board", "group": "Shop"})).unwrap();
+    let r = s.execute("cutting.material.import", &json!({"text": list, "replace": true})).unwrap();
+    assert_eq!(group(&r, "Old Board"), json!("Shop"));
+    let r = s.execute("cutting.material.group", &json!({"name": "Old Board", "group": null})).unwrap();
+    assert_eq!(group(&r, "Old Board"), json!("Card & Board"));
     for n in ["Old Board", "New Felt"] {
         s.execute("cutting.material.delete", &json!({"name": n})).unwrap();
     }

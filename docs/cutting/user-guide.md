@@ -223,6 +223,13 @@ for what is really in it.
 **Material** picks a set of cut and score settings. The built-in ones (Paper (light), Cardstock, Vinyl, …) are
 starting points only: make a test cut before trusting them.
 
+The Material field opens a list with a filter at the top: type part of a name (or of a group, such as "vinyl")
+to narrow it. The materials are listed under groups: Vinyl, Sticker & Label, Magnet, Film & Foil, Plastic,
+Fabric, Leather, Wood & Cork, Foam & Rubber, Card & Board, Paper, then groups of your own, Other, and the
+built-in **Starting Points** last. A material goes in the group its name suggests ("Glossy Vinyl" in Vinyl,
+"Sticker Paper" in Sticker & Label) until you choose another under **Group** in its Material Details. A group's
+material, in Cut Settings › Cutting Order, is picked from the same list.
+
 - Change a setting after choosing a material and the panel says "Changed since the material was chosen".
 - **Save as Material…** keeps the current settings under a name of your own. For a built-in material it offers
   "name (copy)".
@@ -241,7 +248,8 @@ starting points only: make a test cut before trusting them.
   For a blade you set by hand (Kraft, Deep-Cut, ratchet), the panel says how deep to set it under the
   material, for example "Set the blade by hand to 0.9 mm." Make a test cut before trusting a material.
 
-A material of your own also has **Material Details** (closed at first): its **Price** for the job's quote,
+A material of your own also has **Material Details** (closed at first): its **Group** (by its name until you
+choose one; **New Group…** names one of your own), its **Price** for the job's quote,
 **Pressing** (tick **Heat press** for the temperature, time and peel on the job sheet) and, cut on a roll,
 **Roll Left**.
 

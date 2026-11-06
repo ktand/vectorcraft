@@ -346,6 +346,7 @@ pub fn import(text: &str, machine: &str, depth: Depth) -> Result<Imported, Strin
             hand_depth_mm,
             cut_tool,
             tools,
+            group: None,
         });
     }
     unused.sort_unstable();
