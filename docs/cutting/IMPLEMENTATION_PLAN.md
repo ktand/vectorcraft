@@ -33,6 +33,7 @@ These requirements come from the plan's §4 initial acceptance criteria. No hard
 | C1.1 | Fork, `upstream` remote, Windows build, baseline CI | `origin` = `ktand/vectorcraft`, `upstream` = `storytold/vectorcraft`; baseline `cargo xtask ci` result recorded in the review summary |
 | C1.2 | Architecture assessment | [ARCHITECTURE.md](ARCHITECTURE.md) reviewed and accepted by the owner |
 | C1.3 | Agent rules supplement | `AGENTS.md` gets a short "Fork: cutting workspace" section: points to `docs/cutting/`, says where the hooks are (ARCHITECTURE §7), and states the protocol-source rule (R2): inkscape-silhouette may be read for facts, never copied |
+| C1.4 | **A Windows build on push** — **done** (2026-11-06; owner: "I want a release binary to be built when I push to main", "Windows only"): `.github/workflows/fork-windows-build.yml`, the fork's own (an exception to the shared-CI rule by the owner's decision, AGENTS.md › Fork CI): on a push to `main` (or by hand) in `ktand/vectorcraft` only, Windows, Rust 1.95, `cargo build --release --locked -p vectorcraft`, the exe zipped with the licences, NOTICE and ASSETS.md, published with the runner's `gh` as the pre-release `windows-latest`, replacing the last; unsigned (the signing keys are upstream's); the actions pinned as upstream's are. Needs Actions enabled on the fork | On GitHub: the first push's run and its download |
 
 ## Phase 2 — Cutting workspace: settings, operations, mat
 
