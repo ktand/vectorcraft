@@ -111,6 +111,37 @@ fn imports(s: &mut Session, file: &std::path::Path) {
     let _ = std::fs::remove_file(path);
 }
 
+/// C18.19: a material an earlier import named after its blade ("Old Board (Kraft Blade)") is the
+/// same material: left as it is unless replaced (and listed as existing), then merged into one
+/// under the plain name, keeping its price.
+fn earlier_import(s: &mut Session) {
+    let list = [
+        "full_name,cutter_class_id,(force.pressure),(speed),(tool.type),(blade_depth),(nth_pass),(force.acceleration),name_resolved,category,uuid,parent_uuid,action",
+        "Old Board,desktop,15,5,adjustable,0.3,1,1,Old Board,group,g1,root,",
+        "Old Board for M,cameo4,33,1,kraft2,1.5,3,1,M,leaf,l1,g1,kraft_cut",
+        "New Felt,desktop,15,5,adjustable,0.3,1,1,New Felt,group,g2,root,",
+        "New Felt for M,cameo4,20,3,autoadjust,0.4,1,1,M,leaf,l2,g2,cut",
+    ]
+    .join("
+");
+    s.execute("cutting.material.save", &json!({"name": "Old Board (Kraft Blade)"})).unwrap();
+    s.execute("cutting.material.price", &json!({"name": "Old Board (Kraft Blade)", "amount": 2.5, "per": "sheet", "wastePct": 10})).unwrap();
+    let r = s.execute("cutting.material.import", &json!({"text": list, "preview": true})).unwrap();
+    assert_eq!(r["imported"], json!(["New Felt"]));
+    assert_eq!(r["existing"], json!([{"name": "Old Board", "yours": ["Old Board (Kraft Blade)"]}]));
+    let r = s.execute("cutting.material.import", &json!({"text": list, "replace": true})).unwrap();
+    assert_eq!(r["imported"], json!(["Old Board", "New Felt"]));
+    assert_eq!(r["replaced"], json!([{"name": "Old Board", "yours": ["Old Board (Kraft Blade)"]}]));
+    let all = names(&r);
+    assert!(!all.contains(&"Old Board (Kraft Blade)".to_string()), "{all:?}");
+    let board = r["materials"].as_array().unwrap().iter().find(|m| m["name"] == "Old Board").unwrap().clone();
+    assert!(board["cutTool"].as_str().is_some_and(|t| t.starts_with("kraft")), "{board}");
+    assert_eq!(board["price"]["amount"], json!(2.5), "the earlier one's price stays");
+    for n in ["Old Board", "New Felt"] {
+        s.execute("cutting.material.delete", &json!({"name": n})).unwrap();
+    }
+}
+
 /// C18.15: a material's settings per tool: imported, applied to an operation cut with that tool,
 /// followed when another tool is chosen (unless numbers were set by hand), and saved to the tool.
 fn per_tool(s: &mut Session) {
@@ -239,6 +270,7 @@ fn materials_are_applied_saved_and_kept() {
     prices(&mut s);
     imports(&mut s, &file);
     per_tool(&mut s);
+    earlier_import(&mut s);
 
     // Built-in names and unknown ones are refused; the user's own can go.
     assert!(s.execute("cutting.material.save", &json!({"name": "Vinyl"})).is_err());

@@ -172,7 +172,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Import Cutting Materials",
             [],
             None,
-            "{path? | text?: a material list exported from Silhouette Studio (CSV, at most 8 MB), machine?: the file's cutter class (default cameo4), depth?: file|auto (default file: the AutoBlade's depth from the file's mm, 0.1 mm a step of 1–10; auto: left to the machine; other blades' depth is set by hand: kept as the material's handDepthMm, never sent), replace?: bool (default false: a material of yours of the same name is skipped), preview?: bool (nothing kept)} the list's materials for the machine as the user's own (C18.14): each tool's first row (C18.15: the AutoBlade's cut and score, the Deep-Cut, ratchet, Kraft and rotary blades', the pen's sketch, the punch's), a material without an AutoBlade cut having its first other tool's as its cut; force and speed the machine's steps as they are → as cutting.materials, and imported: [names], skipped: [{name, reason}], machines: [the file's cutter classes], unused: [the file's actions not used, such as stipple]",
+            "{path? | text?: a material list exported from Silhouette Studio (CSV, at most 8 MB), machine?: the file's cutter class (default cameo4), depth?: file|auto (default file: the AutoBlade's depth from the file's mm, 0.1 mm a step of 1–10; auto: left to the machine; other blades' depth is set by hand: kept as the material's handDepthMm, never sent), replace?: bool (default false: a material of yours of the same name, or one an earlier import named after its blade such as \"Board (Kraft Blade)\", is skipped and listed in existing; true: replaced by the file's, keeping its price, roll and pressing, the earlier import's merged into one, listed in replaced), preview?: bool (nothing kept)} the list's materials for the machine as the user's own (C18.14): each tool's first row (C18.15: the AutoBlade's cut and score, the Deep-Cut, ratchet, Kraft and rotary blades', the pen's sketch, the punch's), a material without an AutoBlade cut having its first other tool's as its cut; force and speed the machine's steps as they are → as cutting.materials, and imported: [names], skipped: [{name, reason}], existing / replaced: [{name, yours: [your materials' names]}] (C18.19), machines: [the file's cutter classes], unused: [the file's actions not used, such as stipple]",
             has_doc,
             import_cmd
         ),
@@ -477,7 +477,7 @@ fn import_cmd(s: &mut Session, p: &Value) -> Result<Value> {
     let (replace, preview) = (flag("replace"), flag("preview"));
     let got = studio::import(&text, machine, depth).map_err(|e| bad(CMD, e))?;
     let mut skipped: Vec<Value> = got.skipped.iter().map(|k| json!({"name": k.name, "reason": k.reason})).collect();
-    let mut imported = vec![];
+    let (mut imported, mut replaced, mut existing) = (vec![], vec![], vec![]);
     {
         let mut st = store().lock().map_err(|_| bad(CMD, "the materials are damaged"))?;
         let mut user = st.user.clone();
@@ -486,23 +486,36 @@ fn import_cmd(s: &mut Session, p: &Value) -> Result<Value> {
                 skipped.push(json!({"name": m.name, "reason": "the name of a built-in material"}));
                 continue;
             }
-            let full = user.len() >= vectorcraft_cutjob::MAX_MATERIALS;
-            match user.iter_mut().find(|u| u.name.eq_ignore_ascii_case(&m.name)) {
-                Some(_) if !replace => skipped.push(json!({"name": m.name, "reason": "already one of yours"})),
-                Some(u) => {
-                    // Its price, roll and pressing stay, as when it is saved again.
+            // C18.19: the user's material of this name, and the ones an earlier import gave it
+            // under its blade's name ("Chipboard (Kraft Blade)"), are the same material.
+            let earlier = studio::earlier_names(&m.name);
+            let same = |u: &Material| u.name.eq_ignore_ascii_case(&m.name);
+            let old = |u: &Material| earlier.iter().any(|e| u.name.eq_ignore_ascii_case(e));
+            let yours: Vec<String> = user.iter().filter(|u| same(u) || old(u)).map(|u| u.name.clone()).collect();
+            if !yours.is_empty() {
+                if !replace {
+                    skipped.push(json!({"name": m.name, "reason": "already one of yours"}));
+                    existing.push(json!({"name": m.name, "yours": yours}));
+                    continue;
+                }
+                // Its price, roll and pressing stay, as when it is saved again: the one of this
+                // name's first, else the earlier import's.
+                if let Some(u) = user.iter().find(|u| same(u)).or_else(|| user.iter().find(|u| old(u))) {
                     (m.price, m.roll_left_mm, m.press, m.mirror) = (u.price, u.roll_left_mm, u.press, u.mirror);
-                    imported.push(m.name.clone());
-                    *u = m;
                 }
-                None if full => {
-                    skipped.push(json!({"name": m.name, "reason": format!("at most {} materials are kept", vectorcraft_cutjob::MAX_MATERIALS)}));
-                }
-                None => {
-                    imported.push(m.name.clone());
-                    user.push(m);
-                }
+                let at = user.iter().position(|u| same(u) || old(u)).unwrap_or(user.len());
+                user.retain(|u| !(same(u) || old(u)));
+                imported.push(m.name.clone());
+                replaced.push(json!({"name": m.name, "yours": yours}));
+                user.insert(at.min(user.len()), m);
+                continue;
             }
+            if user.len() >= vectorcraft_cutjob::MAX_MATERIALS {
+                skipped.push(json!({"name": m.name, "reason": format!("at most {} materials are kept", vectorcraft_cutjob::MAX_MATERIALS)}));
+                continue;
+            }
+            imported.push(m.name.clone());
+            user.push(m);
         }
         if !preview && !imported.is_empty() {
             st.user = user;
@@ -513,6 +526,8 @@ fn import_cmd(s: &mut Session, p: &Value) -> Result<Value> {
     if let Some(o) = out.as_object_mut() {
         o.insert("imported".into(), json!(imported));
         o.insert("skipped".into(), Value::Array(skipped));
+        o.insert("replaced".into(), Value::Array(replaced));
+        o.insert("existing".into(), Value::Array(existing));
         o.insert("machines".into(), json!(got.machines));
         o.insert("unused".into(), json!(got.unused));
     }

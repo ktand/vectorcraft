@@ -222,6 +222,16 @@ fn settings(row: &[String], c: &Columns, base: &ToolSettings, depth: Depth, auto
     Some(t)
 }
 
+/// The blade names the first import (C18.14) put after a material's name when it wasn't cut with
+/// the AutoBlade ("Chipboard (Kraft Blade)"); since C18.15 a material keeps every tool under one name.
+const EARLIER_SUFFIXES: [&str; 3] = ["Ratchet Blade", "Kraft Blade", "Deep-Cut Blade"];
+
+/// The names an earlier import (C18.14) gave the material it now imports as `name`, so a new import
+/// can take their place (C18.19).
+pub fn earlier_names(name: &str) -> Vec<String> {
+    EARLIER_SUFFIXES.iter().map(|s| fit(&format!("{} ({s})", name.trim()))).filter(|n| !n.eq_ignore_ascii_case(name.trim())).collect()
+}
+
 /// A name a material may have, cut to [`MAX_NAME`] characters.
 fn fit(name: &str) -> String {
     name.trim().chars().take(MAX_NAME).collect::<String>().trim().to_string()
@@ -456,5 +466,13 @@ mod tests {
         ] {
             let _ = import(text, "", Depth::File);
         }
+    }
+
+    /// C18.19: the names the first import gave a material cut with a blade set by hand.
+    #[test]
+    fn earlier_names_carry_the_blade() {
+        assert_eq!(earlier_names(" Chipboard "), ["Chipboard (Ratchet Blade)", "Chipboard (Kraft Blade)", "Chipboard (Deep-Cut Blade)"]);
+        let long = "x".repeat(MAX_NAME);
+        assert!(earlier_names(&long).is_empty(), "cut to the same name: not an earlier one");
     }
 }

@@ -231,8 +231,12 @@ starting points only: make a test cut before trusting them.
 - **Import…** adds the materials of a list you exported from Silhouette Studio (a CSV file), as materials of
   your own: the Cameo 4's settings for each tool the material has them for (the AutoBlade's cut and score, the
   pen's sketch, the punch, the Kraft, Deep-Cut and rotary blades). Materials it can't use (none for the Cameo 4,
-  or only things VectorCraft doesn't do, such as embossing) and names you already have are skipped, and the line
-  under the buttons says which and why, and which of the file's actions weren't used (such as stipple). The
+  or only things VectorCraft doesn't do, such as embossing) are skipped, and the line under the buttons says
+  which and why, and which of the file's actions weren't used (such as stipple). When the list has materials
+  you already have, the panel asks first: **Replace Mine** takes the list's settings (your price, pressing and
+  roll stay), **Keep Mine** adds only the new ones. Replacing also tidies a list imported by an earlier
+  version, which kept a material cut with a hand-set blade under a name such as "Chipboard (Kraft Blade)":
+  it becomes one "Chipboard" with the settings for each of its tools. The
   AutoBlade's depth comes from the file too (Studio gives it in millimetres; each step of the 1–10 is 0.1 mm).
   For a blade you set by hand (Kraft, Deep-Cut, ratchet), the panel says how deep to set it under the
   material, for example "Set the blade by hand to 0.9 mm." Make a test cut before trusting a material.

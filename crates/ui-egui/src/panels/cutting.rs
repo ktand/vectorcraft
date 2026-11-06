@@ -574,6 +574,7 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let mut saving: Option<String> = super::pstate(&ctx, "cutting-material-saving");
     let mut error: Option<String> = super::pstate(&ctx, "cutting-material-error");
     let mut imported: Option<String> = super::pstate(&ctx, "cutting-material-imported");
+    let mut asking: Option<ImportAsk> = super::pstate(&ctx, "cutting-material-asking");
     ui.horizontal_wrapped(|ui| {
         if let Some(name) = &mut saving {
             let field = ui.add(egui::TextEdit::singleline(name).hint_text(tl!("Material name")).desired_width(120.0));
@@ -622,15 +623,36 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
                 .clicked()
             && let Some(path) = crate::picks::open(app, &pick)
         {
-            match app.run("cutting.material.import", json!({ "path": path })) {
-                Ok(r) => {
-                    error = None;
-                    imported = Some(import_note(&r));
-                }
+            // C18.19: a look first; materials already the user's are replaced only when asked.
+            asking = None;
+            match app.run("cutting.material.import", json!({ "path": path, "preview": true })) {
+                Ok(r) => match ImportAsk::from_preview(&path, &r) {
+                    Some(ask) => (asking, error, imported) = (Some(ask), None, None),
+                    None => (imported, error) = import_now(app, &path, false),
+                },
                 Err(e) => error = Some(e),
             }
         }
     });
+    if let Some(ask) = asking.clone() {
+        ui.label(ask.question());
+        if ask.earlier > 0 {
+            widgets::dim_label(ui, tl!("Replacing also merges the ones an earlier import named after their blade into one material each."));
+        }
+        ui.horizontal_wrapped(|ui| {
+            if ui.small_button(tl!("Replace Mine")).on_hover_text(tl!("Use the list's settings; their price, pressing and roll stay")).clicked() {
+                (imported, error) = import_now(app, &ask.path, true);
+                asking = None;
+            }
+            if ui.small_button(tl!("Keep Mine")).on_hover_text(tl!("Add only the materials you don't have yet")).clicked() {
+                (imported, error) = import_now(app, &ask.path, false);
+                asking = None;
+            }
+            if ui.small_button(tl!("Cancel")).clicked() {
+                asking = None;
+            }
+        });
+    }
     if let Some(note) = imported.clone() {
         ui.horizontal_wrapped(|ui| {
             widgets::dim_label(ui, &note);
@@ -727,6 +749,7 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     super::set_pstate(&ctx, "cutting-material-saving", saving);
     super::set_pstate(&ctx, "cutting-material-error", error);
     super::set_pstate(&ctx, "cutting-material-imported", imported);
+    super::set_pstate(&ctx, "cutting-material-asking", asking);
 }
 
 /// The depth to set a hand-adjusted blade to, for material `d` mm.
@@ -740,14 +763,70 @@ fn no_tool_note(material: &str, tool: &str, score: bool) -> String {
     format!("{material}: {} {tool}; {used}", tl!("no settings for the"))
 }
 
+/// C18.19: an import waiting for the user to say what becomes of the materials already theirs.
+#[derive(Clone, Debug, Default, PartialEq)]
+struct ImportAsk {
+    path: String,
+    /// The list's materials the user already has.
+    existing: usize,
+    /// Of those, the ones an earlier import named after their blade ("Board (Kraft Blade)").
+    earlier: usize,
+}
+
+impl ImportAsk {
+    /// What a preview found already the user's; none when there is nothing to ask.
+    fn from_preview(path: &str, r: &Value) -> Option<Self> {
+        let existing = r["existing"].as_array().filter(|e| !e.is_empty())?;
+        let earlier = existing
+            .iter()
+            .filter(|e| {
+                let name = e["name"].as_str().unwrap_or_default();
+                e["yours"].as_array().is_some_and(|y| y.iter().any(|n| n.as_str().is_some_and(|n| !n.eq_ignore_ascii_case(name))))
+            })
+            .count();
+        Some(Self { path: path.to_string(), existing: existing.len(), earlier })
+    }
+
+    fn question(&self) -> String {
+        if self.existing == 1 {
+            tl!("1 material in the list is already yours. Replace it with the list's settings?").to_string()
+        } else {
+            format!("{} {}", self.existing, tl!("materials in the list are already yours. Replace them with the list's settings?"))
+        }
+    }
+}
+
+/// Imports the list at `path`, replacing the user's materials of the same names or not: the note
+/// saying what it did, or the error.
+fn import_now(app: &mut VectorcraftApp, path: &str, replace: bool) -> (Option<String>, Option<String>) {
+    match app.run("cutting.material.import", json!({ "path": path, "replace": replace })) {
+        Ok(r) => (Some(import_note(&r)), None),
+        Err(e) => (None, Some(e)),
+    }
+}
+
 /// What an import (`cutting.material.import`'s answer) did, in a line: how many were added and
 /// which were skipped, and why, and the list's actions not used.
 fn import_note(r: &Value) -> String {
-    let n = r["imported"].as_array().map_or(0, Vec::len);
-    let skipped: Vec<String> =
-        r["skipped"].as_array().into_iter().flatten().filter_map(|k| Some(format!("{} ({})", k["name"].as_str()?, k["reason"].as_str()?))).collect();
+    let replaced = r["replaced"].as_array().map_or(0, Vec::len);
+    let n = r["imported"].as_array().map_or(0, Vec::len).saturating_sub(replaced);
+    let kept = r["existing"].as_array().map_or(0, Vec::len);
+    // C18.19: the ones already the user's are counted, not listed: there can be hundreds.
+    let skipped: Vec<String> = r["skipped"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|k| !r["existing"].as_array().is_some_and(|e| e.iter().any(|e| e["name"] == k["name"])))
+        .filter_map(|k| Some(format!("{} ({})", k["name"].as_str()?, k["reason"].as_str()?)))
+        .collect();
     let unused: Vec<&str> = r["unused"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
     let mut note = if n == 1 { tl!("1 material added.").to_string() } else { format!("{n} {}", tl!("materials added.")) };
+    if replaced > 0 {
+        note = format!("{note} {replaced} {}", tl!("replaced."));
+    }
+    if kept > 0 {
+        note = format!("{note} {kept} {}", tl!("of yours kept as they were."));
+    }
     if !skipped.is_empty() {
         note = format!("{note} {} {}", tl!("Skipped:"), skipped.join("; "));
     }
@@ -1121,6 +1200,22 @@ mod tests {
         let r = json!({"imported": ["A", "B"], "skipped": [{"name": "Felt", "reason": "only emboss, which VectorCraft doesn't do"}], "unused": ["emboss", "stipple"]});
         assert_eq!(import_note(&r), "2 materials added. Skipped: Felt (only emboss, which VectorCraft doesn't do) Not used: emboss, stipple.");
         assert_eq!(import_note(&json!({"imported": ["A"], "skipped": []})), "1 material added.");
+        // C18.19: the ones already the user's are counted, not listed.
+        let r = json!({"imported": ["A", "B", "C"], "replaced": [{"name": "B"}, {"name": "C"}], "existing": [], "skipped": []});
+        assert_eq!(import_note(&r), "1 material added. 2 replaced.");
+        let r = json!({"imported": [], "existing": [{"name": "B"}], "skipped": [{"name": "B", "reason": "already one of yours"}]});
+        assert_eq!(import_note(&r), "0 materials added. 1 of yours kept as they were.");
+        // C18.19: a preview with materials already the user's asks; one without doesn't.
+        assert_eq!(ImportAsk::from_preview("l.csv", &json!({"existing": []})), None);
+        let preview = json!({"existing": [{"name": "Board", "yours": ["Board (Kraft Blade)"]}, {"name": "Card", "yours": ["Card"]}]});
+        let ask = ImportAsk::from_preview("l.csv", &preview).unwrap();
+        assert_eq!((ask.existing, ask.earlier), (2, 1));
+        super::super::set_pstate(&ctx, "cutting-material-asking", Some(ask));
+        let asked = tool_texts(&mut app, &ctx);
+        super::super::set_pstate(&ctx, "cutting-material-asking", None::<ImportAsk>);
+        for t in ["2 materials in the list are already yours. Replace them with the list's settings?", "Replace Mine", "Keep Mine"] {
+            assert!(asked.iter().any(|x| x == t), "{t}: {asked:?}");
+        }
         super::super::set_pstate(&ctx, "cutting-material-imported", Some("1 material added.".to_string()));
         assert!(tool_texts(&mut app, &ctx).iter().any(|t| t == "1 material added."));
         // C18.15: a material only cut with a Kraft blade: with the AutoBlade it says it has no
