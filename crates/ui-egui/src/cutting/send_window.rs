@@ -264,9 +264,7 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
                 // column, away from what it plays).
                 ui.vertical(|ui| {
                     let size = crate::canvas::cutting_overlay::preview_size(app, room.x - GAP - SIDE_W, room.y - PLAYBACK_H);
-                    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-                    ui.painter().rect_filled(rect, 4.0, Tokens::get(ui.ctx()).pasteboard);
-                    crate::canvas::cutting_overlay::preview(app, ui.painter(), rect);
+                    zoomable_preview(app, ui, size);
                     if let Some(job) = crate::cutting::job(app, ui.ctx())
                         && let Ok(made) = &*job
                         && !made.job.paths.is_empty()
@@ -623,6 +621,102 @@ fn test_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     crate::panels::set_pstate(&ctx, "cutting-test", c);
 }
 
+/// What the preview's zoom keeps between frames (C18.28): the view, and whether it follows the
+/// blade while the run plays or is stepped.
+#[derive(Clone, Copy, Debug, Default)]
+struct Zoom {
+    view: crate::canvas::cutting_overlay::PreviewView,
+    follow: bool,
+}
+
+/// The preview `size` large, zoomed with the wheel round the pointer, moved by dragging, back to
+/// the whole mat on a double-click or Fit; −, + and Fit in its corner, and Follow while zoomed.
+fn zoomable_preview(app: &mut VectorcraftApp, ui: &mut egui::Ui, size: egui::Vec2) {
+    use crate::canvas::cutting_overlay::{PREVIEW_MAX_ZOOM, PreviewView, blade_at, preview_xf, preview_zoomed};
+    let ctx = ui.ctx().clone();
+    let t = Tokens::get(&ctx);
+    let mut z: Zoom = crate::panels::pstate(&ctx, "cutting-preview-zoom");
+    let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click_and_drag());
+    let response = response.on_hover_text(tl!("Scroll to zoom, drag to move, double-click for the whole mat"));
+    // Zoom by `factor` keeping the document point under `at` where it is.
+    let zoom_by = |app: &VectorcraftApp, z: &mut Zoom, factor: f64, at: egui::Pos2| {
+        let Some(xf) = preview_xf(app, rect, &z.view) else { return };
+        let before = xf.to_doc(at);
+        let next = (z.view.zoom.max(1.0) * factor).clamp(1.0, PREVIEW_MAX_ZOOM);
+        if next <= 1.0 {
+            z.view = PreviewView::default();
+            return;
+        }
+        z.view = PreviewView { zoom: next, center: Some(xf.center) };
+        if let Some(after) = preview_xf(app, rect, &z.view).map(|x| x.to_doc(at))
+            && let Some(c) = z.view.center
+        {
+            z.view.center = Some(c + (before - after));
+        }
+    };
+    if response.hovered() {
+        let scroll = ctx.input(|i| i.smooth_scroll_delta.y);
+        if scroll != 0.0
+            && scroll.is_finite()
+            && let Some(at) = response.hover_pos()
+        {
+            // About 1.13 times for each notch of a wheel (50 points).
+            zoom_by(app, &mut z, f64::from(scroll / 400.0).exp(), at);
+        }
+    }
+    if response.dragged()
+        && z.view.zoom > 1.0
+        && let Some(xf) = preview_xf(app, rect, &z.view)
+    {
+        let c = rect.center();
+        z.view.center = Some(xf.center + (xf.to_doc(c) - xf.to_doc(c + response.drag_delta())));
+        z.follow = false;
+    }
+    if response.double_clicked() {
+        z = Zoom { follow: z.follow, ..Zoom::default() };
+    }
+    if z.follow
+        && z.view.zoom > 1.0
+        && let Some(blade) = blade_at(app, &ctx)
+    {
+        z.view.center = Some(blade);
+    }
+    ui.painter().rect_filled(rect, 4.0, t.pasteboard);
+    preview_zoomed(app, ui.painter(), rect, &z.view);
+    // The controls in the preview's top right corner, right to left.
+    let zoom = z.view.zoom.max(1.0);
+    let mut x = rect.right() - 6.0;
+    let mut corner = |ui: &mut egui::Ui, label: &str, w: f32, enabled: bool, hint: &str| -> bool {
+        x -= w;
+        let r = egui::Rect::from_min_size(egui::pos2(x, rect.top() + 6.0), egui::vec2(w, 22.0));
+        x -= 4.0;
+        // A child, so the controls don't move the layout's cursor up over the preview.
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
+        child.add_enabled(enabled, egui::Button::new(label).small()).on_hover_text(hint).clicked()
+    };
+    if corner(ui, tl!("Fit"), 34.0, zoom > 1.0, tl!("The whole mat")) {
+        z.view = PreviewView::default();
+    }
+    if corner(ui, "+", 22.0, zoom < PREVIEW_MAX_ZOOM, tl!("Zoom in")) {
+        zoom_by(app, &mut z, 2.0, rect.center());
+    }
+    if corner(ui, "\u{2212}", 22.0, zoom > 1.0, tl!("Zoom out")) {
+        zoom_by(app, &mut z, 0.5, rect.center());
+    }
+    if zoom > 1.0 {
+        let label = if z.follow { format!("\u{2713} {}", tl!("Follow")) } else { tl!("Follow").to_string() };
+        if corner(ui, &label, 62.0, true, tl!("Keep the blade in view while the run plays")) {
+            z.follow = !z.follow;
+        }
+        let pct = egui::RichText::new(format!("{:.0} %", zoom * 100.0)).size(11.0).color(t.text).background_color(t.panel);
+        ui.new_child(
+            egui::UiBuilder::new().max_rect(egui::Rect::from_min_size(egui::pos2(rect.left() + 8.0, rect.top() + 8.0), egui::vec2(60.0, 18.0))),
+        )
+        .label(pct);
+    }
+    crate::panels::set_pstate(&ctx, "cutting-preview-zoom", z);
+}
+
 /// The curve test's rows, as the choice shows them and as `cutting.testCurves` takes them.
 const CURVE_ROWS: [(&str, Option<&str>); 4] =
     [("All Three Rows", None), ("Straight Moves", Some("segments")), ("Béziers (BZ)", Some("bezier")), ("Circle (W)", Some("circle"))];
@@ -916,6 +1010,25 @@ mod tests {
                 .collect();
         }
         texts
+    }
+
+    /// C18.28: zoomed in, the preview says how far and offers Follow; at the whole mat it doesn't.
+    #[test]
+    fn the_preview_shows_its_zoom() {
+        let _serial = serial();
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        set_open(&ctx, true);
+        let whole = window_texts(&mut app, &ctx);
+        assert!(whole.iter().any(|t| t == "Fit") && !whole.iter().any(|t| t == "Follow"), "{whole:?}");
+        let view = crate::canvas::cutting_overlay::PreviewView { zoom: 4.0, center: Some(vectorcraft_geom::Point::new(30.0, 30.0)) };
+        crate::panels::set_pstate(&ctx, "cutting-preview-zoom", Zoom { view, follow: false });
+        let zoomed = window_texts(&mut app, &ctx);
+        crate::panels::set_pstate(&ctx, "cutting-preview-zoom", Zoom::default());
+        set_open(&ctx, false);
+        assert!(zoomed.iter().any(|t| t == "400 %") && zoomed.iter().any(|t| t == "Follow"), "{zoomed:?}");
     }
 
     /// C9.2: the window opens three quarters of the app's height (the preview with it), not the

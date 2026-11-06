@@ -281,31 +281,60 @@ pub(super) fn playback_bar(app: &VectorcraftApp, ctx: &egui::Context, xf: &Xf) {
 /// How far above the canvas's foot the playback bar sits, px.
 const BAR_MARGIN: f32 = 12.0;
 
-/// The mat as the machine takes it, fitted into `rect` (the Send window, C7.1): the plate, the
-/// cut area and origin, and the job's toolpaths with their playback, whatever Show Toolpaths and
-/// the view say. The mat is drawn upright, its feed edge at the top, however the artboard lies on
-/// it.
-pub(crate) fn preview(app: &VectorcraftApp, p: &egui::Painter, rect: egui::Rect) {
-    let Some(pl) = placed(app) else { return };
+/// C18.28: how the Send window's preview is zoomed: by how much over the whole mat (1, or less:
+/// the whole mat), round which point of the document (none: the mat's middle).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct PreviewView {
+    pub zoom: f64,
+    pub center: Option<Point>,
+}
+
+/// The most the preview zooms in over the whole mat.
+pub(crate) const PREVIEW_MAX_ZOOM: f64 = 40.0;
+
+/// How the preview in `rect` maps the document to the screen with `view`; none without a mat.
+pub(crate) fn preview_xf(app: &VectorcraftApp, rect: egui::Rect, view: &PreviewView) -> Option<Xf> {
+    let pl = placed(app)?;
     let to_doc = pl.mat_to_doc();
     let [w, h] = pl.mat.size_mm;
     let [ml, mt, mr, mb] = pl.mat.plate_margin_mm;
     let (full_w, full_h) = (w + ml + mr, h + mt + mb);
     if !(full_w > 0.0 && full_h > 0.0) {
-        return;
+        return None;
     }
     let px_per_mm = (f64::from(rect.width()) / full_w).min(f64::from(rect.height()) / full_h);
+    let zoom = if view.zoom.is_finite() { view.zoom.clamp(1.0, PREVIEW_MAX_ZOOM) } else { 1.0 };
     let [a, b, ..] = to_doc.as_coeffs();
+    let middle = to_doc * Point::new((w + mr - ml) / 2.0, (h + mb - mt) / 2.0);
     let xf = Xf {
         rect,
-        zoom: px_per_mm * MM_PER_PT,
-        center: to_doc * Point::new((w + mr - ml) / 2.0, (h + mb - mt) / 2.0),
+        zoom: px_per_mm * MM_PER_PT * zoom,
+        center: view.center.filter(|c| zoom > 1.0 && c.x.is_finite() && c.y.is_finite()).unwrap_or(middle),
         // The mat's x axis back along the screen's.
         rot: -b.atan2(a),
     };
-    if !(xf.zoom.is_finite() && xf.zoom > 0.0) {
-        return;
-    }
+    (xf.zoom.is_finite() && xf.zoom > 0.0).then_some(xf)
+}
+
+/// Where the blade is in the document while the run plays or is stepped; none when it isn't.
+pub(crate) fn blade_at(app: &VectorcraftApp, ctx: &egui::Context) -> Option<Point> {
+    let pl = placed(app)?;
+    let job = crate::cutting::job(app, ctx)?;
+    let made = (*job).as_ref().ok()?;
+    let mm = crate::cutting::playback(ctx).mm?;
+    let at = made.sim.at_mm(mm).position;
+    Some(pl.mat_to_doc() * Point::new(at[0], at[1]))
+}
+
+/// The mat as the machine takes it, fitted into `rect` (the Send window, C7.1) and zoomed by
+/// `view` (C18.28): the plate, the cut area and origin, and the job's toolpaths with their
+/// playback, whatever Show Toolpaths and the view say. The mat is drawn upright, its feed edge at
+/// the top, however the artboard lies on it.
+pub(crate) fn preview_zoomed(app: &VectorcraftApp, p: &egui::Painter, rect: egui::Rect, view: &PreviewView) {
+    let Some(pl) = placed(app) else { return };
+    let to_doc = pl.mat_to_doc();
+    let [w, h] = pl.mat.size_mm;
+    let Some(xf) = preview_xf(app, rect, view) else { return };
     let p = p.with_clip_rect(rect);
     mat_plate(app, &p, &xf);
     let screen = |x: f64, y: f64| xf.to_screen(to_doc * Point::new(x, y));
@@ -509,6 +538,28 @@ fn playback(p: &egui::Painter, sim: &vectorcraft_cutjob::Simulation, mm: f64, sc
 #[cfg(test)]
 mod tests {
     use super::{RectMm, hatch, ticks};
+
+    /// C18.28: the preview zoomed: twice the scale at 2, round the point asked for; at 1 or less
+    /// (or not finite) the whole mat round its middle, whatever centre is given.
+    #[test]
+    fn the_preview_zooms_round_its_centre() {
+        use super::{PREVIEW_MAX_ZOOM, PreviewView, preview_xf};
+        use vectorcraft_geom::Point;
+        let mut app = crate::VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        app.run("file.new", serde_json::json!({"width": 200, "height": 200})).unwrap();
+        let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 400.0));
+        let fit = preview_xf(&app, rect, &PreviewView::default()).unwrap();
+        let at = Point::new(30.0, 40.0);
+        let two = preview_xf(&app, rect, &PreviewView { zoom: 2.0, center: Some(at) }).unwrap();
+        assert!((two.zoom - 2.0 * fit.zoom).abs() < 1e-9 && two.center == at);
+        assert!((two.to_screen(at) - rect.center()).length() < 1e-3, "the centre in the middle");
+        for zoom in [1.0, 0.5, f64::NAN] {
+            let v = preview_xf(&app, rect, &PreviewView { zoom, center: Some(at) }).unwrap();
+            assert!(v.center == fit.center && (v.zoom - fit.zoom).abs() < 1e-9, "{zoom}");
+        }
+        let most = preview_xf(&app, rect, &PreviewView { zoom: 1e6, center: Some(at) }).unwrap();
+        assert!((most.zoom - PREVIEW_MAX_ZOOM * fit.zoom).abs() < 1e-6, "capped");
+    }
 
     /// The hatching stays inside its area, both ways, on a grid fixed to the mat.
     #[test]

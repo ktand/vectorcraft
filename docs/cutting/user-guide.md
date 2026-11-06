@@ -703,7 +703,9 @@ load the mat with the machine's load button.
 <!-- shot: send -->
 
 - **Left:** the mat as the machine takes it, with the job's lines on it, and under it the playback (**Play**,
-  **Previous**, **Next**) that runs the blade over it.
+  **Previous**, **Next**) that runs the blade over it. Scroll over the mat to zoom in round the pointer (up to
+  40 times), drag to move, double-click (or **Fit**) for the whole mat again; **−** and **+** in its corner zoom
+  too. Zoomed in, **Follow** keeps the blade in view while the run plays or is stepped.
 - **Right, from the top** (this part scrolls when the window is short):
   - **Job:** the job's numbers (paths, cut length, travel, estimated time, material and cost), **Job Sheet…**,
     **Weeding Map…** and any warnings; which sheet, when there are several;
