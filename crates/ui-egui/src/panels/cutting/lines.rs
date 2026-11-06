@@ -57,16 +57,31 @@ fn weeding_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             ) {
                 set(app, json!({ "weedLinesSmart": !smart }));
             }
+            // C18.26: also a line through every gap between pieces, such as between letters.
+            let between = s["weedLinesBetween"].as_bool() != Some(false);
+            if smart
+                && super::check_hint(
+                    ui,
+                    "Between Pieces",
+                    between,
+                    "Also a line through every gap between the design's pieces, such as between letters, however small the strips already are.",
+                )
+            {
+                set(app, json!({ "weedLinesBetween": !between }));
+            }
         });
         let spacing = s["weedLineSpacingMm"].as_f64().unwrap_or(0.0);
         let label = if smart { tl!("Strip Size") } else { tl!("Spacing") };
         widgets::label_row(ui, label, LABEL_W, |ui| {
             if let Some(v) = mm_field(ui, "weed-spacing", spacing, 0.0) {
+                // C18.24: no strip is narrower than the smallest size; 0 stays 0 (50 mm).
+                let least = vectorcraft_cutting::weed::SMALLEST_STRIP_MM;
+                let v = if smart && v > 0.0 { v.max(least) } else { v };
                 set(app, json!({ "weedLineSpacingMm": v.clamp(0.0, 200.0) }));
             }
         });
         if smart {
-            widgets::dim_label(ui, tl!("Strip Size 0: strips up to 50 mm. Weeding Map… in Send to Cutter shows the strips."));
+            widgets::dim_label(ui, tl!("Strip Size 10–200 mm, or 0 for 50 mm. Weeding Map… in Send to Cutter shows the strips."));
         } else {
             widgets::dim_label(ui, tl!("Spacing 0: one line in from the middle of each side."));
         }
@@ -251,12 +266,15 @@ mod tests {
         let texts = panel_texts(&mut app, &ctx, show_weeding);
         // C18.24: smart placement at first, its strip size; off, the even spacing.
         assert!(
-            texts.iter().any(|t| t == "Margin") && texts.iter().any(|t| t == "Strip Size") && texts.iter().any(|t| t == "Smart Placement"),
+            texts.iter().any(|t| t == "Margin")
+                && texts.iter().any(|t| t == "Strip Size")
+                && texts.iter().any(|t| t == "Smart Placement")
+                && texts.iter().any(|t| t == "Between Pieces"),
             "{texts:?}"
         );
         app.run("cutting.settings.set", json!({"weedLinesSmart": false})).unwrap();
         let texts = panel_texts(&mut app, &ctx, show_weeding);
-        assert!(texts.iter().any(|t| t == "Spacing") && !texts.iter().any(|t| t == "Strip Size"), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "Spacing") && !texts.iter().any(|t| t == "Strip Size" || t == "Between Pieces"), "{texts:?}");
         assert!(app.run("cutting.settings.set", json!({"weedMarginMm": 80})).is_err(), "out of range");
     }
 

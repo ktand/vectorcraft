@@ -29,6 +29,8 @@ const MAX_WORK: usize = 50_000_000;
 pub const STRIP_MM: f64 = 50.0;
 /// Smart lines: no strip narrower than this is split off, mm.
 const MIN_STRIP_MM: f64 = 5.0;
+/// Smart lines: the smallest strip size asked for, mm (a smaller one is taken as this).
+pub const SMALLEST_STRIP_MM: f64 = 2.0 * MIN_STRIP_MM;
 /// Smart lines: how close a line may come to the design, mm.
 const CLEAR_MM: f64 = 1.0;
 /// Smart lines: most lines for one group.
@@ -52,9 +54,9 @@ pub fn weeding(paths: &[Polyline], area: RectMm, s: &CuttingSettings) -> (Vec<Po
     let mut out = vec![];
     let mut warnings = vec![];
     if s.weed_lines && s.weed_lines_smart {
-        let strip = if s.weed_line_spacing_mm > 0.0 { s.weed_line_spacing_mm.max(2.0 * MIN_STRIP_MM) } else { STRIP_MM };
+        let strip = if s.weed_line_spacing_mm > 0.0 { s.weed_line_spacing_mm.max(SMALLEST_STRIP_MM) } else { STRIP_MM };
         let mut budget = MAX_WORK;
-        out.extend(smart_lines(paths, boxed, strip, &mut budget));
+        out.extend(smart_lines(paths, boxed, strip, s.weed_lines_between, &mut budget));
         if budget == 0 {
             warnings.push(JobWarning { source: None, message: "the design is too large for all its weed lines: some were left out".into() });
         }
@@ -111,15 +113,18 @@ fn positions(lo: f64, hi: f64, spacing: f64) -> Vec<f64> {
 /// Smart weed lines (C18.24) in `boxed`: each strip larger than `strip` split by a line across it
 /// through a gap in the design, as near its middle as there is one; a strip with no gap gets lines
 /// in from both sides to the design. Every test of a line against a segment uses up `budget`.
-fn smart_lines(paths: &[Polyline], boxed: RectMm, strip: f64, budget: &mut usize) -> Vec<Polyline> {
+fn smart_lines(paths: &[Polyline], boxed: RectMm, strip: f64, between: bool, budget: &mut usize) -> Vec<Polyline> {
     let mut out = vec![];
     let mut todo = vec![boxed];
+    // The strips no line splits further.
+    let mut leaves = vec![];
     while let Some(r) = todo.pop() {
         if out.len() >= MAX_SMART_LINES || *budget == 0 {
             break;
         }
         let (w, h) = (r.width(), r.height());
         if w <= strip && h <= strip {
+            leaves.push(r);
             continue;
         }
         // The longer side first: a vertical line (not horizontal) splits the width.
@@ -149,6 +154,62 @@ fn smart_lines(paths: &[Polyline], boxed: RectMm, strip: f64, budget: &mut usize
             let (lo, hi, a0, a1) = if horizontal { (r.y0, r.y1, r.x0, r.x1) } else { (r.x0, r.x1, r.y0, r.y1) };
             *budget = budget.saturating_sub(paths.iter().map(|p| p.points.len()).sum());
             out.extend(lines_across(paths, (lo + hi) / 2.0, a0, a1, horizontal));
+            leaves.push(r);
+        }
+    }
+    // C18.26: a line through every gap between pieces (between letters) in each strip.
+    if between {
+        for r in leaves {
+            for horizontal in [false, true] {
+                if out.len() >= MAX_SMART_LINES || *budget == 0 {
+                    break;
+                }
+                out.extend(gap_lines(paths, r, horizontal, budget));
+            }
+        }
+    }
+    out.truncate(MAX_SMART_LINES);
+    out
+}
+
+/// Lines across `r` through each gap between the design's pieces: a run of places where a line
+/// right across clears the design, with design on both sides of it in `r`, gets one line through
+/// its middle. Vertical lines (gaps side by side, as between letters), or horizontal ones.
+fn gap_lines(paths: &[Polyline], r: RectMm, horizontal: bool, budget: &mut usize) -> Vec<Polyline> {
+    let (lo, hi, a0, a1) = if horizontal { (r.y0, r.y1, r.x0, r.x1) } else { (r.x0, r.x1, r.y0, r.y1) };
+    let step = ((hi - lo) / 2000.0).max(0.5);
+    let n = ((hi - lo) / step).floor();
+    if !(n.is_finite() && n >= 2.0) {
+        return vec![];
+    }
+    let places: Vec<(f64, bool)> = (0..=n as usize)
+        .map(|k| {
+            let at = lo + step * k as f64;
+            let band = if horizontal {
+                RectMm { x0: a0, x1: a1, y0: at - CLEAR_MM, y1: at + CLEAR_MM }
+            } else {
+                RectMm { x0: at - CLEAR_MM, x1: at + CLEAR_MM, y0: a0, y1: a1 }
+            };
+            (at, clear(paths, band, budget))
+        })
+        .collect();
+    let mut out = vec![];
+    let mut k = 0;
+    while k < places.len() {
+        if !places.get(k).is_some_and(|p| p.1) {
+            k += 1;
+            continue;
+        }
+        let start = k;
+        while places.get(k).is_some_and(|p| p.1) {
+            k += 1;
+        }
+        // Design on both sides: not a run that reaches the strip's edge.
+        if start > 0
+            && k < places.len()
+            && let (Some(a), Some(b)) = (places.get(start), places.get(k - 1))
+        {
+            out.push(segment((a.0 + b.0) / 2.0, a0, a1, horizontal));
         }
     }
     out
@@ -345,6 +406,24 @@ mod tests {
         assert!(out.last().is_some_and(|p| p.closed), "the box last");
     }
 
+    /// C18.26: with a strip size larger than the box, still a line through every gap between the
+    /// squares (as between letters), clear of them; none without the option.
+    #[test]
+    fn lines_go_between_the_pieces() {
+        let design: Vec<Polyline> = (0..4).map(|k| square(20.0 + 25.0 * f64::from(k), 50.0, 20.0)).collect();
+        let s = CuttingSettings { weed_line_spacing_mm: 200.0, ..smart(0.0) };
+        let (out, _) = weeding(&design, MAT, &s);
+        let lines: Vec<&Polyline> = out.iter().filter(|l| !l.closed).collect();
+        assert_eq!(lines.len(), 3, "one in each of the three gaps: {lines:?}");
+        for l in &lines {
+            assert!(keeps_clear(l, &design), "{l:?}");
+            let x = l.points[0][0];
+            assert!(((x - 20.0) % 25.0 - 22.5).abs() < 0.6, "in the middle of a gap: {x}");
+        }
+        let off = CuttingSettings { weed_lines_between: false, ..s };
+        assert!(weeding(&design, MAT, &off).0.iter().all(|l| l.closed), "the box alone");
+    }
+
     /// One large shape with no gap: lines come in from both sides and stop short of it; a small
     /// box needs no lines at all.
     #[test]
@@ -366,7 +445,7 @@ mod tests {
     fn a_huge_design_is_bounded() {
         let mut budget = 10;
         let design: Vec<Polyline> = (0..50).map(|k| square(10.0 + 5.0 * f64::from(k), 10.0, 2.0)).collect();
-        let _ = smart_lines(&design, RectMm { x0: 0.0, y0: 0.0, x1: 300.0, y1: 300.0 }, 20.0, &mut budget);
+        let _ = smart_lines(&design, RectMm { x0: 0.0, y0: 0.0, x1: 300.0, y1: 300.0 }, 20.0, true, &mut budget);
         assert_eq!(budget, 0);
     }
 

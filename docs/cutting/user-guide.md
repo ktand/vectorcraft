@@ -553,8 +553,11 @@ In the **Weeding** panel, for vinyl and heat-transfer material, where the waste 
 - **Weed Box:** a box cut round the design, **Margin** mm out.
 - **Weed Lines:** cuts across the waste so it comes off in strips instead of one sheet.
   - **Smart Placement** (on at first) lays each line right across the waste through a gap between the design's
-    pieces, never closer than a millimetre to them, until no strip is larger than **Strip Size** (0: 50 mm).
-    Where there's no gap to go through, lines come in from both sides and stop just short of the design.
+    pieces, never closer than a millimetre to them, until no strip is larger than **Strip Size** (10–200 mm,
+    or 0 for 50 mm). Where there's no gap to go through, lines come in from both sides and stop just short of
+    the design.
+  - **Between Pieces** (on at first, with Smart Placement) also puts a line through every gap between the
+    design's pieces, such as between letters, however small the strips already are.
   - Off, the lines are evenly spaced, each from the box in towards the design, stopping just short of it:
     **Spacing** sets how far apart they are (0: one from the middle of each side).
 
@@ -710,6 +713,7 @@ load the mat with the machine's load button.
   - **Tool Settings** (section 4);
   - **Test Cut** (section 4);
   - **History** (section 10).
+- **Esc** closes the window (a cut carries on), unless a text field or an open list is using Esc.
 - **At the foot, always in sight:** **Send**, then the progress, **Continue** at a pause, and **Cancel** (the
   machine finishes the piece it's on). Hover a greyed Send for why it can't be pressed.
 
