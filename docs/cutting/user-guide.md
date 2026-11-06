@@ -233,6 +233,10 @@ starting points only: make a test cut before trusting them.
   For a blade you set by hand (Kraft, Deep-Cut, ratchet), the panel says how deep to set it under the
   material, for example "Set the blade by hand to 0.9 mm." Make a test cut before trusting a material.
 
+A material of your own also has **Material Details** (closed at first): its **Price** for the job's quote,
+**Pressing** (tick **Heat press** for the temperature, time and peel on the job sheet) and, cut on a roll,
+**Roll Left**.
+
 A material keeps settings for each tool. Choose the tool for Cut or Score and the material's settings for that
 tool are used: choose **Pen** and you get its sketch settings, **Punch tool** and its punch settings. If you
 change the tool after choosing the material, the numbers follow, unless you have already changed them by

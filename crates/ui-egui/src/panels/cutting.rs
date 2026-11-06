@@ -56,6 +56,14 @@ pub(crate) fn has_document(app: &VectorcraftApp, ui: &mut Ui) -> bool {
 pub(crate) const LABEL_W: f32 = 80.0;
 /// A number field in the tool table.
 const CELL_W: f32 = 60.0;
+/// The tool tables' label column, wide enough for "Blade offset": with two [`TABLE_COL_W`]
+/// columns the tables fit 264 points, the Send window's settings column (C18.16).
+const TABLE_LABEL_W: f32 = 72.0;
+/// The tool tables' columns: as wide as the Tool dropdown draws "AutoBlade", so every table's
+/// columns line up and a number's unit fits after its field.
+const TABLE_COL_W: f32 = 92.0;
+/// Between the tool tables' columns.
+const TABLE_GAP: f32 = 4.0;
 
 pub(crate) fn set(app: &mut VectorcraftApp, p: Value) {
     // A refusal (a value out of range) leaves the settings as they were; the field shows them.
@@ -253,7 +261,7 @@ fn machine_advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         return;
     }
     let ops = &info["settings"]["operations"];
-    egui::Grid::new(("cutting", "advanced")).num_columns(3).spacing([8.0, 3.0]).show(ui, |ui| {
+    egui::Grid::new(("cutting", "advanced")).num_columns(3).spacing([TABLE_GAP, 3.0]).show(ui, |ui| {
         table_heading(ui);
         tool_row(ui, "Accel.", "The machine's acceleration steps, 1–3; Auto: none sent, the machine keeps the one it was last given.", |ui, op| {
             if let Some(v) = optional_cell(ui, op, "accel", "Accel.", ops[op]["accel"].as_f64(), 3) {
@@ -261,7 +269,7 @@ fn machine_advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             }
         });
         tool_row(ui, "Corners", "How far past each corner the blade goes, 0–2 mm.", |ui, op| {
-            if let Some(v) = cell(ui, op, "corners", "Corners", ops[op]["cornerOvercutMm"].as_f64().unwrap_or(0.0), " mm", 1, 0.1, 0.0) {
+            if let Some(v) = cell(ui, op, "corners", "Corners", ops[op]["cornerOvercutMm"].as_f64().unwrap_or(0.0), "mm", 1, 0.1, 0.0) {
                 set(app, json!({ "operations": { op: { "cornerOvercutMm": (v.clamp(0.0, 2.0) * 10.0).round() / 10.0 } } }));
             }
         });
@@ -270,7 +278,7 @@ fn machine_advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             let offset = ops[op]["bladeOffsetMm"].as_f64().unwrap_or(silhouette::BLADE_OFFSET_MM);
             if silhouette::tool(ops[op]["tool"].as_str()).is_some_and(|t| t.pen) {
                 widgets::dim_label(ui, "—");
-            } else if let Some(v) = cell(ui, op, "blade-offset", "Blade offset", offset, " mm", 2, 0.05, 0.0) {
+            } else if let Some(v) = cell(ui, op, "blade-offset", "Blade offset", offset, "mm", 2, 0.05, 0.0) {
                 set(app, json!({ "operations": { op: { "bladeOffsetMm": (v.clamp(0.0, 2.0) * 20.0).round() / 20.0 } } }));
             }
         });
@@ -348,6 +356,18 @@ fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     });
 }
 
+/// A tool's name short enough for the tool table's cell (C18.16): the dropdown's list has the
+/// full names.
+fn table_tool_name(t: &silhouette::Tool) -> &'static str {
+    match t.id {
+        "ratchet" => "Ratchet",
+        "deepcut" => "Deep-cut",
+        "rotary" => "Rotary",
+        "punch" => "Punch",
+        _ => t.label,
+    }
+}
+
 /// The tool table's heading row: the two operations over their columns.
 fn table_heading(ui: &mut Ui) {
     ui.label("");
@@ -360,18 +380,34 @@ fn table_heading(ui: &mut Ui) {
 /// A row of the tool table: `label` (its range and meaning on hover), then `add` for the cut's
 /// cell and the score's.
 fn tool_row(ui: &mut Ui, label: &str, hover: &str, mut add: impl FnMut(&mut Ui, &'static str)) {
-    widgets::dim_label(ui, tl!(label)).on_hover_text(tl!(hover));
+    // One width for every table's labels (C18.16), so the main table's and Advanced's columns line up.
+    ui.allocate_ui(egui::vec2(TABLE_LABEL_W, 20.0), |ui| {
+        ui.set_min_width(TABLE_LABEL_W);
+        widgets::dim_label(ui, tl!(label)).on_hover_text(tl!(hover));
+    });
     for op in ["cut", "score"] {
-        add(ui, op);
+        ui.allocate_ui(egui::vec2(TABLE_COL_W, 20.0), |ui| {
+            ui.set_min_width(TABLE_COL_W);
+            add(ui, op);
+        });
     }
     ui.end_row();
 }
 
-/// A number cell of the tool table, named for screen readers by its row and operation.
+/// A number cell of the tool table, named for screen readers by its row and operation; its
+/// `unit`, if any, after the field, where the field's width can't clip it (C18.16).
 #[allow(clippy::too_many_arguments)]
-fn cell(ui: &mut Ui, op: &'static str, key: &'static str, row: &str, v: f64, suffix: &str, decimals: usize, step: f64, min: f64) -> Option<f64> {
+fn cell(ui: &mut Ui, op: &'static str, key: &'static str, row: &str, v: f64, unit: &str, decimals: usize, step: f64, min: f64) -> Option<f64> {
     let name = format!("{} {}", if op == "cut" { tl!("Cut") } else { tl!("Score") }, tl!(row));
-    widgets::spin_plain_named(ui, ("cutting", op, key), Some(&name), v, suffix, decimals, CELL_W, step, min, &[])
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 3.0;
+        let got = widgets::spin_plain_named(ui, ("cutting", op, key), Some(&name), v, "", decimals, CELL_W, step, min, &[]);
+        if !unit.is_empty() {
+            widgets::dim_label(ui, unit);
+        }
+        got
+    })
+    .inner
 }
 
 /// A setting the machine keeps when it isn't sent (blade depth, acceleration): Auto, or 1 to
@@ -479,7 +515,7 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let names: Vec<&str> = list.iter().map(|(n, _)| n.as_str()).collect();
     let shown = current.as_deref().unwrap_or(tl!("None"));
     widgets::label_row(ui, tl!("Material"), LABEL_W, |ui| {
-        if let Some(i) = widgets::dropdown_names(ui, ("cutting", "material"), shown, &names, 170.0)
+        if let Some(i) = widgets::dropdown_names(ui, ("cutting", "material"), shown, &names, 150.0)
             && let Some((name, _)) = list.get(i)
         {
             let _ = app.run("cutting.material.apply", json!({ "name": name }));
@@ -507,7 +543,7 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let mut saving: Option<String> = super::pstate(&ctx, "cutting-material-saving");
     let mut error: Option<String> = super::pstate(&ctx, "cutting-material-error");
     let mut imported: Option<String> = super::pstate(&ctx, "cutting-material-imported");
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         if let Some(name) = &mut saving {
             let field = ui.add(egui::TextEdit::singleline(name).hint_text(tl!("Material name")).desired_width(120.0));
             let entered = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -572,17 +608,22 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             }
         });
     }
+    // C18.16: a material of the user's keeps its price, pressing and roll in a section of their
+    // own, closed at first: they are about the material, not how it is cut.
+    let own = current.as_deref().and_then(|c| info["materials"].as_array()?.iter().find(|m| m["name"] == c && m["builtin"] == false)).cloned();
+    let details = own.is_some() && fold(ui, "cutting-material-details", tl!("Material Details"));
     // C18.3: a material of the user's has a price, for the job's quote.
-    if let Some(c) = &current
-        && let Some(m) = info["materials"].as_array().into_iter().flatten().find(|m| m["name"] == *c && m["builtin"] == false)
+    if details
+        && let Some(c) = &current
+        && let Some(m) = &own
     {
         let price = &m["price"];
         let amount = price["amount"].as_f64();
         let per_metre = price["per"] == "metre";
         widgets::label_row(ui, tl!("Price"), LABEL_W, |ui| {
-            let r = widgets::spin_plain(ui, ("cutting", "material-price"), amount.unwrap_or(0.0), "", 2, 70.0, 0.1, 0.0, &[]);
+            let r = widgets::spin_plain(ui, ("cutting", "material-price"), amount.unwrap_or(0.0), "", 2, 64.0, 0.1, 0.0, &[]);
             let pers = [tl!("per sheet"), tl!("per metre")];
-            let per = widgets::dropdown(ui, ("cutting", "material-price-per"), pers[usize::from(per_metre)], &pers, 90.0);
+            let per = widgets::dropdown(ui, ("cutting", "material-price-per"), pers[usize::from(per_metre)], &pers, 84.0);
             let (amount, per_metre) = (r.unwrap_or(amount.unwrap_or(0.0)), per.map_or(per_metre, |i| i == 1));
             if r.is_some() || per.is_some() {
                 let p = json!({ "name": c, "amount": amount.max(0.0), "per": if per_metre { "metre" } else { "sheet" }, "wastePct": price["wastePct"].as_f64().unwrap_or(10.0) });
@@ -591,25 +632,31 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         });
     }
     // C18.8: how a material of the user's is pressed, for the job sheet.
-    if let Some(c) = &current
-        && let Some(m) = info["materials"].as_array().into_iter().flatten().find(|m| m["name"] == *c && m["builtin"] == false)
+    if details
+        && let Some(c) = &current
+        && let Some(m) = &own
     {
         let press = &m["press"];
+        let on = press.is_object();
         widgets::label_row(ui, tl!("Pressing"), LABEL_W, |ui| {
-            let mut on = press.is_object();
-            if ui.checkbox(&mut on, "").on_hover_text(tl!("Heat-press settings for the job sheet")).changed() {
+            let mut on = on;
+            if ui.checkbox(&mut on, tl!("Heat press")).on_hover_text(tl!("Heat-press settings for the job sheet")).changed() {
                 let p = if on { json!({ "name": c, "tempC": 150, "seconds": 15 }) } else { json!({ "name": c, "tempC": null }) };
                 error = app.run("cutting.material.press", p).err();
             }
-            if on {
+        });
+        // Its numbers on a row of their own, so a narrow panel doesn't clip them.
+        if on {
+            ui.horizontal(|ui| {
+                ui.add_space(16.0);
                 let (t, sec) = (press["tempC"].as_f64().unwrap_or(150.0), press["seconds"].as_f64().unwrap_or(15.0));
-                let nt = widgets::spin_plain(ui, ("cutting", "press-temp"), t, " °C", 0, 70.0, 5.0, 50.0, &[]);
-                let ns = widgets::spin_plain(ui, ("cutting", "press-seconds"), sec, " s", 0, 60.0, 1.0, 1.0, &[]);
+                let nt = widgets::spin_plain(ui, ("cutting", "press-temp"), t, " °C", 0, 68.0, 5.0, 50.0, &[]);
+                let ns = widgets::spin_plain(ui, ("cutting", "press-seconds"), sec, " s", 0, 56.0, 1.0, 1.0, &[]);
                 let peels = ["hot", "warm", "cold"];
                 let peel = press["peel"].as_str().unwrap_or("warm");
                 let shown = [tl!("peel hot"), tl!("peel warm"), tl!("peel cold")];
                 let i = peels.iter().position(|p| *p == peel).unwrap_or(1);
-                let np = widgets::dropdown(ui, ("cutting", "press-peel"), shown[i], &shown, 90.0);
+                let np = widgets::dropdown(ui, ("cutting", "press-peel"), shown[i], &shown, 84.0);
                 if nt.is_some() || ns.is_some() || np.is_some() {
                     let p = json!({
                         "name": c,
@@ -620,13 +667,14 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
                     });
                     error = app.run("cutting.material.press", p).err();
                 }
-            }
-        });
+            });
+        }
     }
     // C18.11: what's left of the roll of a material of the user's, when the job is cut on a roll.
-    if info_settings_roll(app)
+    if details
+        && info_settings_roll(app)
         && let Some(c) = &current
-        && let Some(m) = info["materials"].as_array().into_iter().flatten().find(|m| m["name"] == *c && m["builtin"] == false)
+        && let Some(m) = &own
     {
         let left = m["rollLeftMm"].as_f64();
         widgets::label_row(ui, tl!("Roll Left"), LABEL_W, |ui| {
@@ -693,7 +741,7 @@ fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let force_hint = format!("{f_lo}–{f_hi}: {}", tl!("the machine's own force steps"));
     let speed_hint = format!("{s_lo}–{s_hi}: {}", tl!("the machine's own speed steps"));
     let kind = |op: &str| silhouette::tool(ops[op]["tool"].as_str());
-    egui::Grid::new(("cutting", "tools")).num_columns(3).spacing([8.0, 3.0]).show(ui, |ui| {
+    egui::Grid::new(("cutting", "tools")).num_columns(3).spacing([TABLE_GAP, 3.0]).show(ui, |ui| {
         table_heading(ui);
         // C10.2: the tool decides the holder; the AutoBlade (the usual one) is kept as none.
         let labels: Vec<&str> = silhouette::TOOLS.iter().map(|t| t.label).collect();
@@ -702,8 +750,8 @@ fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             "Tool",
             "Holder 1 (left): the AutoBlade, the pen and the blades in adapters; holder 2 (right): the 3 mm Kraft, rotary and punch tools.",
             |ui, op| {
-                let shown = kind(op).map_or(tl!("Unknown"), |t| t.label);
-                if let Some(i) = widgets::dropdown(ui, ("cutting", op, "tool"), shown, &labels, 84.0)
+                let shown = kind(op).map_or(tl!("Unknown"), table_tool_name);
+                if let Some(i) = widgets::dropdown(ui, ("cutting", op, "tool"), shown, &labels, TABLE_COL_W)
                     && let Some(t) = silhouette::TOOLS.get(i)
                 {
                     let id = if t.id == silhouette::AUTOBLADE.id { Value::Null } else { json!(t.id) };
@@ -731,7 +779,7 @@ fn tool_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
             }
         });
         tool_row(ui, "Overcut", "How far past the start a closed path is cut again, 0–5 mm.", |ui, op| {
-            if let Some(v) = cell(ui, op, "overcut", "Overcut", get(op, "overcutMm", 0.0), " mm", 1, 0.5, 0.0) {
+            if let Some(v) = cell(ui, op, "overcut", "Overcut", get(op, "overcutMm", 0.0), "mm", 1, 0.5, 0.0) {
                 set_tool(app, op, "overcutMm", (v.clamp(0.0, 5.0) * 10.0).round() / 10.0);
             }
         });
@@ -958,6 +1006,72 @@ mod tests {
         assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Fewest Roller Moves"));
     }
 
+    /// C18.16: units after the narrow fields, not in them; a material's price, pressing and roll in
+    /// Material Details, closed at first; the pressing's checkbox named, its numbers on a row of
+    /// their own.
+    #[test]
+    fn the_tool_settings_are_tidy() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        super::super::set_pstate(&ctx, "cutting-tool-advanced", true);
+        let tools = tool_texts(&mut app, &ctx);
+        super::super::set_pstate(&ctx, "cutting-tool-advanced", false);
+        for label in ["Overcut", "Corners", "Blade offset"] {
+            assert!(tools.iter().any(|t| t == label), "{label}: {tools:?}");
+        }
+        assert!(!tools.iter().any(|t| t.ends_with(" mm") && t.chars().next().is_some_and(|c| c.is_ascii_digit())), "no unit in a cell: {tools:?}");
+        assert_eq!(tools.iter().filter(|t| *t == "mm").count(), 6, "after each field of the three rows: {tools:?}");
+        assert!(!tools.iter().any(|t| t == "Material Details"), "a built-in material has none: {tools:?}");
+        app.run("cutting.material.save", json!({"name": "UI Details"})).unwrap();
+        let closed = tool_texts(&mut app, &ctx);
+        super::super::set_pstate(&ctx, "cutting-material-details", true);
+        let open = tool_texts(&mut app, &ctx);
+        app.run("cutting.material.press", json!({"name": "UI Details", "tempC": 150})).unwrap();
+        let pressed = tool_texts(&mut app, &ctx);
+        super::super::set_pstate(&ctx, "cutting-material-details", false);
+        app.run("cutting.material.delete", json!({"name": "UI Details"})).unwrap();
+        assert!(closed.iter().any(|t| t == "Material Details") && !closed.iter().any(|t| t == "Price" || t == "Pressing"), "{closed:?}");
+        assert!(open.iter().any(|t| t == "Price") && open.iter().any(|t| t == "Heat press"), "{open:?}");
+        assert!(pressed.iter().any(|t| t == "peel warm"), "{pressed:?}");
+    }
+
+    /// C18.16 (owner, 2026-11-06: "Units in blade offset and overcut are clipped"): the tool
+    /// settings fit a narrow dock, Advanced and Material Details open, nothing drawn past its edge.
+    #[test]
+    fn the_tool_settings_fit_a_narrow_panel() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        app.run("cutting.material.save", json!({"name": "UI Narrow"})).unwrap();
+        app.run("cutting.material.press", json!({"name": "UI Narrow", "tempC": 150})).unwrap();
+        app.run("cutting.settings.set", json!({"operations": {"cut": {"tool": "deepcut", "bladeOffsetMm": 0.25}}})).unwrap();
+        super::super::set_pstate(&ctx, "cutting-tool-advanced", true);
+        super::super::set_pstate(&ctx, "cutting-material-details", true);
+        // The Send window's settings column (C18.16: the owner's screenshot), its margins in.
+        const W: f32 = 280.0;
+        let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(W, 2400.0))), ..Default::default() };
+        let mut right = 0.0f32;
+        for _ in 0..3 {
+            let mut out = ctx.run_ui(raw.clone(), |ui| {
+                egui::CentralPanel::default().show(ui, |ui| tool_settings(&mut app, ui));
+            });
+            out.textures_delta.clear();
+            // What the panel holds (its own background, from 0, is anti-aliased past its edge).
+            right = out
+                .shapes
+                .iter()
+                .map(|c| c.shape.visual_bounding_rect())
+                .filter(|r| r.is_finite() && r.min.x > 0.5)
+                .map(|r| r.max.x)
+                .fold(0.0, f32::max);
+        }
+        super::super::set_pstate(&ctx, "cutting-tool-advanced", false);
+        super::super::set_pstate(&ctx, "cutting-material-details", false);
+        app.run("cutting.material.delete", json!({"name": "UI Narrow"})).unwrap();
+        assert!(right <= W, "drawn to {right}, past the {W} panel");
+    }
+
     /// C18.14: Import… shows only where a file can be picked; the note says what was added and
     /// what was skipped, and why.
     #[test]
@@ -1057,7 +1171,7 @@ mod tests {
         assert!(!texts.iter().any(|t| t.starts_with("Cut: holder")), "{texts:?}");
         app.run("cutting.settings.set", json!({"operations": {"score": {"tool": "rotary"}}})).unwrap();
         let texts = tool_texts(&mut app, &ctx);
-        assert!(texts.iter().any(|t| t == "Rotary blade") && texts.iter().any(|t| t == "Cut: holder 1 · Score: holder 2"), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "Rotary") && texts.iter().any(|t| t == "Cut: holder 1 · Score: holder 2"), "{texts:?}");
         assert!(texts.iter().any(|t| t == "—"), "no depth for the rotary blade: {texts:?}");
     }
 
