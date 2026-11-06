@@ -88,3 +88,36 @@ steps = [
   { run = "cutting.sendWindow" },
   { wait = 500 },
 ]
+
+[[shot]]
+name = "stickers"
+caption = "A sticker sheet: a kiss cut round each design, a print bleed under it, the registration marks, and a cut round the whole sheet on the Sheet Cut layer."
+crop = "canvas"
+steps = [
+  { run = "shape.ellipse", params = { x = 130, y = 170, width = 150, height = 150 } },
+  { run = "paint.setFill", params = { color = "#e4572e" } },
+  { run = "shape.star", params = { cx = 430, cy = 250, radius1 = 90, radius2 = 42, points = 5 } },
+  { run = "paint.setFill", params = { color = "#f2c14e" } },
+  { run = "shape.rectangle", params = { x = 140, y = 400, width = 160, height = 110 } },
+  { run = "paint.setFill", params = { color = "#2e86ab" } },
+  { run = "shape.polygon", params = { cx = 430, cy = 460, radius = 80, sides = 6 } },
+  { run = "paint.setFill", params = { color = "#76b041" } },
+  { run = "select.all" },
+  { run = "cutting.stickers", params = { offsetMm = 2, sheetCut = true } },
+  { run = "select.none" },
+  { run = "view.fitArtboard", may_fail = true },
+]
+
+[[shot]]
+name = "knockout"
+caption = "Knockout, cut by fill colour: the red circle below, the yellow star above. Besides its outline, the circle's cut has a star-shaped hole a little inside the star's outline (3 mm here, to show it; 0.5 mm at first), so only that edge of red stays under the star."
+crop = "canvas"
+steps = [
+  { run = "shape.ellipse", params = { x = 56, y = 146, width = 500, height = 500 } },
+  { run = "paint.setFill", params = { color = "#e4572e" } },
+  { run = "shape.star", params = { cx = 306, cy = 404, radius1 = 200, radius2 = 90, points = 5 } },
+  { run = "paint.setFill", params = { color = "#f2c14e" } },
+  { run = "cutting.settings.set", params = { grouping = "fillColor", knockout = true, knockoutOverlapMm = 3 } },
+  { run = "select.none" },
+  { run = "view.fitArtboard", may_fail = true },
+]

@@ -1,12 +1,27 @@
 # Cutting with VectorCraft: user guide
 
 > **For:** anyone using this fork to prepare and cut designs on a Silhouette cutter · **Machines:** the Cameo 4
-> family first (Cameo 3, 4, 4 Plus, 4 Pro, 5, 5 Plus and Portrait 3, 4 are recognised) · **Status:** written 2026-10-30, before the
-> first cut on a real machine: some steps may change once the [hardware checks](hardware-validation.md) are done
+> family first (Cameo 3, 4, 4 Plus, 4 Pro, 5, 5 Plus and Portrait 3, 4 are recognised) · **Status:** tested on a Cameo 4 (sending, cutting, the
+> origin, curves); a few steps are still to be confirmed on the machine ([hardware checks](hardware-validation.md))
 
 VectorCraft can send a design straight to a cutting machine. This guide walks through it in the order you'd
 usually work: set up the mat, choose what is cut and how, make cut lines, arrange the pieces, check the job,
 send it.
+
+## Your first cut
+
+1. Open or draw your design. (An SVG from the web may come in at the wrong size: see section 2, "Is it the right
+   size?")
+2. Window › Workspace › **Cutting**.
+3. In the **Cutting Mat** panel, choose your mat. The panel says in red if the artboard doesn't fit on it.
+4. Every object is cut along its lines at first (Cut Settings › Whole Job › **Default**: Cut). For stickers you
+   print first, see Contour and Sticker sheets (section 5) and Print & Cut (section 7).
+5. Click **Send to Cutter…** at the top of Cut Settings. Switch the machine on, plug it in by USB and close
+   Silhouette Studio; the machine shows under **Cutter** (click **Find Cutters** if it doesn't).
+6. Under **Tool Settings**, choose the **Material**, and the **Tool** that's in the machine.
+7. Load the mat with the machine's load button. Click **Test Cut**: a small square with a triangle inside is cut
+   in a corner. Raise or lower **Force** until the triangle lifts out cleanly without cutting the backing.
+8. Click **Send**. When it's done, unload the mat with the machine's button.
 
 ## 1. The Cutting workspace
 
@@ -90,8 +105,10 @@ For such a document, Cut Settings says **Measured in pixels: cut at 72 per inch.
 - If 72 per inch is what you meant, change the document's units in File › Document Setup instead, and the warning
   goes.
 
-**Moving the head with the machine's arrows** makes where you leave it the place the next cut starts from: the
-job is cut from there instead of the mat's corner, and the preview doesn't show the difference. Switch the machine
+### Where the cut starts
+
+Every job is cut from the top-left corner of the mat's cut area. **Moving the head with the machine's arrows**
+changes that: where you leave it is the place the next cut starts from. The job is cut from there instead of the mat's corner, and the preview doesn't show the difference. Switch the machine
 off and on to start from the corner again.
 
 ## 3. What gets cut, and how
@@ -139,11 +156,40 @@ While cutting in groups, Cut Settings lists each group under **Cutting Order**. 
 or its own **Force** and **Passes**. A group left on "Document's setup" uses the tool settings in the Send window. When a group has a
 material, the pause says what to load ("Paused before Gold. Load Cardstock, then Continue.").
 
-**Knockout** (shown once the job is cut in groups) is for layered vinyl, heat transfer vinyl above all: each colour
-is cut only where it shows, the colours painted above it taken out of it, so the layers don't pile up thick. The
-**Overlap** beside it (default 0.5 mm) is how far a lower colour still runs under the edge of the one above, so no
-gap shows when the layers are pressed a little off. The document doesn't change, only what's cut; a colour that
-is wholly hidden isn't cut, and the Send window says so.
+#### Knockout: layered vinyl without the bulk
+
+When a design has several colours of vinyl on top of each other (heat transfer vinyl above all), each colour is
+normally cut whole, and wherever two colours overlap there are two layers of vinyl, which is thick, stiff and
+can peel. **Knockout** (Cut Settings › Whole Job, shown once the job is cut in groups) cuts each colour only where
+it shows: the parts covered by colours painted above it are taken out of it. Most of the design is then one layer
+thick. The document doesn't change, only what's cut.
+
+An example: a red circle with a yellow star on top of it. Without Knockout the red circle is cut whole and the
+star is pressed on top of it, two layers where the star is. With Knockout, the red circle is cut with a star-shaped
+hole in it, and the yellow star fills that hole.
+
+**Overlap** (under Knockout, 0.5 mm at first) makes the hole a little smaller than the star, so the red still runs
+that far under the star's edge. Then no gap shows if the layers are pressed a little off. Make it larger (1 mm)
+if you find the colours hard to line up.
+
+<!-- shot: knockout -->
+
+How to use it:
+
+1. Draw each colour of vinyl as its own fill colour (or put each colour on its own layer). Stack them as they will
+   be pressed: what goes on top is above in the Layers panel.
+2. In Cut Settings › Whole Job, set **Groups** to **By Fill Colour** (or **By Layer**), so each colour is cut as a
+   group, with a pause to load the next colour's vinyl.
+3. Tick **Knockout**. Tick **Align Marks** too, if you'd like help lining the colours up (below).
+4. Look at the cut lines on the canvas, or in the Send window: a lower colour now has holes where the colours above
+   it sit.
+5. Send. At each pause, load that colour's vinyl (heat transfer vinyl shiny side down, with **Cut Mirrored**
+   on), then Continue.
+6. Weed each colour. Press the lowest colour first, briefly, just enough to hold it; then lay each colour above in
+   its place and press it; finish with the full press.
+
+Only closed shapes set to Cut are knocked out; shapes of the same colour don't cut holes in each other. A colour
+that's covered completely isn't cut at all, and the Send window says so.
 
 **Align Marks** (also shown once the job is cut in groups) cuts a small cross in the same place on every colour,
 just outside the design's corner. Weed the cross with the design; when pressing or applying, lay each colour's
@@ -164,29 +210,34 @@ they belong to what is on the mat today: test, adjust, test again, then send, wi
 | **Speed** | In the machine's own steps (1–30). |
 | **Passes** | How many times each line is cut (1–10). |
 | **Overcut** | How far a closed shape's cut runs on past its start, so it lifts out cleanly. |
-| **Blade depth** | The AutoBlade's depth, 1–10, or **Auto**: no depth is sent and the blade stays where it was last set (by the last job, or Silhouette Studio). Choosing a material sets its depth. Other tools show "—". |
+| **Blade depth** | The AutoBlade's depth, 1–10 (higher is deeper). **Auto** sends no depth: the blade stays at whatever depth it was last set to, by the job before or by Silhouette Studio, so set a number when you want to be sure. Choosing a material sets its depth. Other blades are set by hand and show "—". |
 
 **Cut Mirrored** cuts the design flipped left to right, for material cut from the back such as heat transfer
 vinyl (iron-on). Your art stays as you drew it, and the canvas's toolpaths stay on it; the Send window's mat
 shows the cut mirrored, as the material lies. Print & Cut is never
 cut mirrored (the marks are read as printed): print the art mirrored instead.
 
-The Send window's **Advanced** (closed at first, under the table) holds what most cuts leave alone: **Accel.**
-(gentler or faster moves), **Corners** (the blade runs a little past each sharp corner), **Blade offset** (how far
-the blade's tip trails its axis; the machine turns the blade round corners with it; a pen shows "—") and **Track
-Enhancing** (on a Cameo 4 with a mat it made no visible difference in our tests; it may matter from the roll). Cut Settings' own **Advanced** holds the design's: **Perforate** (the cut and gap lengths for
-objects set to Perforate), **Slow Details**, **Send Curves** and **Cut Order**.
+The Send window's **Advanced** (closed at first, under the table) holds tool settings most cuts leave alone:
+
+- **Accel.:** gentler or faster moves.
+- **Corners:** the blade runs a little past each sharp corner and back, for crisp corners.
+- **Blade offset:** how far the blade's tip trails its axis; the machine turns the blade round corners with it.
+  A pen shows "—".
+- **Track Enhancing:** the machine grips the material harder. On a Cameo 4 with a mat it made no visible
+  difference in our tests; it may matter from the roll.
+
+Cut Settings has an **Advanced** of its own, for the design: **Perforate** (the cut and gap lengths for objects
+set to Perforate), **Slow Details** (section 8), and **Send Curves** and **Cut Order** (below).
 
 **Send Curves** (on at first) sends the curves of your design to the machine as curves, which it cuts smoother
 and rounder than the short straight lines they are otherwise broken into. A path cut up to the mat's edge (Clip to
 Mat) or given corner runs (**Corners**) is still sent as straight lines. Turn it off to cut everything as straight
 lines, as earlier versions did. The preview looks the same either way.
 
-With Send Curves on, the machine also perforates by itself where it can: it knows three kinds of dashes, a cut of
-1/2, 25/32 or 1/8 of each repeat. A perforation whose cut is within 0.15 mm of one of those is sent as the whole
-line, cut once, and the machine makes the dashes; the job's dashes are then made to the machine's lengths, so the
-preview shows what it cuts. The usual 3 mm and 1 mm becomes 3.125 mm and 0.875 mm (25/32 of 4 mm); 2 mm and 2 mm
-stays as it is (1/2). Other lengths, and a perforation cut more than once (**Passes**), are sent as dashes.
+With Send Curves on, the machine can also cut a perforation by itself, in one smooth run, when its dashes are
+close to one of the three kinds the machine knows. There's nothing to set: the dashes are adjusted slightly to the
+machine's (the usual 3 mm cut and 1 mm gap become 3.125 mm and 0.875 mm), and the preview shows them as cut.
+Other dashes, and a perforation cut more than once (**Passes**), are cut dash by dash.
 
 **Cut Order** decides the order the lines are cut in. Scoring always comes before cutting, and with the first two
 choices a shape inside another (the counter of an O) is cut before it, so the piece around it stays held:
@@ -235,18 +286,7 @@ material, in Cut Settings › Cutting Order, is picked from the same list.
   "name (copy)".
 - **Update "name"** saves your changes into one of your own materials in one click.
 - **Delete** removes one of your own.
-- **Import…** adds the materials of a list you exported from Silhouette Studio (a CSV file), as materials of
-  your own: the Cameo 4's settings for each tool the material has them for (the AutoBlade's cut and score, the
-  pen's sketch, the punch, the Kraft, Deep-Cut and rotary blades). Materials it can't use (none for the Cameo 4,
-  or only things VectorCraft doesn't do, such as embossing) are skipped, and the line under the buttons says
-  which and why, and which of the file's actions weren't used (such as stipple). When the list has materials
-  you already have, the panel asks first: **Replace Mine** takes the list's settings (your price, pressing and
-  roll stay), **Keep Mine** adds only the new ones. Replacing also tidies a list imported by an earlier
-  version, which kept a material cut with a hand-set blade under a name such as "Chipboard (Kraft Blade)":
-  it becomes one "Chipboard" with the settings for each of its tools. The
-  AutoBlade's depth comes from the file too (Studio gives it in millimetres; each step of the 1–10 is 0.1 mm).
-  For a blade you set by hand (Kraft, Deep-Cut, ratchet), the panel says how deep to set it under the
-  material, for example "Set the blade by hand to 0.9 mm." Make a test cut before trusting a material.
+- **Import…** adds the materials of Silhouette Studio's list (below).
 
 A material of your own also has **Material Details** (closed at first): its **Group** (by its name until you
 choose one; **New Group…** names one of your own), its **Price** for the job's quote,
@@ -266,6 +306,29 @@ doesn't ask with Print & Cut (never cut mirrored) or for a test cut. A material 
 on is marked as cut from the back too.
 
 Your materials are kept in `%APPDATA%\VectorCraft\Cutting\Materials.json` and are there in every document.
+
+#### Importing materials from Silhouette Studio
+
+If you have a material list exported from Silhouette Studio (a CSV file), its materials can become your own:
+
+1. Click **Import…** under the Material and choose the file.
+2. If some of the list's materials are already yours, the panel asks: **Replace Mine** takes the list's settings
+   (your price, pressing and roll stay), **Keep Mine** adds only the new ones.
+3. The line under the buttons says how many were added, replaced and kept, and which were skipped and why.
+
+What comes in:
+
+- The Cameo 4's settings for each tool the material has them for: the AutoBlade's cut and score, the pen's
+  sketch, the punch, and the Kraft, Deep-Cut and rotary blades.
+- The AutoBlade's depth (Studio gives it in millimetres; each step of the 1–10 is 0.1 mm).
+- For a blade you set by hand (Kraft, Deep-Cut, ratchet), the depth to set it to: the panel shows it under the
+  material, for example "Set the blade by hand to 0.9 mm."
+- Not: materials with no settings for the Cameo 4, or only for things VectorCraft doesn't do (such as
+  embossing), nor the actions it doesn't do (such as stipple). The line under the buttons lists them.
+
+A list imported by an earlier version kept a material cut with a hand-set blade under a name such as "Chipboard
+(Kraft Blade)". Import it again and choose **Replace Mine**: it becomes one "Chipboard" with the settings for
+each of its tools. As with any material, make a test cut before trusting it.
 
 ### The test cut
 
@@ -294,6 +357,11 @@ Cut the machine measures from the marks, so the adjustment only moves where it s
 Compare how round and smooth each row is. **Rows** cuts just one of them. Each row is cut once, without overcut,
 and the test isn't kept in the history. If the curved rows come out worse than the straight one on your machine,
 turn **Send Curves** off (Cut Settings › Advanced).
+
+**Add Calibration Sheet** (in the **Curve Test** fold) adds a sheet of lines and shapes to measure your machine by:
+100 mm lines both ways, a square and a circle that must close, and small sharp corners; with Print & Cut on,
+rings round printed crosses to show how well the cut lines up with the print. The
+[hardware checks](hardware-validation.md#step-21-the-calibration-sheet-c412) say what to measure.
 
 ## 5. Making cut lines
 
@@ -359,6 +427,13 @@ kiss cut at the panel's **Offset**): Print & Cut on, a cut contour round each de
 backing), a print bleed, and if asked a cut round the whole sheet on a **Sheet Cut** layer that is cut last with
 a stronger setup of its own, through the backing.
 
+An example: four designs, made into a sticker sheet with a cut round the whole sheet. Each design has a kiss cut
+just outside it, the print spreads a little under each cut (the bleed) so no white edge shows, the registration
+marks sit in the corners, and the rectangle round all four is cut last, through the backing. Print the page, put
+it on the mat with the square mark at the top left, and send.
+
+<!-- shot: stickers -->
+
 ### Pop-up cards
 
 The **Pop Up** panel makes the selected design (text converted to outlines, shapes, or several together) into a
@@ -384,18 +459,14 @@ Fold the card along its middle fold first, then push each design forward along i
 
 <!-- shot: templates -->
 
-The **Templates** panel makes a flat net you cut out and fold up, at the size you ask for. So far: the **Tuck End
-Box** (a card-deck box, both ends tucked in from the back), the **Reverse Tuck End Box** (the bottom tucked in
-from the front), the **Open Tray**, the **Tray with Lid** (the lid sized to slide over the tray, with the
-**Clearance** you give), the **Shipping Carton (0201)** (flaps that meet in the middle; give the board's
-**Thickness**), the **Drawer Box** (a drawer with a finger hole and the sleeve it slides into), the **Gable Box** (a peaked box with a carry handle; its top locks shut), the **Heart Box** (a band rolled round a heart-shaped floor, and a lid), the **Star Box** (the same round a star of 4 to 12 points, the band scored at each corner), the **Mailer (0427)** (a one-piece box with a hinged lid that tucks in at the front, its double sides holding the corner ears; no glue) and the **Pillow Box** (curved ends that fold in; **Depth** is how far they bow).
-Under **Cards & Envelopes**: an **Envelope** and a **Pointed Envelope** (give the card's size and the **Ease**
-round it), a **Place Card**, a **Gift Tag**, an **Earring Card** (with a **Hang Slot** you can switch off) and a
-**Gift Card Holder**. Under **Solids**: the **Cube**, **Tetrahedron**, **Octahedron**, **Dodecahedron** and
-**Icosahedron** (give the **Edge**), a **Pyramid** and a **Prism** of 3 to 24 sides, a **Cylinder** and a **Cone**
-(a **Top Diameter** above 0 cuts it off flat). Solids come out in one piece with a glue tab on every edge that
-is cut, the ends of a cylinder or a cone as pieces of their own. Under **Party**: **Bunting** (any number of
-pennants, pointed or **Swallowtail**), a **Paper Lantern** and a **Party Hat**.
+The **Templates** panel makes a flat net you cut out and fold up, at the size you ask for:
+
+| Group | Templates |
+|---|---|
+| **Boxes** | **Tuck End Box** (a card-deck box, both ends tucked in from the back); **Reverse Tuck End Box** (the bottom tucked in from the front); **Open Tray**; **Tray with Lid** (the lid slides over the tray, with the **Clearance** you give); **Shipping Carton (0201)** (flaps that meet in the middle; give the board's **Thickness**); **Drawer Box** (a drawer with a finger hole and the sleeve it slides into); **Gable Box** (a peaked box with a carry handle; its top locks shut); **Heart Box** (a band rolled round a heart-shaped floor, and a lid); **Star Box** (the same round a star of 4 to 12 points); **Mailer (0427)** (one piece, a hinged lid that tucks in at the front; no glue); **Pillow Box** (curved ends that fold in; **Depth** is how far they bow) |
+| **Cards & Envelopes** | **Envelope** and **Pointed Envelope** (give the card's size and the **Ease** round it); **Place Card**; **Gift Tag**; **Earring Card** (with a **Hang Slot** you can switch off); **Gift Card Holder** |
+| **Solids** | **Cube**, **Tetrahedron**, **Octahedron**, **Dodecahedron**, **Icosahedron** (give the **Edge**); **Pyramid** and **Prism** of 3 to 24 sides; **Cylinder** and **Cone** (a **Top Diameter** above 0 cuts it off flat). One piece with a glue tab on every cut edge; a cylinder's or cone's ends are pieces of their own |
+| **Party** | **Bunting** (any number of pennants, pointed or **Swallowtail**); **Paper Lantern**; **Party Hat** |
 
 - **Template:** which one. A picture of its net shows under it (the outline, the folds dashed in blue, the glue
   tabs shaded), with the net's size, and changes as you change the sizes.
@@ -481,7 +552,8 @@ the mat is named, and nothing is changed. One Undo takes the whole batch back.
 
 <!-- shot: print -->
 
-To print a design and then cut round the print:
+To print a design and then cut round the print (for stickers, **Make Sticker Sheet** in section 5 adds the
+marks, the contours and the bleed in one step):
 
 1. In the **Print & Cut** panel, tick **Print & Cut**, then **Add Marks**. Registration marks are added round the artboard on a
    locked layer of their own. Their settings, best left as they are:
@@ -578,6 +650,9 @@ set it to Cut Outline to weld them). They are warnings: the job can still be sen
 window. It doesn't block the rest of the app: you can keep it open beside your art, and drag its corner to make
 it larger.
 
+Before you press Send: switch the machine on and plug it in, close Silhouette Studio (it holds the machine), and
+load the mat with the machine's load button.
+
 <!-- shot: send -->
 
 - **Left:** the mat as the machine takes it, with the job's lines on it, and under it the playback (**Play**,
@@ -594,11 +669,6 @@ it larger.
 - **At the foot, always in sight:** **Send**, then the progress, **Continue** at a pause, and **Cancel** (the
   machine finishes the piece it's on). Hover a greyed Send for why it can't be pressed.
 
-**Add Calibration Sheet** (in the **Curve Test** fold) adds a sheet of lines and shapes to measure your machine by:
-100 mm lines both ways, a square and a circle that must close, and small sharp corners; with Print & Cut on,
-rings round printed crosses to show how well the cut lines up with the print. The
-[hardware checks](hardware-validation.md#step-21-the-calibration-sheet-c412) say what to measure.
-
 Closing the window doesn't stop a cut. Cut Settings shows how far it has got, and opening the window again shows
 it in full.
 
@@ -606,8 +676,6 @@ On a Cameo 4 each job tells the machine the mat's cut area, so nothing outside i
 holds, and puts the machine's whole area back at the end. The window then waits for the machine to finish the
 last cut (the bar stays full until it has) and asks whether anything lay outside the area; if so it says so
 under **Sent.** The [history](#10-history) keeps that note with the send.
-
-Before you press Send: load the mat in the machine, and close Silhouette Studio so it doesn't hold the machine.
 
 ## 10. History
 

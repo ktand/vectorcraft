@@ -106,6 +106,8 @@ fn run() -> Result<(), String> {
 
     // The Typst: the template next to the main file, the screenshots under shots/.
     std::fs::write(out.join("template.typ"), include_str!("../template.typ")).map_err(|e| e.to_string())?;
+    // The cover's mark (original, ASSETS.md).
+    std::fs::write(out.join("logo.svg"), include_str!("../logo.svg")).map_err(|e| e.to_string())?;
     let shot_typst = |name: &str| {
         let Some(r) = recipes.shot.iter().find(|s| s.name == name) else { return format!("#missing({})", typst_md::string(name)) };
         if !shot_dir.join(format!("{name}.png")).exists() {

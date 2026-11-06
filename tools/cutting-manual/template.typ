@@ -54,7 +54,9 @@
 
   // The cover.
   page(paper: "a4", margin: 3cm)[
-    #v(28%)
+    #v(18%)
+    #image("logo.svg", width: 3.2cm)
+    #v(1.2em)
     #text(size: 32pt, weight: "bold", fill: accent, title)
     #v(0.4em)
     #text(size: 15pt, fill: dim, subtitle)
