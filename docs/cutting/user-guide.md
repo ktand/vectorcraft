@@ -25,8 +25,11 @@ Workspace › Reset Cutting brings back this layout. Any panel can also be dragg
 The panels (each also on the Window › Cutting menu):
 
 - **Cut Settings:** how things are cut. At the top, a summary of the job ("2 paths · 392 mm · 5 s") and **Send
-  to Cutter…**. Below it: what the selection is cut as and along, the default, groups, and **Advanced**. The
-  material and tool settings are in the Send window, beside the test cut that tunes them (section 4).
+  to Cutter…**. Below it, under **Selection**, what the selected objects are cut as and along; under **Whole
+  Job**, the default and the groups; with groups, **Cutting Order**, each group's own setup; then **Advanced**.
+  The material and tool settings are in the Send window, beside the test cut that tunes them (section 4).
+- Each feature panel starts with a line saying what it does; a button that needs a selection says so under it
+  while nothing is selected.
 - **Contour**, **Stencil** and **Weeding:** what adds cut lines to cut the art out: a contour round it, stencil
   bridges, weeding's box and lines (section 5).
 - **Sketch Fill**, **Rhinestones**, **Puzzle** and **Pop Up:** designs made from the art: lines for the pen, a
@@ -56,7 +59,7 @@ In the **Cutting Mat** panel:
   on the machine.
 - **Orientation:** Portrait or Landscape, as the mat goes into the machine.
 - **Artboard:** with more than one artboard, which one goes on the mat.
-- **Offset:** moves the artboard on the mat, in mm from the cut area's top-left corner.
+- **Offset:** moves the artboard on the mat, in mm from the cut area's top-left corner: **X** across, **Y** down.
 - **Clip to Mat:** lines that run off the cut area are cut up to its edge. Without it, a job that runs off the
   mat isn't sent.
 
@@ -103,14 +106,15 @@ Every object is cut in one of these ways:
 | **Perforate** | Cuts in dashes, so the sheet tears along the line: the object's own dash pattern if its stroke is dashed, else 3 mm cuts with 1 mm gaps (Cut Settings › Advanced › Perforate). |
 | **No Cut** | Not cut at all: printed art, notes, guides. |
 
-- **Default** (Cut Settings) is what everything is cut as unless something says otherwise.
-- **Selected** appears when something is selected. It sets the selected objects' operation, or **As Its Group or
-  Layer** to follow their group or layer. Setting a layer to No Cut turns off everything on it.
+- **Default** (Cut Settings › Whole Job) is what everything is cut as unless something says otherwise.
+- **Cut As** (Cut Settings › Selection) appears when something is selected. It sets the selected objects'
+  operation, or **As Its Group or Layer** to follow their group or layer. Setting a layer to No Cut turns off
+  everything on it.
 
 ### Along the path or round the stroke
 
 A line drawn with a thick stroke is cut down its middle at first: the blade follows the path, whatever the
-stroke's width. **Cut Along** (shown under Selected) changes that for the selected objects:
+stroke's width. **Cut Along** (under Cut As) changes that for the selected objects:
 
 - **Path:** along the path itself. Right for shapes whose edge *is* the path: filled shapes, thin lines.
 - **Stroke Edge:** round the edge of what the object paints, its stroke as wide as it is drawn (with its caps,
@@ -128,11 +132,11 @@ O, while the sheet still holds.
 **Groups** › By Layer, By Line Colour or By Fill Colour cuts the job in groups: each top-level layer, each stroke
 colour (else fill colour), or each fill colour (else stroke colour), one after the other. The machine **pauses
 before each group** after the first: change the blade or the material, then press **Continue** in the Send window.
-Each group's row has **On** (switch it off and it isn't cut) and **Pause** (switch it off and the group is cut
-straight after the one before, with its own settings).
+Each group's name has a box beside it (clear it and the group isn't cut) and, after the first, **Pause before**
+(clear it and the group is cut straight after the one before, with its own settings).
 
-While cutting in groups, Cut Settings lists each group in cutting order. Give a group its own **Material**, or its
-own **Force** and **Passes**. A group left on "Document's setup" uses the tool settings below. When a group has a
+While cutting in groups, Cut Settings lists each group under **Cutting Order**. Give a group its own **Material**,
+or its own **Force** and **Passes**. A group left on "Document's setup" uses the tool settings in the Send window. When a group has a
 material, the pause says what to load ("Paused before Gold. Load Cardstock, then Continue.").
 
 **Knockout** (shown once the job is cut in groups) is for layered vinyl, heat transfer vinyl above all: each colour
@@ -299,7 +303,7 @@ contour away and puts the art's operation back.
 Cut a letter O out of a stencil sheet and its middle falls out with it. **Stencil** › **Add Bridges** keeps such
 middles joined to the sheet by narrow bridges (the **Stencil** panel):
 
-- **Bridges:** how wide each bridge is (default 1.5 mm). Wider holds better; narrower shows less.
+- **Bridge Width:** how wide each bridge is (default 1.5 mm). Wider holds better; narrower shows less.
 - **Direction:** **Vertical** puts a bridge above and below each hole, **Horizontal** one either side.
 
 The art is taken as filled shapes, as it is cut: a closed shape counts as filled whatever its paint, an object set
@@ -418,7 +422,7 @@ A pen draws lines, not areas. The **Sketch Fill** panel fills the selected shape
 - **Cross-Hatch:** a second set of lines across the first (Lines only).
 - **Add Sketch Fill:** adds the lines as a path just above the art. Holes are left empty.
 
-To draw them, choose the **Pen** as the tool in Cut Settings (or cut by colour, with the lines in a colour of their
+To draw them, choose the **Pen** as the tool in the Send window's Tool Settings (or cut by colour, with the lines in a colour of their
 own and the pen in that group's setup).
 
 ### Weeding
@@ -427,7 +431,7 @@ In the **Weeding** panel, for vinyl and heat-transfer material, where the waste 
 
 - **Weed Box:** a box cut round the design, **Margin** mm out.
 - **Weed Lines:** lines from the box in towards the design, stopping just short of it, so the waste comes off in
-  strips. **Every** sets their spacing (0: one from the middle of each side).
+  strips. **Spacing** sets how far apart they are (0: one from the middle of each side).
 
 When cutting in groups, each group gets its own box and lines.
 
@@ -442,7 +446,7 @@ so a small piece can sit in a larger one's hole:
   **Off** keeps every piece as drawn.
 - **Onto New Sheets:** what doesn't fit goes onto new artboards ("Sheet 2", "Sheet 3", …) to the right, each cut
   on its own.
-- **Copies:** Replicate: this many more of each piece are made and nested with them, to fill a sheet with
+- **Extra Copies:** Replicate: this many more of each piece are made and nested with them, to fill a sheet with
   stickers or labels. Copies that don't fit are left out, or with Onto New Sheets go onto more sheets.
 - **Nest Selected** / **Nest All:** each top-level object or group is one piece. Pieces too large for the mat stay
   where they were.
@@ -525,19 +529,19 @@ full speed. Fine vinyl lifts and tears less in tight curves cut slowly.
 
 Under the job's numbers the Send window says how much material the job takes (a sheet on a mat; on a roll,
 the length to the end of the last path and 10 mm more) and, when the material has a price, what that costs.
-Give one of your own materials a **Price** in Cut Settings, per sheet or per metre (a roll's length gets 10%
+Give one of your own materials a **Price** (Send window › Tool Settings › Material Details), per sheet or per metre (a roll's length gets 10%
 added for waste). A built-in material can't be priced: save it as your own first. Each group of a job cut in
 groups counts its own material.
 
 ### What's left of a roll
 
-Cutting from a roll (mat **Roll**), tick **Roll Left** under one of your own materials in Cut Settings and give
+Cutting from a roll (mat **Roll**), tick **Roll Left** in one of your own materials' **Material Details** and give
 the length left on the roll. Each send takes off what it cuts (when it starts, so a cancelled send counts), and
 the Send window warns when a job needs more than is left.
 
 ### Pressing and the job sheet
 
-For heat transfer vinyl, tick **Pressing** under one of your own materials in Cut Settings and give the
+For heat transfer vinyl, tick **Heat press** in one of your own materials' **Material Details** and give the
 heat press's temperature and time and when to peel the carrier. **Job Sheet…** in the Send window saves a page
 (SVG, to print) listing each group in cutting order with its material, cut settings and pressing.
 
@@ -563,16 +567,19 @@ it larger.
 
 <!-- shot: send -->
 
-- **Left:** the mat as the machine takes it, with the job's lines on it.
-- **Right, from the top:**
-  - the job's numbers and any warnings, with its own playback;
-  - which sheet, when there are several;
-  - the machine. **Find Cutters** looks again after you plug it in.
-  - what is in each holder, as the machine reports it ("Holder 1: AutoBlade · Holder 2: empty"), with **Check
-    Tools**. The window warns when the job needs a tool that isn't fitted.
-  - **Send**, then the progress, **Continue** at a pause, and **Cancel** (the machine finishes the piece it's on);
-  - the test cut (section 4);
+- **Left:** the mat as the machine takes it, with the job's lines on it, and under it the playback (**Play**,
+  **Previous**, **Next**) that runs the blade over it.
+- **Right, from the top** (this part scrolls when the window is short):
+  - **Job:** the job's numbers (paths, cut length, travel, estimated time, material and cost), **Job Sheet…**,
+    **Weeding Map…** and any warnings; which sheet, when there are several;
+  - **Cutter:** the machine, with **Find Cutters** beside it to look again after you plug it in; what is in each
+    holder, as the machine reports it ("Holder 1: AutoBlade · Holder 2: empty"), with **Check Tools**. The window
+    warns when the job needs a tool that isn't fitted;
+  - **Tool Settings** (section 4);
+  - **Test Cut** (section 4);
   - **History** (section 10).
+- **At the foot, always in sight:** **Send**, then the progress, **Continue** at a pause, and **Cancel** (the
+  machine finishes the piece it's on). Hover a greyed Send for why it can't be pressed.
 
 **Add Calibration Sheet** (in the **Curve Test** fold) adds a sheet of lines and shapes to measure your machine by:
 100 mm lines both ways, a square and a circle that must close, and small sharp corners; with Print & Cut on,

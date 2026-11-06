@@ -21,9 +21,19 @@ struct PopUpChoice {
 }
 
 /// A number field shown with `suffix` and `decimals`, stepped by `step`, kept to `lo`–`hi`.
-fn number_row(ui: &mut Ui, label: &str, id: &'static str, v: &mut f64, (suffix, decimals, step): (&str, usize, f64), (lo, hi): (f64, f64)) {
+/// `hint` says what it is, on hover over the field.
+fn number_row(
+    ui: &mut Ui,
+    (label, hint): (&str, &str),
+    id: &'static str,
+    v: &mut f64,
+    (suffix, decimals, step): (&str, usize, f64),
+    (lo, hi): (f64, f64),
+) {
     widgets::label_row(ui, label, LABEL_W, |ui| {
-        if let Some(n) = widgets::spin_plain(ui, ("cutting", id), *v, suffix, decimals, 80.0, step, lo, &[]) {
+        let r = ui.scope(|ui| widgets::spin_plain(ui, ("cutting", id), *v, suffix, decimals, 80.0, step, lo, &[]));
+        r.response.on_hover_text(hint);
+        if let Some(n) = r.inner {
             *v = n.clamp(lo, hi);
         }
     });
@@ -46,10 +56,15 @@ fn popup_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
     let mut c: PopUpChoice = crate::panels::pstate(&ctx, "cutting-popup");
-    number_row(ui, tl!("Base Width"), "popup-base", &mut c.opt.base_pct, (" %", 1, 1.0), BASE_PCT);
-    number_row(ui, tl!("Strut Width"), "popup-strut", &mut c.opt.strut_mm, (" mm", 2, 0.5), STRUT_MM);
-    number_row(ui, tl!("Dash Pitch"), "popup-dash", &mut c.opt.dash_mm, (" mm", 2, 0.25), DASH_MM);
-    number_row(ui, tl!("Margin"), "popup-margin", &mut c.opt.margin_mm, (" mm", 1, 1.0), MARGIN_MM);
+    super::intro(ui, tl!("Makes the selected design into a card that folds in half, the design standing up when the card is opened."));
+    let base = tl!("A bar under the design, as a share of its height, so every part stands on one straight fold.");
+    number_row(ui, (tl!("Base Width"), base), "popup-base", &mut c.opt.base_pct, (" %", 1, 1.0), BASE_PCT);
+    let strut = tl!("The narrow strips from the top of each part to a fold on the back of the card, holding it upright.");
+    number_row(ui, (tl!("Strut Width"), strut), "popup-strut", &mut c.opt.strut_mm, (" mm", 2, 0.5), STRUT_MM);
+    let dash = tl!("The folds are cut as dashes this long, with gaps as long, so the card bends along them.");
+    number_row(ui, (tl!("Dash Pitch"), dash), "popup-dash", &mut c.opt.dash_mm, (" mm", 2, 0.25), DASH_MM);
+    let margin = tl!("How much larger than the pop-up the card is on each side.");
+    number_row(ui, (tl!("Margin"), margin), "popup-margin", &mut c.opt.margin_mm, (" mm", 1, 1.0), MARGIN_MM);
     let one = popup_selected(app);
     let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
     let label = if one { tl!("Apply to Selected Pop Up") } else { tl!("Make Pop Up") };
@@ -69,9 +84,7 @@ fn popup_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             Err(e) => (true, e),
         });
     }
-    if !selected {
-        widgets::dim_label(ui, tl!("Select the design to pop up."));
-    }
+    super::select_hint(ui, selected, "Select the design to pop up.");
     if let Some((bad, note)) = &c.note {
         ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
     }

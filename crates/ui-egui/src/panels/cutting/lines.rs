@@ -20,8 +20,12 @@ pub const WEEDING_ID: &str = "cuttingWeeding";
 /// job (not added to the art), so vinyl's waste comes away easily.
 fn weeding_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let s = &info["settings"];
+    super::intro(
+        ui,
+        tl!("For vinyl: extra cuts that make the waste round the design easy to peel away. They are added to the cut, not to your art."),
+    );
     let boxed = s["weedBox"].as_bool() == Some(true);
-    if widgets::check(ui, tl!("Weed Box"), boxed, true) {
+    if super::check_hint(ui, "Weed Box", boxed, "A box cut round the design, Margin mm out.") {
         set(app, json!({ "weedBox": !boxed }));
     }
     if boxed {
@@ -33,17 +37,22 @@ fn weeding_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         });
     }
     let lines = s["weedLines"].as_bool() == Some(true);
-    if widgets::check(ui, tl!("Weed Lines"), lines, true) {
+    if super::check_hint(
+        ui,
+        "Weed Lines",
+        lines,
+        "Lines from the box in towards the design, stopping just short of it, so the waste comes off in strips.",
+    ) {
         set(app, json!({ "weedLines": !lines }));
     }
     if lines {
         let spacing = s["weedLineSpacingMm"].as_f64().unwrap_or(0.0);
-        widgets::label_row(ui, tl!("Every"), LABEL_W, |ui| {
+        widgets::label_row(ui, tl!("Spacing"), LABEL_W, |ui| {
             if let Some(v) = mm_field(ui, "weed-spacing", spacing, 0.0) {
                 set(app, json!({ "weedLineSpacingMm": v.clamp(0.0, 200.0) }));
             }
         });
-        widgets::dim_label(ui, tl!("0: one line in from the middle of each side."));
+        widgets::dim_label(ui, tl!("Spacing 0: one line in from the middle of each side."));
     }
 }
 
@@ -68,12 +77,13 @@ fn contour_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
     let mut c: ContourChoice = crate::panels::pstate(&ctx, "cutting-contour");
+    super::intro(ui, tl!("A cut line round the selected art, for stickers and printed shapes."));
     widgets::label_row(ui, tl!("Offset"), LABEL_W, |ui| {
         if let Some(v) = mm_field(ui, "contour-offset", c.offset_mm, 0.0) {
             c.offset_mm = v.clamp(0.0, vectorcraft_cutting::contour::MAX_OFFSET_MM);
         }
     });
-    if widgets::check(ui, tl!("Keep Holes"), c.holes, true) {
+    if super::check_hint(ui, "Keep Holes", c.holes, "Also cut round the holes inside the art. Off: only the outside is cut.") {
         c.holes = !c.holes;
     }
     let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
@@ -87,6 +97,16 @@ fn contour_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             Err(e) => (true, e),
         });
     }
+    super::select_hint(ui, selected, "Select the art first.");
+    // C18.18: the sticker sheet under a heading of its own, saying what it does.
+    widgets::divider(ui);
+    widgets::section_header(ui, tl!("Sticker Sheet"));
+    widgets::dim_label(
+        ui,
+        tl!(
+            "In one step: Print & Cut on, a kiss cut round each selected design at the Offset above, a print bleed, and a stronger cut round the whole sheet."
+        ),
+    );
     // C18.5: the contour, a print bleed, Print & Cut and a cut round the sheet, in one step.
     if ui
         .add_enabled(selected, egui::Button::new(tl!("Make Sticker Sheet")))
@@ -127,8 +147,9 @@ fn bridge_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
     let mut c: BridgeChoice = crate::panels::pstate(&ctx, "cutting-bridges");
+    super::intro(ui, tl!("Narrow bridges that keep the middles of letters (the inside of an O) joined to a stencil sheet."));
     let range = vectorcraft_cutting::bridges::WIDTH_MM;
-    widgets::label_row(ui, tl!("Bridges"), LABEL_W, |ui| {
+    widgets::label_row(ui, tl!("Bridge Width"), LABEL_W, |ui| {
         if let Some(v) = mm_field(ui, "bridge-width", c.width_mm, *range.start()) {
             c.width_mm = v.clamp(*range.start(), *range.end());
         }
@@ -153,6 +174,7 @@ fn bridge_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             Err(e) => (true, e),
         });
     }
+    super::select_hint(ui, selected, "Select the art first.");
     if let Some((bad, note)) = &c.note {
         ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
     }
@@ -207,10 +229,10 @@ mod tests {
         app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
         let texts = panel_texts(&mut app, &ctx, show_weeding);
         assert!(texts.iter().any(|t| t == "Weed Box") && texts.iter().any(|t| t == "Weed Lines"), "{texts:?}");
-        assert!(!texts.iter().any(|t| t == "Margin" || t == "Every"), "off: no numbers");
+        assert!(!texts.iter().any(|t| t == "Margin" || t == "Spacing"), "off: no numbers");
         app.run("cutting.settings.set", json!({"weedBox": true, "weedLines": true, "weedMarginMm": 5})).unwrap();
         let texts = panel_texts(&mut app, &ctx, show_weeding);
-        assert!(texts.iter().any(|t| t == "Margin") && texts.iter().any(|t| t == "Every"), "{texts:?}");
+        assert!(texts.iter().any(|t| t == "Margin") && texts.iter().any(|t| t == "Spacing"), "{texts:?}");
         assert!(app.run("cutting.settings.set", json!({"weedMarginMm": 80})).is_err(), "out of range");
     }
 

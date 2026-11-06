@@ -54,6 +54,27 @@ pub(crate) fn has_document(app: &VectorcraftApp, ui: &mut Ui) -> bool {
 }
 
 pub(crate) const LABEL_W: f32 = 80.0;
+/// The Cut Settings panel's dropdowns: one width, so their arrows line up.
+const CHOICE_W: f32 = 150.0;
+
+/// A feature panel's first line: what it does, in a sentence (dim, wrapped).
+pub(crate) fn intro(ui: &mut Ui, text: &str) {
+    widgets::dim_label(ui, text);
+    ui.add_space(4.0);
+}
+
+/// Under a button that needs a selection: what to select, while nothing is.
+pub(crate) fn select_hint(ui: &mut Ui, selected: bool, text: &str) {
+    if !selected {
+        let t = Tokens::get(ui.ctx());
+        ui.label(egui::RichText::new(tl!(text)).color(t.text_dim).italics());
+    }
+}
+
+/// A checkbox with its text after it and its meaning on hover; whether it was toggled.
+pub(crate) fn check_hint(ui: &mut Ui, label: &str, on: bool, hint: &str) -> bool {
+    widgets::check_tip(ui, label, on, true, tl!(hint))
+}
 /// A number field in the tool table.
 const CELL_W: f32 = 60.0;
 /// The tool tables' label column, wide enough for "Blade offset": with two [`TABLE_COL_W`]
@@ -84,7 +105,7 @@ fn job_settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let default = op_ids.iter().position(|o| s["defaultOp"] == *o).unwrap_or(0);
     // The operation of objects that, with their groups and layers, set none.
     widgets::label_row(ui, tl!("Default"), LABEL_W, |ui| {
-        if let Some(i) = widgets::dropdown(ui, ("cutting", "default"), ops[default], &ops, 120.0) {
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "default"), ops[default], &ops, CHOICE_W) {
             set(app, json!({ "defaultOp": op_ids.get(i).copied().unwrap_or("cut") }));
         }
     });
@@ -93,38 +114,35 @@ fn job_settings_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let grouping = grouping_ids.iter().position(|g| s["grouping"] == *g).unwrap_or(0);
     // Cut in groups, with a pause before each after the first to change the tool or material.
     widgets::label_row(ui, tl!("Groups"), LABEL_W, |ui| {
-        if let Some(i) = widgets::dropdown(ui, ("cutting", "grouping"), groupings[grouping], &groupings, 120.0) {
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "grouping"), groupings[grouping], &groupings, CHOICE_W) {
             set(app, json!({ "grouping": grouping_ids.get(i).copied().unwrap_or("none") }));
         }
     });
     // C18.1: layered vinyl cut back to what shows of each colour, the overlap under the next.
+    // Both switches are named beside their boxes (they were bare boxes under a label).
     if grouping > 0 {
-        let mut on = s["knockout"].as_bool().unwrap_or(false);
-        let hint = tl!("Each colour is cut only where it shows, running the Overlap under the colours above it, so stacked vinyl isn't thick.");
-        widgets::label_row(ui, tl!("Knockout"), LABEL_W, |ui| {
-            if ui.checkbox(&mut on, "").on_hover_text(hint).changed() {
-                set(app, json!({ "knockout": on }));
-            }
-            if on {
+        let on = s["knockout"].as_bool().unwrap_or(false);
+        let hint = "Each colour is cut only where it shows, running the Overlap under the colours above it, so stacked vinyl isn't thick.";
+        if check_hint(ui, "Knockout", on, hint) {
+            set(app, json!({ "knockout": !on }));
+        }
+        if on {
+            // Indented under its switch.
+            ui.horizontal(|ui| {
+                ui.add_space(20.0);
+                widgets::dim_label(ui, tl!("Overlap"));
                 let (lo, hi) = vectorcraft_cutjob::CuttingSettings::KNOCKOUT_MM;
                 if let Some(v) = mm_field(ui, "knockout-overlap", s["knockoutOverlapMm"].as_f64().unwrap_or(0.5), lo) {
                     set(app, json!({ "knockoutOverlapMm": v.clamp(lo, hi) }));
                 }
-            }
-        });
+            });
+        }
         // C18.10: a cross cut in the same place in every group, to line the layers up by.
-        let mut marks = s["alignMarks"].as_bool().unwrap_or(false);
-        widgets::label_row(ui, tl!("Align Marks"), LABEL_W, |ui| {
-            if ui
-                .checkbox(&mut marks, "")
-                .on_hover_text(tl!(
-                    "A small cross cut in the same place on every colour, outside the design: lay each cross over the last and the layers line up."
-                ))
-                .changed()
-            {
-                set(app, json!({ "alignMarks": marks }));
-            }
-        });
+        let marks = s["alignMarks"].as_bool().unwrap_or(false);
+        let hint = "A small cross cut in the same place on every colour, outside the design: lay each cross over the last and the layers line up.";
+        if check_hint(ui, "Align Marks", marks, hint) {
+            set(app, json!({ "alignMarks": !marks }));
+        }
     }
 }
 
@@ -161,70 +179,82 @@ fn group_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let names: Vec<&str> = choices.iter().map(String::as_str).collect();
     let doc_cut = &info["settings"]["operations"]["cut"];
     let mut error = None;
-    // A grid, so the numbers line up under their headings: a group's name on a row of its own,
-    // its material, force and passes on the next.
-    egui::Grid::new(("cutting", "groups")).num_columns(3).spacing([6.0, 3.0]).show(ui, |ui| {
-        for heading in ["Material", "Force", "Passes"] {
-            widgets::dim_label(ui, tl!(heading));
+    // Each group a block: its name with whether it is cut and whether the machine pauses before
+    // it, then its material, force and passes, each field named (C18.18: the switches no longer
+    // sit under the Force and Passes headings).
+    let (f_lo, f_hi) = silhouette::FORCE;
+    for (i, g) in groups.iter().enumerate() {
+        let Some(name) = g["name"].as_str() else { continue };
+        let setup = &g["setup"];
+        if i > 0 {
+            ui.add_space(4.0);
         }
-        ui.end_row();
-        for (i, g) in groups.iter().enumerate() {
-            let Some(name) = g["name"].as_str() else { continue };
-            let setup = &g["setup"];
+        // C14.3: whether the group is cut, and (after the first) whether the machine pauses
+        // before it.
+        let on = g["on"].as_bool() != Some(false);
+        ui.horizontal(|ui| {
             let changed = if setup["changed"] == true { format!(" ({})", tl!("changed")) } else { String::new() };
-            ui.label(egui::RichText::new(format!("{}. {name}{changed}", i + 1)).strong());
-            // C14.3: whether the group is cut, and (after the first) whether the machine pauses
-            // before it.
-            let on = g["on"].as_bool() != Some(false);
-            if widgets::check(ui, tl!("On"), on, true) {
+            let title = format!("{}. {name}{changed}", i + 1);
+            let tip = tl!("Off: this group isn't cut.");
+            if widgets::check_tip(ui, &title, on, true, tip) {
                 error = app.run("cutting.group.set", json!({ "group": name, "on": !on })).err();
             }
             if i > 0 {
-                let pause = g["pause"].as_bool() != Some(false);
-                if widgets::check(ui, tl!("Pause"), pause, on) {
-                    error = app.run("cutting.group.set", json!({ "group": name, "pause": !pause })).err();
-                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let pause = g["pause"].as_bool() != Some(false);
+                    let tip = tl!("The machine stops before this group, so the tool or material can be changed; press Continue in Send to Cutter.");
+                    if widgets::check_tip(ui, "Pause before", pause, on, tip) {
+                        error = app.run("cutting.group.set", json!({ "group": name, "pause": !pause })).err();
+                    }
+                });
             }
-            ui.end_row();
-            let shown = if setup.is_null() {
-                choices.first().map(String::as_str).unwrap_or_default()
-            } else {
-                setup["material"].as_str().unwrap_or(tl!("Set by hand"))
-            };
-            let cut = if setup.is_null() { doc_cut } else { &setup["cut"] };
-            if let Some(k) = widgets::dropdown_names(ui, ("cutting", "group", i, "material"), shown, &names, 130.0) {
-                error = choose_group_material(app, name, &choices, k).err();
-            }
-            let (f_lo, f_hi) = silhouette::FORCE;
-            let step = silhouette::force_step(cut["force"].as_f64().unwrap_or(0.3));
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", "group", i, "force"), f64::from(step), "", 0, 44.0, 1.0, f64::from(f_lo), &[]) {
-                let force = silhouette::force_from_step(v.clamp(f64::from(f_lo), f64::from(f_hi)).round() as u32);
-                error = app.run("cutting.group.set", json!({ "group": name, "operations": { "cut": { "force": force } } })).err();
-            }
-            let passes = cut["passes"].as_f64().unwrap_or(1.0);
-            if let Some(v) = widgets::spin_plain(ui, ("cutting", "group", i, "passes"), passes, "", 0, 44.0, 1.0, 1.0, &[]) {
-                error =
-                    app.run("cutting.group.set", json!({ "group": name, "operations": { "cut": { "passes": v.clamp(1.0, 10.0).round() } } })).err();
-            }
-            ui.end_row();
-        }
-    });
+        });
+        let shown = if setup.is_null() {
+            choices.first().map(String::as_str).unwrap_or_default()
+        } else {
+            setup["material"].as_str().unwrap_or(tl!("Set by hand"))
+        };
+        let cut = if setup.is_null() { doc_cut } else { &setup["cut"] };
+        // Indented under the group's name, so its rows read as its own.
+        ui.add_enabled_ui(on, |ui| {
+            ui.indent(("cutting", "group-rows", i), |ui| {
+                widgets::label_row(ui, tl!("Material"), LABEL_W - 14.0, |ui| {
+                    if let Some(k) = widgets::dropdown_names(ui, ("cutting", "group", i, "material"), shown, &names, CHOICE_W) {
+                        error = choose_group_material(app, name, &choices, k).err();
+                    }
+                });
+                widgets::label_row(ui, tl!("Force"), LABEL_W - 14.0, |ui| {
+                    let step = silhouette::force_step(cut["force"].as_f64().unwrap_or(0.3));
+                    if let Some(v) =
+                        widgets::spin_plain(ui, ("cutting", "group", i, "force"), f64::from(step), "", 0, 44.0, 1.0, f64::from(f_lo), &[])
+                    {
+                        let force = silhouette::force_from_step(v.clamp(f64::from(f_lo), f64::from(f_hi)).round() as u32);
+                        error = app.run("cutting.group.set", json!({ "group": name, "operations": { "cut": { "force": force } } })).err();
+                    }
+                    widgets::dim_label(ui, tl!("Passes"));
+                    let passes = cut["passes"].as_f64().unwrap_or(1.0);
+                    if let Some(v) = widgets::spin_plain(ui, ("cutting", "group", i, "passes"), passes, "", 0, 44.0, 1.0, 1.0, &[]) {
+                        error = app
+                            .run("cutting.group.set", json!({ "group": name, "operations": { "cut": { "passes": v.clamp(1.0, 10.0).round() } } }))
+                            .err();
+                    }
+                });
+            });
+        });
+    }
     if let Some(e) = error {
         ui.label(egui::RichText::new(e).color(t.bleed));
     }
-    widgets::dim_label(
-        ui,
-        tl!(
-            "Force and passes of the cut; groups on the document's setup use the tool settings below. Pause: the machine stops before the group so the tool or material can be changed."
-        ),
-    );
+    widgets::dim_label(ui, tl!("A group on Document's setup is cut with the tool settings in Send to Cutter…."));
 }
 
 /// Cut, Score, No Cut or the group's or layer's, for the selected objects, and what they are cut
 /// along: rows only while something is selected (C9.1: one dropdown, at the top).
 fn selection_row(app: &mut VectorcraftApp, ui: &mut Ui) {
     let objects = app.session.execute("cutting.op.get", &json!({})).ok().and_then(|r| r["objects"].as_array().cloned()).unwrap_or_default();
+    widgets::section_header(ui, tl!("Selection"));
     if objects.is_empty() {
+        select_hint(ui, false, "Select objects to choose how they are cut.");
         return;
     }
     let labels = ["Cut", "Cut Outline", "Score", "Perforate", "No Cut", "As Its Group or Layer"];
@@ -238,8 +268,8 @@ fn selection_row(app: &mut VectorcraftApp, ui: &mut Ui) {
         None
     };
     let shown = current.and_then(|i| labels.get(i)).copied().unwrap_or("Mixed");
-    widgets::label_row(ui, tl!("Selected"), LABEL_W, |ui| {
-        if let Some(i) = widgets::dropdown(ui, ("cutting", "selection-op"), shown, &labels, 150.0) {
+    widgets::label_row(ui, tl!("Cut As"), LABEL_W, |ui| {
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "selection-op"), shown, &labels, CHOICE_W) {
             let _ = app.run("cutting.op.set", json!({ "op": ids.get(i).copied().unwrap_or("inherit") }));
         }
     });
@@ -248,7 +278,7 @@ fn selection_row(app: &mut VectorcraftApp, ui: &mut Ui) {
     let edges = ["path", "stroke"];
     let shown = edges.iter().position(|e| all(&|o| o["edge"] == *e)).and_then(|i| labels.get(i)).copied().unwrap_or("Mixed");
     widgets::label_row(ui, tl!("Cut Along"), LABEL_W, |ui| {
-        if let Some(i) = widgets::dropdown(ui, ("cutting", "selection-edge"), shown, &labels, 150.0) {
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "selection-edge"), shown, &labels, CHOICE_W) {
             let _ = app.run("cutting.edge.set", json!({ "edge": edges.get(i).copied().unwrap_or("path") }));
         }
     });
@@ -348,7 +378,7 @@ fn advanced_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let now = s["ordering"].as_str().unwrap_or("insideFirst");
     let shown = orders.iter().position(|o| o.id() == now).unwrap_or(0);
     widgets::label_row(ui, tl!("Cut Order"), LABEL_W, |ui| {
-        if let Some(i) = widgets::dropdown(ui, ("cutting", "ordering"), labels.get(shown).copied().unwrap_or_default(), &labels, 160.0)
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "ordering"), labels.get(shown).copied().unwrap_or_default(), &labels, CHOICE_W)
             && let Some(o) = orders.get(i)
         {
             set(app, json!({ "ordering": o.id() }));
@@ -457,7 +487,8 @@ fn send_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             let paths = if n == 1 { tl!("path") } else { tl!("paths") };
             let mut line = format!("{n} {paths} · {:.0} mm · {:.0} s", made.stats.blade_mm, made.sim.total_seconds);
             if warnings > 0 {
-                line = format!("{line} · {warnings} {}", tl!("warnings"));
+                let word = if warnings == 1 { tl!("warning") } else { tl!("warnings") };
+                line = format!("{line} · {warnings} {word}");
             }
             ui.label(egui::RichText::new(line).color(if warnings > 0 { t.warning } else { t.text_dim }));
         }
@@ -810,11 +841,14 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     send_rows(app, ui);
     pixel_rows(app, ui);
     widgets::divider(ui);
+    // C18.18: what is set for the selection and what for the whole job, each under its heading.
     selection_row(app, ui);
+    widgets::divider(ui);
+    widgets::section_header(ui, tl!("Whole Job"));
     job_settings_rows(app, ui, &info);
     widgets::divider(ui);
     if info["settings"]["grouping"] != "none" {
-        widgets::section_header(ui, tl!("Groups"));
+        widgets::section_header(ui, tl!("Cutting Order"));
         group_rows(app, ui, &info);
         widgets::divider(ui);
     }
@@ -945,8 +979,10 @@ mod tests {
         app.run("shape.rectangle", json!({"x": 100, "y": 100, "width": 50, "height": 50})).unwrap();
         app.run("cutting.settings.set", json!({"grouping": "layer"})).unwrap();
         let texts = panel_texts(&mut app, &ctx);
-        assert_eq!(texts.iter().filter(|t| *t == "On").count(), 2, "{texts:?}");
-        assert_eq!(texts.iter().filter(|t| *t == "Pause").count(), 1, "not before the first: {texts:?}");
+        // C18.18: each group's switch carries its name; Pause before, not before the first.
+        assert!(texts.iter().any(|t| t == "1. Layer 1") && texts.iter().any(|t| t == "2. Gold"), "{texts:?}");
+        assert_eq!(texts.iter().filter(|t| *t == "Pause before").count(), 1, "not before the first: {texts:?}");
+        assert!(!texts.iter().any(|t| t.contains("tool settings below")), "they are in Send to Cutter: {texts:?}");
         let first = app.session.execute("cutting.groups", &json!({})).unwrap()["groups"][0]["name"].clone();
         app.run("cutting.group.set", json!({"group": first, "on": false})).unwrap();
         assert_eq!(app.session.execute("cutting.job", &json!({})).unwrap()["job"]["paths"].as_array().unwrap().len(), 1);
@@ -1118,15 +1154,16 @@ mod tests {
         assert!(!tools.iter().any(|t| t.contains("(1–") || t.contains("machine's)")), "{tools:?}");
         assert!(tools.iter().any(|t| t == "Save as Material…") && !tools.iter().any(|t| t == "Material name"), "{tools:?}");
         let texts = panel_texts(&mut app, &ctx);
-        assert!(!texts.iter().any(|t| t == "Selected"), "nothing selected: {texts:?}");
+        assert!(!texts.iter().any(|t| t == "Cut As"), "nothing selected: {texts:?}");
+        assert!(texts.iter().any(|t| t == "Select objects to choose how they are cut."), "{texts:?}");
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
         let texts = panel_texts(&mut app, &ctx);
         let at = |label: &str| texts.iter().position(|t| t == label).unwrap();
-        assert!(at("Selected") < at("Default"), "{texts:?}");
+        assert!(at("Selection") < at("Cut As") && at("Cut As") < at("Whole Job") && at("Whole Job") < at("Default"), "{texts:?}");
         assert!(texts.iter().any(|t| t == "As Its Group or Layer"), "{texts:?}");
         app.run("cutting.op.set", json!({"op": "score"})).unwrap();
         let texts = panel_texts(&mut app, &ctx);
-        let i = texts.iter().position(|t| t == "Selected").unwrap();
+        let i = texts.iter().position(|t| t == "Cut As").unwrap();
         assert_eq!(texts.get(i + 1).map(String::as_str), Some("Score"), "{texts:?}");
         super::super::set_pstate(&ctx, "cutting-material-saving", Some(String::new()));
         let tools = tool_texts(&mut app, &ctx);

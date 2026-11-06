@@ -42,6 +42,7 @@ fn sketch_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
     let mut c: SketchChoice = crate::panels::pstate(&ctx, "cutting-sketch");
+    super::intro(ui, tl!("Fills the selected shapes with lines for a pen to draw, since a pen draws lines, not areas."));
     let patterns = [Pattern::Lines, Pattern::Concentric, Pattern::Spiral];
     let labels = ["Lines", "Concentric", "Spiral"];
     let shown = patterns.iter().position(|p| *p == c.pattern).unwrap_or(0);
@@ -63,14 +64,16 @@ fn sketch_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
                 c.angle_deg = v.clamp(-180.0, 180.0);
             }
         });
-        if widgets::check(ui, tl!("Cross-Hatch"), c.cross, true) {
+        if super::check_hint(ui, "Cross-Hatch", c.cross, "A second set of lines across the first.") {
             c.cross = !c.cross;
         }
     }
     let selected = app.session.active().is_some_and(|st| !st.selection.is_empty());
     if ui
         .add_enabled(selected, egui::Button::new(tl!("Add Sketch Fill")))
-        .on_hover_text(tl!("Lines across the selected shapes for a pen to draw. Choose the Pen as the tool in Cut Settings to draw them."))
+        .on_hover_text(tl!(
+            "Lines across the selected shapes for a pen to draw. Choose the Pen as the tool in Send to Cutter's Tool Settings to draw them."
+        ))
         .clicked()
     {
         let p = json!({ "pattern": c.pattern.id(), "spacingMm": c.spacing_mm, "angleDeg": c.angle_deg, "cross": c.cross });
@@ -79,6 +82,7 @@ fn sketch_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             Err(e) => (true, e),
         });
     }
+    super::select_hint(ui, selected, "Select the shapes to fill first.");
     if let Some((bad, note)) = &c.note {
         ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
     }
@@ -110,6 +114,7 @@ fn stone_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
     let mut c: StoneChoice = crate::panels::pstate(&ctx, "cutting-stones");
+    super::intro(ui, tl!("A template sheet with a hole for each rhinestone, along the selected shapes."));
     // Stone sizes are names (SS6…), shown as they are; any other hole is Custom.
     let mut sizes: Vec<String> = STONES.iter().map(|(id, mm)| format!("{} ({mm} mm)", id.to_uppercase())).collect();
     sizes.push(tl!("Custom").to_string());
@@ -156,6 +161,7 @@ fn stone_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             Err(e) => (true, e),
         });
     }
+    super::select_hint(ui, selected, "Select the shapes first.");
     if let Some((bad, note)) = &c.note {
         ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
     }
@@ -211,11 +217,12 @@ fn puzzle_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
     let mut c: PuzzleChoice = crate::panels::pstate(&ctx, "cutting-puzzle");
+    super::intro(ui, tl!("Jigsaw cut lines over the selected art, or the whole artboard when nothing is selected. The art stays, to be printed."));
     let (lo, hi) = vectorcraft_cutting::puzzle::ROWS;
     let rows = (f64::from(lo), f64::from(hi));
     count_row(ui, tl!("Rows"), "puzzle-rows", &mut c.rows, "", rows);
     count_row(ui, tl!("Columns"), "puzzle-cols", &mut c.cols, "", rows);
-    if widgets::check(ui, tl!("Curvature"), c.curvature, true) {
+    if super::check_hint(ui, "Curvature", c.curvature, "Knobs and waves. Off: a plain grid of rectangles.") {
         c.curvature = !c.curvature;
     }
     if c.curvature {
@@ -245,7 +252,8 @@ fn puzzle_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     if ui.button(label).on_hover_text(tl!("A jigsaw's cut lines on top of the art, which stays as it is to be printed.")).clicked() {
         run(app, &mut c);
     }
-    if ui.add_enabled(one, egui::Button::new(tl!("Randomize Selected Puzzle"))).clicked() {
+    // Only with a puzzle selected: a greyed button that rarely applies is noise.
+    if one && ui.button(tl!("Randomize Selected Puzzle")).on_hover_text(tl!("The same puzzle with another layout of knobs and wobble.")).clicked() {
         // Another seed, the next in a fixed sequence: deterministic, never the same twice running.
         c.seed = c.seed.wrapping_mul(1_103_515_245).wrapping_add(12_345) % 1_000_000;
         run(app, &mut c);
@@ -335,9 +343,11 @@ mod tests {
         let ctx = egui::Context::default();
         app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
         let texts = panel_texts(&mut app, &ctx, show_puzzle);
-        for label in ["Add Puzzle over Artboard", "Curvature", "Curve", "Ripple", "Wobble", "Randomize Selected Puzzle"] {
+        for label in ["Add Puzzle over Artboard", "Curvature", "Curve", "Ripple", "Wobble"] {
             assert!(texts.iter().any(|t| t == label), "{label}: {texts:?}");
         }
+        // C18.18: Randomize only once a puzzle is selected.
+        assert!(!texts.iter().any(|t| t == "Randomize Selected Puzzle"), "{texts:?}");
         let r = app.run("cutting.puzzle", json!({})).unwrap();
         assert_eq!(r["pieces"], json!(16));
         app.run("select.set", json!({"ids": [r["id"]]})).unwrap();

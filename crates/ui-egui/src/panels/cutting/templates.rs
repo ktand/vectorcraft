@@ -102,6 +102,7 @@ fn template_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let ctx = ui.ctx().clone();
     let mut c: TemplateChoice = crate::panels::pstate(&ctx, "cutting-templates");
     let Some(kind) = c.kind() else { return };
+    super::intro(ui, tl!("Boxes, cards and other nets made to the size you give, ready to cut and fold."));
     widgets::label_row(ui, tl!("Template"), LABEL_W, |ui| {
         let chosen = widgets::combo(ui, ("cutting", "template-kind"), tl!(kind.name), 160.0, |ui| {
             let mut chosen = None;
@@ -129,7 +130,7 @@ fn template_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
         Ok(net) => {
             let (w, h) = net.size();
             picture(ui, &net, Vec2::new(ui.available_width().min(260.0), 110.0));
-            widgets::dim_label(ui, &format!("{w:.0} × {h:.0} mm"));
+            widgets::dim_label(ui, &format!("{} {w:.0} × {h:.0} mm", tl!("Flat size:")));
         }
         Err(e) => {
             ui.label(egui::RichText::new(e).color(t.warning));
@@ -202,7 +203,10 @@ fn template_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
 
 /// Papercraft from a 3D model (C15.6): the size, and the button that picks the model.
 fn papercraft_rows(app: &mut VectorcraftApp, ui: &mut Ui, c: &mut TemplateChoice) {
-    ui.separator();
+    // C18.18: a heading of its own, as it isn't one of the templates above.
+    widgets::divider(ui);
+    widgets::section_header(ui, tl!("Papercraft"));
+    widgets::dim_label(ui, tl!("Unfold a 3D model (.obj or .stl) into numbered pieces to cut, fold and glue."));
     if c.craft_mm <= 0.0 {
         c.craft_mm = 150.0;
     }
@@ -292,7 +296,7 @@ mod tests {
             assert!(t.iter().any(|x| x == label), "{label}: {t:?}");
         }
         // The first template, a card-deck tuck box: 17.84 + 2 × 63.3 + 2 × 22.3 across.
-        assert!(t.iter().any(|x| x == "189 × 162 mm"), "{t:?}");
+        assert!(t.iter().any(|x| x == "Flat size: 189 × 162 mm"), "{t:?}");
         let r = app.run("cutting.template", json!({"kind": "tray"})).unwrap();
         app.run("select.set", json!({"ids": [r["id"]]})).unwrap();
         assert!(template_selected(&app));

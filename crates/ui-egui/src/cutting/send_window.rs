@@ -24,6 +24,14 @@ const OPEN_HEIGHT: f32 = 0.75;
 const SIDE_W: f32 = 290.0;
 /// Between the preview and the column, px.
 const GAP: f32 = 12.0;
+/// The playback under the preview: its buttons, slider and line, px.
+const PLAYBACK_H: f32 = 76.0;
+/// The column's foot (Send and the cut's progress) until it has been drawn once, px.
+const FOOTER_H: f32 = 72.0;
+
+fn footer_key() -> egui::Id {
+    egui::Id::unique("cutting-send-footer-h")
+}
 
 fn open_key() -> egui::Id {
     egui::Id::unique("cutting-send-window-open")
@@ -245,28 +253,50 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
         .show(ctx, |ui| {
             let room = ui.available_size().max(min);
             ui.horizontal_top(|ui| {
-                // The preview fills what the column leaves, the mat's proportions kept.
-                let size = crate::canvas::cutting_overlay::preview_size(app, room.x - GAP - SIDE_W, room.y);
-                let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-                ui.painter().rect_filled(rect, 4.0, Tokens::get(ui.ctx()).pasteboard);
-                crate::canvas::cutting_overlay::preview(app, ui.painter(), rect);
+                // The preview fills what the column leaves, the mat's proportions kept; the
+                // playback that moves the blade over it right under it (C18.18: it was in the
+                // column, away from what it plays).
+                ui.vertical(|ui| {
+                    let size = crate::canvas::cutting_overlay::preview_size(app, room.x - GAP - SIDE_W, room.y - PLAYBACK_H);
+                    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 4.0, Tokens::get(ui.ctx()).pasteboard);
+                    crate::canvas::cutting_overlay::preview(app, ui.painter(), rect);
+                    if let Some(job) = crate::cutting::job(app, ui.ctx())
+                        && let Ok(made) = &*job
+                        && !made.job.paths.is_empty()
+                    {
+                        ui.set_max_width(size.x);
+                        crate::cutting::playback_controls(ui, &made.sim, false);
+                    }
+                });
                 ui.add_space((GAP - ui.spacing().item_spacing.x).max(0.0));
                 ui.vertical(|ui| {
                     ui.set_width(SIDE_W);
-                    // The column scrolls when the window is shorter than it.
-                    egui::ScrollArea::vertical().id_salt("cutting-send-side").max_height(room.y).show(ui, |ui| {
+                    // The column scrolls when the window is shorter than it; Send and the cut's
+                    // progress stay at its foot, never scrolled away (C18.18).
+                    // As tall as it was last drawn: a pause, a progress bar or a note make it taller.
+                    let foot = ctx.data(|d| d.get_temp::<f32>(footer_key())).unwrap_or(FOOTER_H);
+                    egui::ScrollArea::vertical().id_salt("cutting-send-side").max_height((room.y - foot).max(120.0)).show(ui, |ui| {
+                        widgets::section_header(ui, tl!("Job"));
                         job_rows(app, ui);
-                        widgets::divider(ui);
                         sheet_rows(app, ui, &status);
+                        widgets::divider(ui);
+                        widgets::section_header(ui, tl!("Cutter"));
                         cutter_rows(app, ui, &status);
                         widgets::divider(ui);
                         // C14.8: tuned here, the test cut under them.
                         crate::panels::cutting::tool_settings(app, ui);
                         widgets::divider(ui);
+                        widgets::section_header(ui, tl!("Test Cut"));
                         test_rows(app, ui, &status);
                         widgets::divider(ui);
                         history_rows(app, ui, &status);
                     });
+                    let top = ui.cursor().top();
+                    widgets::divider(ui);
+                    send_rows(app, ui, &status);
+                    let h = ui.cursor().top() - top;
+                    ctx.data_mut(|d| d.insert_temp(footer_key(), h));
                 });
             });
         });
@@ -292,18 +322,9 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
     match &*job {
         Ok(made) => {
             let (j, s) = (&made.job, &made.stats);
-            ui.label(format!("{}: {}", tl!("Paths"), s.path_count));
-            ui.label(format!("{}: {:.0} mm", tl!("Cut length"), s.blade_mm));
-            ui.label(format!("{}: {:.0} mm", tl!("Travel"), s.travel_mm));
-            ui.label(format!("{}: {:.0} s", tl!("Estimated time"), made.sim.total_seconds));
-            // C12.5: a Print & Cut job, and how far apart the marks it looks for are.
-            if let Some(r) = &j.registration {
-                ui.label(egui::RichText::new(format!("{}: {:.0} × {:.0} mm", tl!("Print & Cut, marks"), r.size_mm[0], r.size_mm[1])).color(t.accent))
-                    .on_hover_text(tl!("The cutter finds the printed registration marks first (about 20 s), then cuts. Load the printed sheet at the mat's top-left corner, the square mark at the top left."));
-            }
             // C18.3: the material it takes and, where the material has a price, what it costs.
-            if let Some(st) = app.session.active() {
-                let settings = vectorcraft_cutting::settings(&st.doc);
+            let settings = app.session.active().map(|st| vectorcraft_cutting::settings(&st.doc));
+            let quote = settings.map(|settings| {
                 let listed = app.session.execute("cutting.materials", &json!({})).unwrap_or_default();
                 let prices: Vec<(String, vectorcraft_cutjob::Price)> = listed["materials"]
                     .as_array()
@@ -312,16 +333,47 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
                     .filter_map(|m| Some((m["name"].as_str()?.to_string(), vectorcraft_cutjob::Price::from_value(&m["price"])?)))
                     .collect();
                 let price_of = |name: &str| prices.iter().find(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, p)| *p);
-                let q = vectorcraft_cutting::quote::quote(&settings, j, &price_of);
+                vectorcraft_cutting::quote::quote(&settings, j, &price_of)
+            });
+            // C18.18: the numbers in two columns, each name beside its value.
+            let mut rows = vec![
+                (tl!("Paths"), s.path_count.to_string()),
+                (tl!("Cut length"), format!("{:.0} mm", s.blade_mm)),
+                (tl!("Travel"), format!("{:.0} mm", s.travel_mm)),
+                (tl!("Estimated time"), duration(made.sim.total_seconds)),
+            ];
+            if let Some(q) = &quote {
                 let metres: f64 = q.shares.iter().map(|g| g.metres).sum();
                 let sheets: f64 = q.shares.iter().map(|g| g.sheets).sum();
-                let used = if metres > 0.0 { format!("{metres:.2} m") } else { format!("{sheets:.0} {}", tl!("sheets")) };
-                match q.cost {
-                    Some(c) => ui.label(format!("{}: {used} · {}: {c:.2}", tl!("Material"), tl!("Cost"))),
-                    None => {
-                        ui.label(format!("{}: {used}", tl!("Material"))).on_hover_text(tl!("Give the material a price in Cut Settings for the cost."))
-                    }
+                let used = if metres > 0.0 {
+                    format!("{metres:.2} m")
+                } else if (sheets - 1.0).abs() < 1e-9 {
+                    tl!("1 sheet").to_string()
+                } else {
+                    format!("{sheets:.0} {}", tl!("sheets"))
                 };
+                rows.push((tl!("Material"), used));
+                if let Some(c) = q.cost {
+                    rows.push((tl!("Cost"), format!("{c:.2}")));
+                }
+            }
+            let priced = quote.as_ref().is_some_and(|q| q.cost.is_some());
+            egui::Grid::new("cutting-send-stats").num_columns(2).spacing([12.0, 2.0]).show(ui, |ui| {
+                for (name, value) in rows {
+                    let r = widgets::dim_label(ui, name);
+                    if name == tl!("Material") && !priced {
+                        r.on_hover_text(tl!("Give one of your own materials a price under Tool Settings › Material Details for the cost."));
+                    }
+                    ui.label(value);
+                    ui.end_row();
+                }
+            });
+            // C12.5: a Print & Cut job, and how far apart the marks it looks for are.
+            if let Some(r) = &j.registration {
+                ui.label(egui::RichText::new(format!("{}: {:.0} × {:.0} mm", tl!("Print & Cut, marks"), r.size_mm[0], r.size_mm[1])).color(t.accent))
+                    .on_hover_text(tl!("The cutter finds the printed registration marks first (about 20 s), then cuts. Load the printed sheet at the mat's top-left corner, the square mark at the top left."));
+            }
+            if quote.is_some() {
                 // C18.8: a page to print for the machine and the press.
                 ui.horizontal(|ui| {
                     if ui
@@ -361,9 +413,6 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
                     }
                 });
             }
-            if !j.paths.is_empty() {
-                crate::cutting::playback_controls(ui, &made.sim, false);
-            }
         }
         Err(e) => {
             ui.label(egui::RichText::new(e).color(t.bleed));
@@ -384,6 +433,21 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
                 app.status(e);
             }
         });
+    }
+}
+
+/// `seconds` as a person reads a cut's length: "45 s", "3 min 20 s", "1 h 5 min".
+fn duration(seconds: f64) -> String {
+    if !seconds.is_finite() || seconds < 0.0 {
+        return "—".into();
+    }
+    // Finite and at least 0: the cast is exact for any cut's length (it saturates past u64).
+    let s = seconds.round() as u64;
+    match (s / 3600, (s % 3600) / 60, s % 60) {
+        (0, 0, sec) => format!("{sec} s"),
+        (0, min, 0) => format!("{min} min"),
+        (0, min, sec) => format!("{min} min {sec} s"),
+        (h, min, _) => format!("{h} h {min} min"),
     }
 }
 
@@ -423,7 +487,7 @@ fn history_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
                 other => (other.to_string(), true),
             };
             let material = e["material"].as_str().map_or_else(|| tl!("no material").to_string(), str::to_string);
-            let took = e["seconds"].as_f64().map_or(String::new(), |s| format!(" · {s:.0} s"));
+            let took = e["seconds"].as_f64().map_or(String::new(), |s| format!(" · {}", duration(s)));
             ui.label(egui::RichText::new(format!("{material} · {shown}{took}")).color(if bad { t.bleed } else { t.text_dim }));
             ui.horizontal(|ui| {
                 if let Some(i) = e["index"].as_u64()
@@ -487,7 +551,7 @@ fn test_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     let m: Machines = crate::panels::pstate(&ctx, "cutting-machines");
     let found = m.found.clone().unwrap_or_default();
     let corners = ["Top Left", "Top Right", "Bottom Left", "Bottom Right"];
-    widgets::label_row(ui, tl!("Test at"), 60.0, |ui| {
+    widgets::label_row(ui, tl!("Test at"), crate::panels::cutting::LABEL_W, |ui| {
         if let Some(i) = widgets::dropdown(ui, ("cutting", "test", "corner"), corners.get(c.corner).copied().unwrap_or(corners[0]), &corners, 140.0) {
             c.corner = i;
         }
@@ -502,7 +566,7 @@ fn test_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
         let mut names: Vec<&str> = vec![tl!("Document's setup")];
         names.extend(groups.iter().map(String::as_str));
         let shown = c.group.and_then(|g| groups.get(g)).map_or(names[0], String::as_str);
-        widgets::label_row(ui, tl!("Setup"), 60.0, |ui| {
+        widgets::label_row(ui, tl!("Setup"), crate::panels::cutting::LABEL_W, |ui| {
             if let Some(i) = widgets::dropdown_names(ui, ("cutting", "test", "group"), shown, &names, 140.0) {
                 c.group = i.checked_sub(1);
             }
@@ -566,7 +630,7 @@ fn curve_test_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, device: Option<S
     let mut row: usize = crate::panels::pstate(&ctx, "cutting-curves-row");
     let names: Vec<&str> = CURVE_ROWS.iter().map(|(n, _)| crate::i18n::t(n)).collect();
     let shown = names.get(row).copied().unwrap_or_default();
-    widgets::label_row(ui, tl!("Rows"), 60.0, |ui| {
+    widgets::label_row(ui, tl!("Rows"), crate::panels::cutting::LABEL_W, |ui| {
         if let Some(i) = widgets::dropdown_names(ui, ("cutting", "curves", "row"), shown, &names, 140.0) {
             row = i;
         }
@@ -626,7 +690,7 @@ fn origin_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, note: &mut Option<(b
             .color(t.text_dim),
     );
     for (label, id, v) in [(tl!("Across"), "origin-across", &mut across), (tl!("Down"), "origin-down", &mut down)] {
-        widgets::label_row(ui, label, 60.0, |ui| {
+        widgets::label_row(ui, label, crate::panels::cutting::LABEL_W, |ui| {
             if let Some(n) = widgets::spin_plain(ui, ("cutting", id), *v, " mm", 1, 80.0, 0.1, -lim, &[]) {
                 *v = ((n * 10.0).round() / 10.0).clamp(-lim, lim);
                 changed = true;
@@ -663,13 +727,9 @@ fn sheet_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     }
 }
 
-/// The machine to send to, sending and its progress (C4.5), the pause between groups (C5.3).
-/// The machines are looked for once and again on Find Cutters, not each frame (that asks the
-/// system for its USB devices).
-fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
-    let t = Tokens::get(ui.ctx());
-    let ctx = ui.ctx().clone();
-    let mut m: Machines = crate::panels::pstate(&ctx, "cutting-machines");
+/// The machines, looked for once and again on Find Cutters, not each frame (that asks the system
+/// for its USB devices): the list, and the chosen one's id.
+fn machines(app: &mut VectorcraftApp, m: &mut Machines) -> (Vec<(String, String)>, Option<String>) {
     let found = match m.found.clone() {
         Some(f) => f,
         None => {
@@ -681,54 +741,70 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
             f
         }
     };
+    let device = found.get(m.chosen).or(found.first()).map(|(id, _)| id.clone());
+    (found, device)
+}
+
+/// The machine to send to (C4.5) with Find Cutters beside it, and what it has in its holders
+/// (C10.3).
+fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut m: Machines = crate::panels::pstate(&ctx, "cutting-machines");
+    let (found, device) = machines(app, &mut m);
     let sending = status["sending"].as_bool() == Some(true);
-    let waiting = status["waitingFor"].as_str();
-    match found.len() {
-        0 => {
-            widgets::dim_label(ui, tl!("No cutter is connected."));
-        }
-        1 => {
-            ui.label(found.first().map(|(_, model)| model.as_str()).unwrap_or_default());
-        }
-        _ => {
-            let names: Vec<&str> = found.iter().map(|(_, model)| model.as_str()).collect();
-            let current = names.get(m.chosen).copied().unwrap_or_default();
-            if let Some(i) = widgets::dropdown_names(ui, ("cutting", "machine"), current, &names, SIDE_W - 20.0) {
-                m.chosen = i;
-            }
-        }
-    }
-    for note in &m.notes {
-        ui.label(egui::RichText::new(note).color(t.warning));
-    }
-    let has_job = crate::cutting::job(app, &ctx).is_some_and(|j| j.as_ref().as_ref().is_ok_and(|made| !made.job.paths.is_empty()));
-    // C12.5: a Print & Cut job's first chunk ends with the search for the marks, answered once the
-    // machine has looked.
-    let print_and_cut = crate::cutting::job(app, &ctx).is_some_and(|j| j.as_ref().as_ref().is_ok_and(|made| made.job.registration.is_some()));
     ui.horizontal(|ui| {
-        if widgets::primary_button_enabled(ui, "Send", !found.is_empty() && has_job && !sending).clicked() {
-            let device = found.get(m.chosen).or(found.first()).map(|(id, _)| id.clone()).unwrap_or_default();
-            match from_the_back(app) {
-                Some(material) => m.ask_mirror = Some((device, material)),
-                None => send(app, &mut m, &device),
+        match found.len() {
+            0 => {
+                widgets::dim_label(ui, tl!("No cutter is connected."));
+            }
+            1 => {
+                ui.label(found.first().map(|(_, model)| model.as_str()).unwrap_or_default());
+            }
+            _ => {
+                let names: Vec<&str> = found.iter().map(|(_, model)| model.as_str()).collect();
+                let current = names.get(m.chosen).copied().unwrap_or_default();
+                if let Some(i) = widgets::dropdown_names(ui, ("cutting", "machine"), current, &names, SIDE_W - 110.0) {
+                    m.chosen = i;
+                }
             }
         }
-        if waiting.is_some() && ui.button(tl!("Continue")).clicked() {
-            let _ = app.run("cutting.continue", json!({}));
-        }
-        if sending && ui.button(tl!("Cancel")).clicked() {
-            let _ = app.run("cutting.cancel", json!({}));
-        }
-        if !sending && ui.button(tl!("Find Cutters")).clicked() {
+        // C18.18: beside the machine it looks for, not beside Send.
+        if !sending
+            && ui.small_button(tl!("Find Cutters")).on_hover_text(tl!("Look again for cutters, after plugging one in or switching it on")).clicked()
+        {
             m.found = None;
             m.chosen = 0;
         }
     });
-    ask_mirror_dialog(app, &ctx, &mut m);
-    if let Some((device, _)) = found.get(m.chosen).or(found.first()) {
-        let device = device.clone();
+    for note in &m.notes {
+        ui.label(egui::RichText::new(note).color(t.warning));
+    }
+    if found.is_empty() {
+        widgets::dim_label(
+            ui,
+            tl!("Plug the cutter in by USB and switch it on, then Find Cutters. Close Silhouette Studio, which holds the machine."),
+        );
+    }
+    if let Some(device) = device {
         tools_rows(app, ui, &mut m, &device, sending);
     }
+    crate::panels::set_pstate(&ctx, "cutting-machines", m);
+}
+
+/// The column's foot (C18.18: kept in sight however far the column is scrolled): Send, Continue
+/// at a pause between groups (C5.3) and Cancel, and how the cut is going or how it ended.
+fn send_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut m: Machines = crate::panels::pstate(&ctx, "cutting-machines");
+    let (found, device) = machines(app, &mut m);
+    let sending = status["sending"].as_bool() == Some(true);
+    let waiting = status["waitingFor"].as_str();
+    let has_job = crate::cutting::job(app, &ctx).is_some_and(|j| j.as_ref().as_ref().is_ok_and(|made| !made.job.paths.is_empty()));
+    // C12.5: a Print & Cut job's first chunk ends with the search for the marks, answered once the
+    // machine has looked.
+    let print_and_cut = crate::cutting::job(app, &ctx).is_some_and(|j| j.as_ref().as_ref().is_ok_and(|made| made.job.registration.is_some()));
     if let Some(group) = waiting {
         // The material its own setup came from (C7.4), when it has one.
         let material = crate::cutting::job(app, &ctx).and_then(|j| {
@@ -766,6 +842,31 @@ fn cutter_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     {
         ui.label(egui::RichText::new(note).color(if *bad { t.bleed } else { t.text_dim }));
     }
+    ui.horizontal(|ui| {
+        let button = widgets::primary_button_enabled(ui, "Send", device.is_some() && has_job && !sending);
+        // Why Send can't be pressed, on hover.
+        let why = if found.is_empty() {
+            tl!("No cutter is connected.")
+        } else if !has_job {
+            tl!("Nothing to cut.")
+        } else {
+            tl!("A cut is running.")
+        };
+        if button.on_disabled_hover_text(why).clicked() {
+            let device = device.clone().unwrap_or_default();
+            match from_the_back(app) {
+                Some(material) => m.ask_mirror = Some((device, material)),
+                None => send(app, &mut m, &device),
+            }
+        }
+        if waiting.is_some() && ui.button(tl!("Continue")).clicked() {
+            let _ = app.run("cutting.continue", json!({}));
+        }
+        if sending && ui.button(tl!("Cancel")).on_hover_text(tl!("Stops after the piece the machine is cutting")).clicked() {
+            let _ = app.run("cutting.cancel", json!({}));
+        }
+    });
+    ask_mirror_dialog(app, &ctx, &mut m);
     crate::panels::set_pstate(&ctx, "cutting-machines", m);
 }
 
@@ -819,6 +920,48 @@ mod tests {
         assert!(r.bottom() <= 900.0 && r.top() >= 0.0, "on screen: {r:?}");
     }
 
+    /// C18.18: a cut's length as a person reads it.
+    #[test]
+    fn durations_read_as_minutes_and_hours() {
+        assert_eq!(duration(7.4), "7 s");
+        assert_eq!(duration(200.0), "3 min 20 s");
+        assert_eq!(duration(120.0), "2 min");
+        assert_eq!(duration(3900.0), "1 h 5 min");
+        assert_eq!(duration(f64::NAN), "—");
+        assert_eq!(duration(-1.0), "—");
+    }
+
+    /// C18.18: Send stays in sight on a screen too short for the column, which scrolls above it.
+    #[test]
+    fn send_stays_at_the_foot_of_a_short_window() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        set_open(&ctx, true);
+        let screen = egui::vec2(1000.0, 500.0);
+        let mut sends = vec![];
+        for _ in 0..3 {
+            let raw = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, screen)), ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| show(&mut app, ui.ctx()));
+            out.textures_delta.clear();
+            sends = out
+                .shapes
+                .iter()
+                .filter_map(|c| match &c.shape {
+                    egui::Shape::Text(t) if t.galley.text() == "Send" => Some((t.pos.y, c.clip_rect)),
+                    _ => None,
+                })
+                .collect();
+        }
+        let window = ctx.memory(|m| m.area_rect(egui::Id::unique("cutting-send-window"))).unwrap();
+        let &(y, clip) = sends.last().expect("Send drawn");
+        assert!(
+            y > window.center().y && y < window.bottom() && y < screen.y && clip.contains(egui::pos2(clip.center().x, y)),
+            "in sight: {y} in {window:?}, clip {clip:?}"
+        );
+    }
+
     fn app_with_two_layers() -> VectorcraftApp {
         let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
@@ -844,7 +987,10 @@ mod tests {
         app.run(COMMAND, json!({})).unwrap();
         let texts = window_texts(&mut app, &ctx);
         assert!(texts.iter().any(|t| t == "Send to Cutter"), "the title: {texts:?}");
-        assert!(texts.iter().any(|t| t == "Paths: 1"), "the job: {texts:?}");
+        // C18.18: the numbers in two columns, the playback under the preview.
+        let at = |label: &str| texts.iter().position(|t| t == label).unwrap();
+        assert_eq!(texts.get(at("Paths") + 1).map(String::as_str), Some("1"), "the job: {texts:?}");
+        assert!(at("Play") < at("Job"), "under the preview, before the column: {texts:?}");
         assert!(texts.iter().any(|t| t == "Play"), "the playback: {texts:?}");
         set_open(&ctx, false);
         assert!(window_texts(&mut app, &ctx).is_empty());
@@ -897,7 +1043,10 @@ mod tests {
         assert!(texts.iter().any(|t| t == "Test Cut") && texts.iter().any(|t| t == "Top Left"), "{texts:?}");
         // C14.8: the tool settings, tuned here, just above the test cut.
         let at = |label: &str| texts.iter().position(|t| t == label).unwrap();
-        assert!(at("Send") < at("Tool Settings") && at("Force") < at("Test at") && at("Material") < at("Force"), "{texts:?}");
+        assert!(at("Tool Settings") < at("Force") && at("Force") < at("Test at") && at("Material") < at("Force"), "{texts:?}");
+        // C18.18: Send at the column's foot, after everything that it scrolls.
+        let send = texts.iter().rposition(|t| t == "Send").unwrap();
+        assert!(at("History") < send && at("Cutter") < at("Find Cutters"), "{texts:?}");
         // C14.11: the mirrored cut goes with the material, before the test cut.
         assert!(at("Force") < at("Cut Mirrored") && at("Cut Mirrored") < at("Test at"), "{texts:?}");
         assert!(texts.iter().any(|t| t.contains("lands on the design")), "{texts:?}");

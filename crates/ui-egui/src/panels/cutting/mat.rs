@@ -53,12 +53,18 @@ fn mat_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     });
     if custom || roll {
         let size = |i: usize| s["customMatMm"][i].as_f64().unwrap_or(304.8);
-        widgets::label_row(ui, if roll { tl!("Width, Length") } else { tl!("Size") }, LABEL_W, |ui| {
+        // C18.18: each field named, as the roll's width and length aren't a mat's width and height.
+        widgets::label_row(ui, tl!("Width"), LABEL_W, |ui| {
             if let Some(w) = mm_field(ui, "mat-w", size(0), 10.0) {
                 set(app, json!({ "customMatMm": [w, size(1)] }));
             }
+        });
+        widgets::label_row(ui, if roll { tl!("Length") } else { tl!("Height") }, LABEL_W, |ui| {
             if let Some(h) = mm_field(ui, "mat-h", size(1), 10.0) {
                 set(app, json!({ "customMatMm": [size(0), h] }));
+            }
+            if roll {
+                widgets::dim_label(ui, tl!("to cut"));
             }
         });
     }
@@ -80,16 +86,26 @@ fn mat_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
         });
     }
     let offset = |i: usize| s["offsetMm"][i].as_f64().unwrap_or(0.0);
+    // The artboard's place on the mat, from the cut area's top-left corner: each field named
+    // (C18.18: two bare fields read as a size).
     widgets::label_row(ui, tl!("Offset"), LABEL_W, |ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        widgets::dim_label(ui, "X");
         if let Some(x) = mm_field(ui, "offset-x", offset(0), -3_000.0) {
             set(app, json!({ "offsetMm": [x, offset(1)] }));
         }
+        widgets::dim_label(ui, "Y");
         if let Some(y) = mm_field(ui, "offset-y", offset(1), -3_000.0) {
             set(app, json!({ "offsetMm": [offset(0), y] }));
         }
     });
     let clip = s["clipToMat"].as_bool() == Some(true);
-    if widgets::check(ui, tl!("Clip to Mat"), clip, true) {
+    if super::check_hint(
+        ui,
+        "Clip to Mat",
+        clip,
+        "Lines that run off the cut area are cut up to its edge. Off: a job that runs off the mat isn't sent.",
+    ) {
         set(app, json!({ "clipToMat": !clip }));
     }
     if info["placement"]["fits"].as_bool() == Some(false) {
@@ -116,6 +132,10 @@ fn tile_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
     let mut c: TileChoice = crate::panels::pstate(&ctx, "cutting-tile");
+    super::intro(
+        ui,
+        tl!("Cut a design larger than the mat in parts, each on its own sheet. Works on the selection, or the artboard when nothing is selected."),
+    );
     let (lo, hi) = vectorcraft_cutting::tile::OVERLAP_MM;
     widgets::label_row(ui, tl!("Overlap"), LABEL_W, |ui| {
         if let Some(v) = mm_field(ui, "tile-overlap", c.overlap_mm, lo) {
@@ -124,7 +144,7 @@ fn tile_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     });
     if ui
         .button(tl!("Tile onto Mats"))
-        .on_hover_text(tl!("Artboards the size of the mat over the selection, or over the artboard, each cut on its own sheet: choose one as the Artboard above to cut it."))
+        .on_hover_text(tl!("Artboards the size of the mat over the selection, or over the artboard, each cut on its own sheet: choose one as the Artboard in Cutting Mat, or step through them in Send to Cutter."))
         .clicked()
     {
         c.note = Some(match app.run("cutting.tile", json!({ "overlapMm": c.overlap_mm })) {
@@ -165,6 +185,7 @@ fn nest_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     let t = Tokens::get(ui.ctx());
     let ctx = ui.ctx().clone();
     let mut c: NestChoice = crate::panels::pstate(&ctx, "cutting-nest");
+    super::intro(ui, tl!("Packs the pieces close together on the mat by their shapes. Each top-level object or group is one piece."));
     widgets::label_row(ui, tl!("Gap"), LABEL_W, |ui| {
         if let Some(v) = mm_field(ui, "nest-gap", c.gap_mm, 0.0) {
             c.gap_mm = v.clamp(0.0, 50.0);
@@ -181,10 +202,11 @@ fn nest_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
             (c.rotate, c.fine) = (i > 0, i == 2);
         }
     });
-    if widgets::check(ui, tl!("Onto New Sheets"), c.sheets, true) {
+    if super::check_hint(ui, "Onto New Sheets", c.sheets, "What doesn't fit goes onto new artboards beside this one, each cut on its own.") {
         c.sheets = !c.sheets;
     }
-    widgets::label_row(ui, tl!("Copies"), LABEL_W, |ui| {
+    // More of each piece, made and nested with them (0: just the pieces).
+    widgets::label_row(ui, tl!("Extra Copies"), LABEL_W, |ui| {
         let max = vectorcraft_cutting::nest::MAX_COPIES as f64;
         if let Some(v) = widgets::spin_plain(ui, ("cutting", "nest-copies"), c.copies as f64, "", 0, 60.0, 1.0, 0.0, &[]) {
             // Whole and in range after the clamp: the cast is exact.
@@ -273,6 +295,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         widgets::dim_label(ui, tl!("Open a document to cut it."));
         return;
     };
+    super::intro(ui, tl!("The mat the machine takes, and where the artboard lies on it."));
     mat_rows(app, ui, &info);
 }
 
@@ -337,7 +360,9 @@ mod tests {
         // C17.1: fed from the roll, its width and the length to cut.
         app.run("cutting.settings.set", json!({"mat": "roll", "offsetMm": [0, 0]})).unwrap();
         let t = texts(&mut app, &ctx);
-        assert!(t.iter().any(|x| x == "Roll (no mat)") && t.iter().any(|x| x == "Width, Length"), "{t:?}");
+        assert!(t.iter().any(|x| x == "Roll (no mat)") && t.iter().any(|x| x == "Width") && t.iter().any(|x| x == "Length"), "{t:?}");
+        // C18.18: the offset's fields are named.
+        assert!(t.iter().any(|x| x == "X") && t.iter().any(|x| x == "Y"), "{t:?}");
     }
 
     /// C8.5: the Nesting section nests every piece, or the selection when there is one.
@@ -354,7 +379,7 @@ mod tests {
         assert!(app.run("cutting.job", json!({})).is_err(), "off the mat");
         app.run("cutting.nest", json!({})).unwrap();
         assert!(app.run("cutting.job", json!({})).is_ok(), "nested onto it");
-        assert!(panel_texts(&mut app, &ctx, show_nesting).iter().any(|x| x == "Copies"), "Replicate (C13.1)");
+        assert!(panel_texts(&mut app, &ctx, show_nesting).iter().any(|x| x == "Extra Copies"), "Replicate (C13.1)");
         let r = app.run("cutting.nest", json!({"copies": 3})).unwrap();
         assert_eq!(super::nest_note(&r, false), (false, "4 nested".to_string()));
         let left = json!({"moved": [1], "unplaced": [], "copies": 1, "copiesLeftOut": 7});

@@ -16,13 +16,15 @@ pub const ID: &str = "cuttingPrint";
 fn print_and_cut_rows(app: &mut VectorcraftApp, ui: &mut Ui, info: &Value) {
     let s = &info["settings"];
     let on = s["printAndCut"].as_bool() == Some(true);
+    super::intro(ui, tl!("Print the artboard with registration marks; the machine finds the marks, then cuts round the print."));
     if widgets::check(ui, tl!("Print & Cut"), on, true) {
         set(app, json!({ "printAndCut": !on }));
     }
     if !on {
-        widgets::dim_label(ui, tl!("Print the artboard with registration marks, then cut around the print."));
         return;
     }
+    widgets::divider(ui);
+    widgets::section_header(ui, tl!("Registration Marks"));
     mark_rows(app, ui, s);
     let has_marks = app.session.active().is_some_and(|st| vectorcraft_cutting::marks::marks_layer(&st.doc).is_some());
     ui.horizontal(|ui| {
