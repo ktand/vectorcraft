@@ -1364,10 +1364,19 @@ impl craft_ui::docking::DockContent<String> for PanelContent<'_> {
             crate::dock::panel_body(self.app, ui, id, width, height);
         } else {
             // Shrinking to the content's height lets craft-ui fit a float or flyout to it.
-            crate::widgets::panel_scroll(ui, egui::ScrollArea::vertical().id_salt(("shared-panel-body", id)).auto_shrink([false, true]), |ui| {
-                let width = ui.available_width();
-                crate::dock::panel_body(self.app, ui, id, width, height)
-            });
+            let content =
+                crate::widgets::panel_scroll(ui, egui::ScrollArea::vertical().id_salt(("shared-panel-body", id)).auto_shrink([false, true]), |ui| {
+                    let width = ui.available_width();
+                    crate::dock::panel_body(self.app, ui, id, width, height);
+                    ui.min_rect().height()
+                });
+            // Fork (C18.25): content that grew past the body (a section switched on in a flyout)
+            // reports its whole height, which the scroll area hides, so the flyout grows to fit
+            // it (up to its largest) instead of keeping the height it opened at.
+            let shown = ui.min_rect().height();
+            if content.is_finite() && content > shown + 1.0 {
+                ui.allocate_space(egui::vec2(0.0, content - shown));
+            }
         }
         if field_had_keyboard {
             keep_field_ending_keys(ui);
