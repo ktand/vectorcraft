@@ -184,6 +184,7 @@ fn tuck_end(v: &Values, reverse: bool) -> Result<Net, String> {
         folds: PathData::new(folds),
         glue: PathData::single(glue_area),
         face: Some([xs1, s.top, xf1, s.bottom]),
+        art: vec![],
     })
 }
 

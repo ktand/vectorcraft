@@ -1,8 +1,8 @@
 //! Fork: more templates (C15.5), all our own geometry: a shipping carton in the style the FEFCO
 //! code numbers 0201 (the regular slotted case: four panels and a glue flap, flaps half the depth
 //! so the outer ones meet in the middle; only the style's number and name come from the code), a
-//! drawer box (a tray with a finger hole, and a sleeve it slides into), bunting, a paper lantern
-//! and a party hat.
+//! drawer box (a tray with a finger hole, and a sleeve it slides into), bunting, a paper lantern,
+//! a party hat and a cake topper.
 
 use std::f64::consts::{PI, TAU};
 
@@ -33,13 +33,20 @@ fn moved(net: &Net, d: P) -> Net {
         folds: net.folds.transformed(to),
         glue: net.glue.transformed(to),
         face: net.face.map(|f| [f[0] + d.0, f[1] + d.1, f[2] + d.0, f[3] + d.1]),
+        art: net.art.iter().map(|a| crate::template::Art { path: a.path.transformed(to), ..a.clone() }).collect(),
     }
 }
 
 /// Two nets as one, the paths of both.
 fn join(a: Net, b: Net) -> Net {
     let cat = |x: PathData, y: PathData| PathData::new(x.subpaths.into_iter().chain(y.subpaths).collect());
-    Net { cut: cat(a.cut, b.cut), folds: cat(a.folds, b.folds), glue: cat(a.glue, b.glue), face: a.face.or(b.face) }
+    Net {
+        cut: cat(a.cut, b.cut),
+        folds: cat(a.folds, b.folds),
+        glue: cat(a.glue, b.glue),
+        face: a.face.or(b.face),
+        art: a.art.into_iter().chain(b.art).collect(),
+    }
 }
 
 pub(super) const CARTON: Kind = Kind {
@@ -116,6 +123,7 @@ fn carton(v: &Values) -> Result<Net, String> {
         folds: PathData::new(folds),
         glue: PathData::single(glue_area),
         face: Some([xs[0], top, xs[1], bottom]),
+        art: vec![],
     })
 }
 
@@ -176,6 +184,7 @@ fn drawer(v: &Values) -> Result<Net, String> {
         folds: PathData::new(sleeve_folds),
         glue: PathData::single(sleeve_glue),
         face: Some([xs[1], 0.0, xs[2], long]),
+        art: vec![],
     };
     let below = box_net.size().1 + GAP_MM;
     // The art goes on the drawer's front: the tray's front wall.
@@ -295,7 +304,7 @@ fn wrapped_box(v: &Values, floor_of: &dyn Fn(f64) -> Vec<P>, creases: bool) -> R
         cut.push(polygon(&shifted));
         y += fh + GAP_MM;
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face, art: vec![] })
 }
 
 pub(super) const BUNTING: Kind = Kind {
@@ -352,7 +361,7 @@ fn bunting(v: &Values) -> Result<Net, String> {
         folds.push(line((x, f), (x + w, f)));
         glue.push(polygon(&[(x, 0.0), (x + w, 0.0), (x + w, f), (x, f)]));
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face: Some([0.0, f, w, f + h]) })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face: Some([0.0, f, w, f + h]), art: vec![] })
 }
 
 pub(super) const LANTERN: Kind = Kind {
@@ -391,7 +400,7 @@ fn lantern(v: &Values) -> Result<Net, String> {
     cut.push(polygon(&[(0.0, h + GAP_MM), (hl, h + GAP_MM), (hl, h + GAP_MM + hw), (0.0, h + GAP_MM + hw)]));
     let folds = vec![line((w, 0.0), (w, h))];
     let glue_area = vec![polygon(&[(w, 0.0), (w + glue, 0.0), (w + glue, h), (w, h)])];
-    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue_area), face: Some([0.0, 0.0, w, h]) })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue_area), face: Some([0.0, 0.0, w, h]), art: vec![] })
 }
 
 pub(super) const PARTY_HAT: Kind = Kind {
@@ -442,7 +451,13 @@ fn party_hat(v: &Values) -> Result<Net, String> {
     let hole = |a: f64| circle(at(slant - 10.0, a), 1.5);
     let quarter = sweep * 0.25;
     let cut = vec![o.closed(), hole(a0 + quarter), hole(a1 - quarter)];
-    Ok(Net { cut: PathData::new(cut), folds: PathData::single(line(s0, c)), glue: PathData::single(polygon(&[s0, p1, p2, c])), face: None })
+    Ok(Net {
+        cut: PathData::new(cut),
+        folds: PathData::single(line(s0, c)),
+        glue: PathData::single(polygon(&[s0, p1, p2, c])),
+        face: None,
+        art: vec![],
+    })
 }
 
 pub(super) const STAR: Kind = Kind {
@@ -587,12 +602,102 @@ fn mailer(v: &Values) -> Result<Net, String> {
     }
     folds.push(line((x0 - h, y_base), (x0 - h, y_front)));
     folds.push(line((x1 + h, y_base), (x1 + h, y_front)));
-    Ok(Net { cut: PathData::single(o.closed()), folds: PathData::new(folds), glue: PathData::default(), face: Some([x0, y_lid, x1, y_back]) })
+    Ok(Net {
+        cut: PathData::single(o.closed()),
+        folds: PathData::new(folds),
+        glue: PathData::default(),
+        face: Some([x0, y_lid, x1, y_back]),
+        art: vec![],
+    })
+}
+
+/// A cake topper (C15.5, our own geometry): a disc, plain or scalloped, with a tab hanging from
+/// its bottom to tape a skewer or a lollipop stick behind, cut as one outline.
+pub(super) const CAKE_TOPPER: Kind = Kind {
+    id: "cakeTopper",
+    name: "Cake Topper",
+    family: "Party",
+    params: &[
+        Param { key: "diameterMm", label: "Diameter", unit: Unit::Mm, default: 100.0, min: 40.0, max: 300.0, help: "across the disc" },
+        Param {
+            key: "scalloped",
+            label: "Scalloped",
+            unit: Unit::Toggle,
+            default: 0.0,
+            min: 0.0,
+            max: 1.0,
+            help: "a scalloped edge instead of a round one",
+        },
+        Param { key: "tabWidthMm", label: "Tab Width", unit: Unit::Mm, default: 18.0, min: 6.0, max: 60.0, help: "the stick's tab, across" },
+        Param {
+            key: "tabLengthMm",
+            label: "Tab Length",
+            unit: Unit::Mm,
+            default: 30.0,
+            min: 8.0,
+            max: 150.0,
+            help: "how far the tab hangs below the disc",
+        },
+    ],
+    sized: false,
+    fit: None,
+    make: cake_topper,
+};
+
+fn cake_topper(v: &Values) -> Result<Net, String> {
+    let r = v.get("diameterMm") / 2.0;
+    let c = (r, r);
+    // The tab: never wider than most of the disc.
+    let hw = (v.get("tabWidthMm") / 2.0).min(r * 0.6);
+    let scalloped = v.get("scalloped") >= 0.5;
+    // A scalloped edge: bumps about 12 mm long, their dips on a circle inside the disc.
+    let bump = if scalloped { (r * 0.06).min(4.0) } else { 0.0 };
+    let base = r - bump;
+    // Where the tab's sides meet the edge, below the centre: the edge runs from the right one
+    // up over the top round to the left one.
+    let from = (hw / base).acos();
+    let to = -PI - from;
+    let mut o = Edge::from((c.0 + hw, c.1 + base * from.sin()));
+    if scalloped {
+        let n = ((to - from).abs() * r / 12.0).round().max(6.0);
+        let step = (to - from) / n;
+        let on = |a: f64, rad: f64| (c.0 + rad * a.cos(), c.1 + rad * a.sin());
+        for k in 0..n as usize {
+            let a = from + step * k as f64;
+            o.quad(on(a + step / 2.0, base + 2.0 * bump * 1.8), on(a + step, base));
+        }
+    } else {
+        o.arc(c, r, from, to);
+    }
+    let bottom = c.1 + r + v.get("tabLengthMm");
+    o.to((c.0 - hw, bottom)).to((c.0 + hw, bottom));
+    Ok(Net { cut: PathData::single(o.closed()), face: Some([0.0, 0.0, 2.0 * r, 2.0 * r]), ..Net::default() })
 }
 
 #[cfg(test)]
 mod tests {
     use super::super::tests::{simple, values};
+
+    /// The cake topper: as wide as the disc, its tab hanging below it, plain or scalloped, an
+    /// outline that doesn't cross itself.
+    #[test]
+    fn the_cake_topper_hangs_on_its_tab() {
+        for scalloped in [0.0, 1.0] {
+            for (d, tw, tl) in [(100.0, 18.0, 30.0), (40.0, 60.0, 8.0), (300.0, 6.0, 150.0)] {
+                let v = super::super::tests::values(
+                    &CAKE_TOPPER,
+                    &[("diameterMm", d), ("scalloped", scalloped), ("tabWidthMm", tw), ("tabLengthMm", tl)],
+                    false,
+                )
+                .unwrap();
+                let net = CAKE_TOPPER.make(&v).unwrap();
+                let (w, h) = net.size();
+                assert!((w - d).abs() < d * 0.05, "{scalloped} {d}: {w}");
+                assert!(h >= d + tl - 0.5, "{scalloped} {d}: the tab below the disc, {h}");
+                assert!(super::super::tests::simple(&net.cut), "{scalloped} {d} {tw} {tl}");
+            }
+        }
+    }
     use super::*;
 
     /// The carton's flaps meet in the middle: each half the short side (plus half a thickness)

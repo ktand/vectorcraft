@@ -147,7 +147,7 @@ fn envelope(v: &Values, pointed: bool) -> Result<Net, String> {
         polygon(&[(x0 + relief, y1), (x0 + bottom_in, y1 + bottom), (x0 + bottom_in + strip, y1 + bottom), (x0 + relief + strip, y1)]),
         polygon(&[(x1 - relief, y1), (x1 - relief - strip, y1), (x1 - bottom_in - strip, y1 + bottom), (x1 - bottom_in, y1 + bottom)]),
     ];
-    Ok(Net { cut: PathData::single(o.closed()), folds: PathData::new(folds), glue: PathData::new(glue), face: Some([x0, y0, x1, y1]) })
+    Ok(Net { cut: PathData::single(o.closed()), folds: PathData::new(folds), glue: PathData::new(glue), face: Some([x0, y0, x1, y1]), art: vec![] })
 }
 
 pub(super) const PLACE_CARD: Kind = Kind {
@@ -173,6 +173,7 @@ fn place_card(v: &Values) -> Result<Net, String> {
         glue: PathData::default(),
         // The face toward the guest: the lower half, upright when the card stands.
         face: Some([0.0, h, w, 2.0 * h]),
+        art: vec![],
     })
 }
 
@@ -201,7 +202,7 @@ fn gift_tag(v: &Values) -> Result<Net, String> {
         }
         cut.push(circle((w / 2.0, c.max(hole / 2.0 + 3.0)), hole / 2.0));
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::default(), glue: PathData::default(), face: Some([0.0, 0.0, w, h]) })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::default(), glue: PathData::default(), face: Some([0.0, 0.0, w, h]), art: vec![] })
 }
 
 pub(super) const EARRING_CARD: Kind = Kind {
@@ -253,7 +254,7 @@ fn earring_card(v: &Values) -> Result<Net, String> {
     for x in [w / 2.0 - gap / 2.0, w / 2.0 + gap / 2.0] {
         cut.push(circle((x, y), hole / 2.0));
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::default(), glue: PathData::default(), face: Some([0.0, 0.0, w, h]) })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::default(), glue: PathData::default(), face: Some([0.0, 0.0, w, h]), art: vec![] })
 }
 
 pub(super) const GIFT_CARD_HOLDER: Kind = Kind {
@@ -303,7 +304,13 @@ fn gift_card_holder(v: &Values) -> Result<Net, String> {
         // From a point on one edge to one on the other, past the corner by 1.5 mm each way.
         cut.push(line((x + sx * d, y - sy * 1.5), (x - sx * 1.5, y + sy * d)));
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::single(line((w, 0.0), (w, h))), glue: PathData::default(), face: Some([0.0, 0.0, w, h]) })
+    Ok(Net {
+        cut: PathData::new(cut),
+        folds: PathData::single(line((w, 0.0), (w, h))),
+        glue: PathData::default(),
+        face: Some([0.0, 0.0, w, h]),
+        art: vec![],
+    })
 }
 
 #[cfg(test)]

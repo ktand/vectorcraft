@@ -315,7 +315,7 @@ pub(super) fn papercraft(mut s: Solid, size_mm: f64, tab: f64, row_mm: f64) -> R
             Label { at: (at.0 + d.0, at.1 + d.1), angle, number }
         })
         .collect();
-    craft.net = Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face: None };
+    craft.net = Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face: None, art: vec![] };
     craft.valleys = PathData::new(vs);
     Ok(craft)
 }

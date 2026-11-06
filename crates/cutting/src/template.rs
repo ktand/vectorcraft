@@ -9,6 +9,7 @@
 
 use vectorcraft_geom::{Anchor, PathData, Point, SubPath};
 
+mod animals;
 mod boxes;
 mod cards;
 mod gable;
@@ -85,6 +86,19 @@ pub struct Net {
     /// The face art goes on (`x0, y0, x1, y1`, mm): the front of a box, a card's face. None: no
     /// one face (a solid).
     pub face: Option<[f64; 4]>,
+    /// Art printed on it (C15.5: an animal box's face), not cut: each a filled or stroked shape in
+    /// a colour of its own.
+    pub art: Vec<Art>,
+}
+
+/// A shape printed on a net (C15.5): its name, its colour (`0xRRGGBB`) and either filled or drawn
+/// as a line this wide, mm.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Art {
+    pub name: &'static str,
+    pub color: u32,
+    pub path: PathData,
+    pub stroke_mm: Option<f64>,
 }
 
 impl Net {
@@ -145,6 +159,9 @@ impl Kind {
             for p in [&mut net.cut, &mut net.folds, &mut net.glue] {
                 p.transform(to);
             }
+            for a in &mut net.art {
+                a.path.transform(to);
+            }
             if let Some(f) = &mut net.face {
                 *f = [f[0] - b.x0, f[1] - b.y0, f[2] - b.x0, f[3] - b.y0];
             }
@@ -152,7 +169,7 @@ impl Kind {
         // A net that isn't finite or has no size is a template's bug: refused, not drawn.
         let finite = |p: &PathData| p.subpaths.iter().flat_map(|s| &s.anchors).all(|a| a.p.x.is_finite() && a.p.y.is_finite());
         let (w, h) = net.size();
-        if !(finite(&net.cut) && finite(&net.folds) && finite(&net.glue)) || w <= 0.0 || h <= 0.0 {
+        if !(finite(&net.cut) && finite(&net.folds) && finite(&net.glue) && net.art.iter().all(|a| finite(&a.path))) || w <= 0.0 || h <= 0.0 {
             return Err(format!("the {} couldn't be made with these sizes", self.name.to_lowercase()));
         }
         Ok(net)
@@ -190,6 +207,11 @@ pub const KINDS: &[Kind] = &[
     more::BUNTING,
     more::LANTERN,
     more::PARTY_HAT,
+    more::CAKE_TOPPER,
+    animals::BUNNY,
+    animals::CAT,
+    animals::BEAR,
+    animals::FOX,
 ];
 
 /// The template `id`.
@@ -432,7 +454,13 @@ fn tray(v: &Values) -> Result<Net, String> {
     ];
     let tab = |x: f64, dir: f64, top: f64| polygon(&[(x, top), (x + dir * g, top + taper), (x + dir * g, top + h - taper), (x, top + h)]);
     let glue = vec![tab(x1, 1.0, 0.0), tab(x1, 1.0, y1), tab(x0, -1.0, y1), tab(x0, -1.0, 0.0)];
-    Ok(Net { cut: PathData::single(polygon(&outline)), folds: PathData::new(folds), glue: PathData::new(glue), face: Some([x0, y0, x1, y1]) })
+    Ok(Net {
+        cut: PathData::single(polygon(&outline)),
+        folds: PathData::new(folds),
+        glue: PathData::new(glue),
+        face: Some([x0, y0, x1, y1]),
+        art: vec![],
+    })
 }
 
 #[cfg(test)]

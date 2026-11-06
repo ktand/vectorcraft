@@ -200,6 +200,15 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
     };
     let to_doc = Affine::translate(at) * Affine::scale(1.0 / MM_PER_PT);
     let (cut, folds, glue) = (net.cut.transformed(to_doc), net.folds.transformed(to_doc), net.glue.transformed(to_doc));
+    // C15.5: the art printed on it (an animal box's face), in doc points.
+    let printed: Vec<(&str, Color, PathData, Option<f64>)> = net
+        .art
+        .iter()
+        .map(|a| {
+            let c = |shift: u32| ((a.color >> shift) & 0xff) as f32 / 255.0;
+            (a.name, Color::Rgb { r: c(16), g: c(8), b: c(0) }, a.path.transformed(to_doc), a.stroke_mm.map(|w| w / MM_PER_PT))
+        })
+        .collect();
     let warnings = super::popup::off_the_mat(d, &cut, "net");
     let top = match &again {
         Some((old, _)) => d.layer_of(*old),
@@ -210,11 +219,26 @@ fn add(s: &mut Session, p: &Value) -> Result<Value> {
     let fold_op = if perforate { Op::Perforate } else { Op::Score };
     let mut id: Option<NodeId> = None;
     s.edit(if again.is_some() { "Remake Template" } else { "Add Template" }, |d, _| {
-        let parts = vec![
-            part(d, "Glue", glue.clone(), Appearance::basic(Paint::solid(GLUE_COLOR), Paint::None, 0.0), Op::NoCut),
-            part(d, "Cut", cut.clone(), Appearance::basic(Paint::None, Paint::solid(Color::BLACK), 0.5), Op::Cut),
-            part(d, "Folds", folds.clone(), Appearance::basic(Paint::None, Paint::solid(FOLD_COLOR), 0.5), fold_op),
-        ];
+        let mut parts = vec![part(d, "Glue", glue.clone(), Appearance::basic(Paint::solid(GLUE_COLOR), Paint::None, 0.0), Op::NoCut)];
+        // The printed art under the cut lines, as one group, not cut.
+        if !printed.is_empty() {
+            let shapes: Vec<Arc<Node>> = printed
+                .iter()
+                .map(|(name, color, path, stroke)| {
+                    let look = match stroke {
+                        Some(w) => Appearance::basic(Paint::None, Paint::solid(*color), *w),
+                        None => Appearance::basic(Paint::solid(*color), Paint::None, 0.0),
+                    };
+                    part(d, name, path.clone(), look, Op::NoCut)
+                })
+                .collect();
+            let mut g = Node::group(d.alloc_id(), shapes);
+            g.name = Some("Print".to_string());
+            set_own_op(&mut g, Some(Op::NoCut));
+            parts.push(Arc::new(g));
+        }
+        parts.push(part(d, "Cut", cut.clone(), Appearance::basic(Paint::None, Paint::solid(Color::BLACK), 0.5), Op::Cut));
+        parts.push(part(d, "Folds", folds.clone(), Appearance::basic(Paint::None, Paint::solid(FOLD_COLOR), 0.5), fold_op));
         let attr = ForeignAttribute { ns: NS.to_string(), prefix: PREFIX.to_string(), name: ATTR.to_string(), value: made.clone() };
         if let Some((old, _)) = &again
             && let Some(n) = d.node_mut(*old)

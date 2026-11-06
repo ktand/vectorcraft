@@ -222,7 +222,7 @@ pub(super) fn unfold(s: &Solid, tab: f64) -> Result<Net, String> {
     }
     let outline = boundary(&faces, &is_fold, &tab_on)?;
     let glue: Vec<_> = tabs.iter().map(|t| polygon(t)).collect();
-    Ok(Net { cut: PathData::single(outline.closed()), folds: PathData::new(folds), glue: PathData::new(glue), face: None })
+    Ok(Net { cut: PathData::single(outline.closed()), folds: PathData::new(folds), glue: PathData::new(glue), face: None, art: vec![] })
 }
 
 /// A tab on edge `a`→`b` of a face whose corners run with a positive signed area (as every laid

@@ -20,8 +20,8 @@ list (author, source, license) is in ASSETS.md.
   (Ubuntu Font Licence 1.0), Hack (MIT), Noto Emoji (SIL Open Font License 1.1) and emoji-icon-font
   (MIT). Their license texts ship with that crate.
 
-Fork (cutting workspace): the tuck-end and gable box templates in crates/cutting/src/template/tuck.rs
-and gable.rs are ported from Die Cut Studio (https://github.com/pradeepsiddappa/diecutstudio), Copyright (c) 2026
+Fork (cutting workspace): the tuck-end, gable box and animal treat box templates in
+crates/cutting/src/template/tuck.rs, gable.rs and animals.rs are ported from Die Cut Studio (https://github.com/pradeepsiddappa/diecutstudio), Copyright (c) 2026
 Pradeep Siddappa, under the MIT License; the notice is in those files.
 
 Rust dependencies (vello_cpu, kurbo, peniko, skrifa, harfrust, usvg, linesweeper, egui, eframe, …) are

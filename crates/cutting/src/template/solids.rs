@@ -303,7 +303,7 @@ fn cylinder(v: &Values) -> Result<Net, String> {
         e.arc((cx, t + r), r, 0.0, TAU);
         cut.push(e.closed());
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face: None })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face: None, art: vec![] })
 }
 
 pub(super) const CONE: Kind = Kind {
@@ -386,7 +386,7 @@ fn cone(v: &Values) -> Result<Net, String> {
         glue.extend(gl);
         x += 2.0 * (r + tab) + 5.0;
     }
-    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face: None })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::new(glue), face: None, art: vec![] })
 }
 
 #[cfg(test)]

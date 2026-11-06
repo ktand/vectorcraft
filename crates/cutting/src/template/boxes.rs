@@ -72,7 +72,7 @@ fn tray_lid(v: &Values) -> Result<Net, String> {
     let join = |a: &PathData, b: &PathData| PathData::new(a.subpaths.iter().chain(b.transformed(down).subpaths.iter()).cloned().collect());
     // The art goes on the lid's top.
     let face = lid.face.map(|f| [f[0], f[1] + base.size().1 + PIECE_GAP_MM, f[2], f[3] + base.size().1 + PIECE_GAP_MM]);
-    Ok(Net { cut: join(&base.cut, &lid.cut), folds: join(&base.folds, &lid.folds), glue: join(&base.glue, &lid.glue), face })
+    Ok(Net { cut: join(&base.cut, &lid.cut), folds: join(&base.folds, &lid.folds), glue: join(&base.glue, &lid.glue), face, art: vec![] })
 }
 
 pub(super) const PILLOW: Kind = Kind {
@@ -167,6 +167,7 @@ fn pillow(v: &Values) -> Result<Net, String> {
         folds: PathData::new(folds),
         glue: PathData::single(glue),
         face: Some([xs[0], top, xs[1], bottom]),
+        art: vec![],
     })
 }
 

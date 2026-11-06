@@ -150,7 +150,7 @@ fn gable(v: &Values) -> Result<Net, String> {
     }
     folds.push(line((xf0, tuck_b), (xs1, tuck_b)));
     let glue = polygon(&[(0.0, top + gt), (gt, top), (xf0, top), (xf0, bottom), (gt, bottom), (0.0, bottom - gt)]);
-    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::single(glue), face: Some([xf0, top, xs1, bottom]) })
+    Ok(Net { cut: PathData::new(cut), folds: PathData::new(folds), glue: PathData::single(glue), face: Some([xf0, top, xs1, bottom]), art: vec![] })
 }
 
 #[cfg(test)]

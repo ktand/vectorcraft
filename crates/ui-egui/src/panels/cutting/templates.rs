@@ -88,6 +88,17 @@ fn picture(ui: &mut Ui, net: &Net, size: Vec2) {
         let pts: Vec<Pos2> = s.anchors.iter().map(|a| at(a.p)).collect();
         painter.add(egui::Shape::convex_polygon(pts, glue, Stroke::NONE));
     }
+    // C15.5: the art printed on it (an animal's face), under the cut.
+    for a in &net.art {
+        let [r, g, b] = [(a.color >> 16) as u8, (a.color >> 8) as u8, a.color as u8];
+        let color = Color32::from_rgb(r, g, b);
+        for s in &a.path.subpaths {
+            match a.stroke_mm {
+                Some(w) => painter.add(egui::Shape::line(points(s), Stroke::new((w as f32 * scale).max(0.5), color))),
+                None => painter.add(egui::Shape::convex_polygon(points(s), color, Stroke::NONE)),
+            };
+        }
+    }
     for s in &net.cut.subpaths {
         painter.add(egui::Shape::line(points(s), Stroke::new(1.0, t.text)));
     }

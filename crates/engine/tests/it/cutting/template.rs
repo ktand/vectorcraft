@@ -203,3 +203,29 @@ fn a_box_is_sized_to_the_art() {
     let ys: Vec<f64> = path.subpaths.iter().filter(|s| (s.anchors[0].p.y - s.anchors[1].p.y).abs() < 1e-9).map(|s| s.anchors[0].p.y).collect();
     assert!(ys.iter().any(|y| (y - 299.5).abs() < 1e-6) && ys.iter().any(|y| (y - 444.5).abs() < 1e-6), "{ys:?}");
 }
+
+/// C15.5: an animal box comes with its face to print, as a group of shapes that aren't cut: the
+/// job holds only the outline and the folds.
+#[test]
+fn an_animal_box_has_its_face_to_print() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 800, "height": 800})).unwrap();
+    s.execute("cutting.template", &json!({"kind": "catBox"})).unwrap();
+    let k = kinds(&mut s);
+    assert_eq!((k.iter().filter(|k| *k == "cut").count(), k.iter().filter(|k| *k == "score").count()), (1, 10), "{k:?}");
+    let st = s.active().unwrap();
+    let mut found = None;
+    st.doc.walk(|n| {
+        if n.name.as_deref() == Some("Print") {
+            found = Some(n);
+        }
+    });
+    let print = found.expect("the face's group");
+    let vectorcraft_doc::NodeKind::Group { children, .. } = &print.kind else { panic!("a group") };
+    let names: Vec<&str> = children.iter().filter_map(|c| c.name.as_deref()).collect();
+    assert!(names.contains(&"Eyes") && names.contains(&"Whiskers"), "{names:?}");
+    // The cake topper: one outline, nothing to fold.
+    s.execute("select.none", &json!({})).unwrap();
+    s.execute("cutting.template", &json!({"kind": "cakeTopper", "scalloped": true})).unwrap();
+    assert_eq!(kinds(&mut s).iter().filter(|k| *k == "cut").count(), 2);
+}
