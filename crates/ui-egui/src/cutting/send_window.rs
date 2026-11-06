@@ -609,8 +609,10 @@ fn test_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     if let Some((bad, note)) = &c.note {
         ui.label(egui::RichText::new(note).color(if *bad { t.bleed } else { t.text_dim }));
     }
-    origin_rows(app, ui, &mut c.note);
     let device = found.get(m.chosen).or(found.first()).map(|(id, _)| id.clone());
+    // C18.23: a row of test cuts to find a setting by.
+    super::calibrate::rows(app, ui, corner.id(), device.clone(), !found.is_empty() && !sending);
+    origin_rows(app, ui, &mut c.note);
     curve_test_rows(app, ui, device, !found.is_empty() && !sending, &mut c.note);
     crate::panels::set_pstate(&ctx, "cutting-test", c);
 }

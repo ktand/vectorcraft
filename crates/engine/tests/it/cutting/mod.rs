@@ -2,6 +2,7 @@
 //! engine as users reach it. See `docs/cutting/`.
 
 mod bridges;
+mod calibrate;
 mod contour;
 mod edge;
 mod groups;

@@ -25,6 +25,7 @@
 pub mod align;
 pub mod bleed;
 pub mod bridges;
+pub mod calibrate;
 pub mod calibration;
 pub mod checks;
 pub mod clip;

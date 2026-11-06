@@ -360,6 +360,22 @@ that corner, the window warns before cutting.
 To tune a material: test, then raise or lower Force until the triangle lifts out cleanly without cutting the
 backing. Then **Save as Material…** (or **Update**).
 
+**Calibrate** (under the test cut, closed at first) finds a setting by cutting a row of tests instead of one at
+a time:
+
+1. Choose the **Setting**: **Force** (seven cells, a step apart, round the force you have now), **Speed**,
+   **Blade Depth** (the AutoBlade's), **Overcut** or **Corners**. The line under it lists each cell's number and
+   value.
+2. **Cut Calibration Row** cuts the row at the test cut's corner: one test shape for each value, the rest of
+   each cut as the tool settings have it. A short line beside the first cell shows where the row starts; count
+   from there.
+3. Look at the cells and choose the **Best** one: for force, the one whose triangle lifts out cleanly with the
+   backing whole, at the lowest force that does.
+4. **Use It** puts that value in the tool settings. If the material chosen is one of your own, it is saved in
+   it; otherwise **Save as Material…** keeps it.
+
+Calibrate force first, then the others if you need to, each row with the value found before.
+
 **Origin Adjustment** (under the test cut, closed at first): if the cuts land a little off the mat's grid, the
 same amount everywhere, move them back. Cut a test, measure from the grid's corner where it landed against where
 the preview shows it, and set the difference: **Across** + moves the cuts to the right, **Down** + toward you
