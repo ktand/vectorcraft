@@ -247,7 +247,8 @@ pub(crate) fn preview_size(app: &VectorcraftApp, width: f32, max_height: f32) ->
     let [ml, mt, mr, mb] = pl.mat.plate_margin_mm;
     let (full_w, full_h) = (w + ml + mr, h + mt + mb);
     let aspect = if full_w > 0.0 && full_h.is_finite() { (full_h / full_w) as f32 } else { 1.0 };
-    let height = (width * aspect).clamp(width * 0.25, max_height);
+    // Not clamp: in a short window max_height can be below width * 0.25, and clamp panics then.
+    let height = (width * aspect).max(width * 0.25).min(max_height).max(1.0);
     egui::vec2((height / aspect).min(width), height)
 }
 

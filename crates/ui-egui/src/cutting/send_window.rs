@@ -24,8 +24,9 @@ const OPEN_HEIGHT: f32 = 0.75;
 const SIDE_W: f32 = 290.0;
 /// Between the preview and the column, px.
 const GAP: f32 = 12.0;
-/// The playback under the preview: its buttons, slider and line, px.
-const PLAYBACK_H: f32 = 76.0;
+/// The playback under the preview until it has been drawn (its buttons, slider and line), px: on
+/// the large side, so the first frame never asks for more than the window has (C18.29).
+const PLAYBACK_H: f32 = 110.0;
 /// The column's foot (Send and the cut's progress) until it has been drawn once, px.
 const FOOTER_H: f32 = 72.0;
 
@@ -242,10 +243,11 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
         set_open(ctx, false);
         return;
     }
-    // Opens with the preview three quarters of the app's height, as wide as the mat makes it.
+    // Opens with the preview three quarters of the app's height, as wide as the mat makes it
+    // under the playback (C18.29: the gap's 8 points are the layout's spacing beside it).
     let screen = ctx.content_rect();
     let preview_h = (screen.height() * OPEN_HEIGHT - 40.0).max(PREVIEW_MIN.y);
-    let preview_w = crate::canvas::cutting_overlay::preview_size(app, screen.width(), preview_h).x.max(PREVIEW_MIN.x);
+    let preview_w = crate::canvas::cutting_overlay::preview_size(app, screen.width(), preview_h - PLAYBACK_H).x.max(PREVIEW_MIN.x);
     let min = egui::vec2(PREVIEW_MIN.x + GAP + SIDE_W, PREVIEW_MIN.y);
     egui::Window::new(tl!("Send to Cutter"))
         .id(egui::Id::unique("cutting-send-window"))
@@ -253,7 +255,7 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
         .collapsible(false)
         .resizable(true)
         .min_size(min)
-        .default_size(egui::vec2(preview_w + GAP + SIDE_W, preview_h))
+        .default_size(egui::vec2(preview_w + GAP + 8.0 + SIDE_W, preview_h))
         .pivot(egui::Align2::CENTER_CENTER)
         .default_pos(screen.center())
         .show(ctx, |ui| {
@@ -263,14 +265,25 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
                 // playback that moves the blade over it right under it (C18.18: it was in the
                 // column, away from what it plays).
                 ui.vertical(|ui| {
-                    let size = crate::canvas::cutting_overlay::preview_size(app, room.x - GAP - SIDE_W, room.y - PLAYBACK_H);
+                    // C18.29: the playback's height as it was last drawn (its font's, not a guess),
+                    // so the preview and it never ask for more than the window has: a few points
+                    // more each frame made the window grow, as if animated, when it opened.
+                    let playback_h = crate::panels::pstate::<Option<f32>>(ui.ctx(), "cutting-send-playback-h").unwrap_or(PLAYBACK_H);
+                    // The gap's spacing on both sides of it: the horizontal layout adds one too.
+                    let width = room.x - GAP - SIDE_W - ui.spacing().item_spacing.x;
+                    let size = crate::canvas::cutting_overlay::preview_size(app, width, room.y - playback_h);
                     zoomable_preview(app, ui, size);
+                    let below = ui.min_rect().bottom();
                     if let Some(job) = crate::cutting::job(app, ui.ctx())
                         && let Ok(made) = &*job
                         && !made.job.paths.is_empty()
                     {
                         ui.set_max_width(size.x);
                         crate::cutting::playback_controls(ui, &made.sim, false);
+                        let used = ui.min_rect().bottom() - below + ui.spacing().item_spacing.y;
+                        if used.is_finite() && used > 0.0 {
+                            crate::panels::set_pstate(ui.ctx(), "cutting-send-playback-h", Some(used));
+                        }
                     }
                 });
                 ui.add_space((GAP - ui.spacing().item_spacing.x).max(0.0));
@@ -1010,6 +1023,30 @@ mod tests {
                 .collect();
         }
         texts
+    }
+
+    /// C18.29: the window opens at its size and stays there: it used to grow a little every frame
+    /// (its content a few points larger than the room it was given), which looked like an animation.
+    #[test]
+    fn the_window_keeps_its_size() {
+        let _serial = serial();
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        set_open(&ctx, true);
+        let mut sizes = vec![];
+        for _ in 0..12 {
+            let raw =
+                egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1440.0, 900.0))), ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| show(&mut app, ui.ctx()));
+            out.textures_delta.clear();
+            let id = egui::Id::unique("cutting-send-window");
+            sizes.push(ctx.memory(|m| m.area_rect(id)).map(|r| r.size()));
+        }
+        set_open(&ctx, false);
+        let settled: Vec<_> = sizes.iter().skip(3).collect();
+        assert!(settled.windows(2).all(|w| w[0] == w[1]), "{sizes:?}");
     }
 
     /// C18.28: zoomed in, the preview says how far and offers Follow; at the whole mat it doesn't.
