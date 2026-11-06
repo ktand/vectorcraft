@@ -16,6 +16,10 @@ window = [1280, 800]
 setup = [
   { run = "file.new", params = { width = 612, height = 792 } },
   { run = "window.workspace", params = { name = "Cutting" } },
+  # The app's update check at start may offer a newer release over the window: Escape closes
+  # the offer (and does nothing when there is none).
+  { wait = 2000 },
+  { method = "ui.key", params = { key = "Escape" }, may_fail = true },
   { wait = 400 },
 ]
 
@@ -78,7 +82,7 @@ steps = [
 [[shot]]
 name = "send"
 caption = "The Send to Cutter window: the mat as it is cut, the tool table and the job's summary."
-crop = [218, 120, 844, 562]
+crop = [219, 120, 842, 582]
 steps = [
   { run = "shape.rectangle", params = { x = 100, y = 100, width = 200, height = 150 } },
   { run = "cutting.sendWindow" },

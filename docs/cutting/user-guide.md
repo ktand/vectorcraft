@@ -287,12 +287,13 @@ Cut the machine measures from the marks, so the adjustment only moves where it s
 **Curve Test** (under Origin Adjustment, closed at first) is a check for the machine, not for a material.
 **Cut Curve Test** cuts a 10 mm circle and a 50 mm S-curve in three rows from the top-left corner (about
 75 × 80 mm), each sent its own way:
-- **top row:** as short straight moves, as every job is sent;
-- **middle row:** as the machine's own Bézier curves;
+- **top row:** as short straight moves, as a job is sent with **Send Curves** off;
+- **middle row:** as the machine's own Bézier curves, as a job is sent with Send Curves on;
 - **bottom row:** the circle as the machine's own circle command.
 
 Compare how round and smooth each row is. **Rows** cuts just one of them. Each row is cut once, without overcut,
-and the test isn't kept in the history. Whether jobs will ever be sent as curves depends on what this shows.
+and the test isn't kept in the history. If the curved rows come out worse than the straight one on your machine,
+turn **Send Curves** off (Cut Settings › Advanced).
 
 ## 5. Making cut lines
 
