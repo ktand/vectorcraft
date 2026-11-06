@@ -236,6 +236,12 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
         return;
     }
     let mut open = true;
+    // C18.27: Esc closes it (the cut carries on), unless a field or an open list takes Esc first.
+    let free = !egui::Popup::is_any_open(ctx) && ctx.memory(|m| m.focused().is_none());
+    if free && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+        set_open(ctx, false);
+        return;
+    }
     // Opens with the preview three quarters of the app's height, as wide as the mat makes it.
     let screen = ctx.content_rect();
     let preview_h = (screen.height() * OPEN_HEIGHT - 40.0).max(PREVIEW_MIN.y);
@@ -1004,7 +1010,20 @@ mod tests {
         assert_eq!(texts.get(at("Paths") + 1).map(String::as_str), Some("1"), "the job: {texts:?}");
         assert!(at("Play") < at("Job"), "under the preview, before the column: {texts:?}");
         assert!(texts.iter().any(|t| t == "Play"), "the playback: {texts:?}");
-        set_open(&ctx, false);
+        // C18.27: Esc closes it.
+        let esc = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 1600.0))),
+            events: vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            ..Default::default()
+        };
+        let _ = ctx.run_ui(esc, |ui| show(&mut app, ui.ctx()));
+        assert!(!is_open(&ctx), "Esc closed it");
         assert!(window_texts(&mut app, &ctx).is_empty());
     }
 
