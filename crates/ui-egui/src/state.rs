@@ -206,6 +206,7 @@ pub const ICON_PANELS: &[(&str, &str, &str)] = &[
     (crate::panels::css_properties::ID, "CSS Properties", "globe"),
     // Fork: the cutting workspace.
     (crate::panels::cutting::ID, "Cut Settings", "scissors"),
+    (crate::panels::cutting::projects::ID, "Projects", "file-plus"),
     (crate::panels::cutting::lines::ID, "Contour", "pen-tool"),
     (crate::panels::cutting::lines::STENCIL_ID, "Stencil", "squares-subtract"),
     (crate::panels::cutting::lines::WEEDING_ID, "Weeding", "eraser"),

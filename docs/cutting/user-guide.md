@@ -23,6 +23,27 @@ send it.
    in a corner. Raise or lower **Force** until the triangle lifts out cleanly without cutting the backing.
 8. Click **Send**. When it's done, unload the mat with the machine's button.
 
+### Projects: a guided start
+
+For the usual kinds of job, the **Projects** panel (first in the strip of icons) walks you through it. Choose
+what you're making:
+
+- **Iron-On (Heat Transfer Vinyl):** a design pressed onto fabric.
+- **Vinyl Decal (Adhesive Vinyl):** a sticker of vinyl for a window, a wall or a mug, moved with transfer tape.
+- **Sticker Sheet (Print & Cut):** printed stickers cut out round their edges.
+- **Stencil:** a sheet with the design cut out, the middles of letters kept by bridges.
+
+The panel lists the project's steps, from preparing the design to pressing or applying it. A step VectorCraft can
+do has a button: **Set Up** sets the cut for the project in one go (an iron-on is cut mirrored with a weed box; a
+decal as drawn with a weed box and weed lines; either, with several fill colours, colour by colour with
+Knockout and Align Marks, and the matching material unless you have chosen one of the right kind), **Make
+Sticker Sheet** and **Add Bridges** work on the selected designs, and **Print…** and **Send to Cutter…** open
+those windows. Tick each step as you finish it; a set-up step ticks itself while its settings are on the
+document. **Start Over** clears the ticks, not the document.
+
+If the Projects icon isn't in your strip (a Cutting workspace saved with an older version), choose Window ›
+Workspace › Reset Cutting, or open it from Window › Cutting › Projects.
+
 ## 1. The Cutting workspace
 
 Window › Workspace › **Cutting**. It turns on Cutting View (the mat drawn behind your artboard) and arranges the
@@ -30,7 +51,7 @@ panels on the right:
 
 - **Layers** at the top. Cutting by layer is set up here.
 - **Cut Settings** below it: what you change for each cut, and Send to Cutter….
-- Beside them, a strip of icons, one for each feature: **Cutting Mat** first, then **Contour**, **Stencil**,
+- Beside them, a strip of icons, one for each feature: **Projects** first, then **Cutting Mat**, then **Contour**, **Stencil**,
   **Weeding**, **Sketch Fill**, **Rhinestones**, **Puzzle**, **Pop Up**, **Templates**, **Tiles**, **Nesting** and **Print & Cut**. Click an icon to
   open that feature's panel beside it, and again (or anywhere else) to close it. Hover an icon for its name.
 

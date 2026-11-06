@@ -229,6 +229,18 @@ fn list(s: &mut Session, _: &Value) -> Result<Value> {
 fn set_material(s: &mut Session, m: &Material, label: &str) -> Result<()> {
     let mut settings = vectorcraft_cutting::settings(&s.doc()?.doc);
     let before = settings.clone();
+    with_material(&mut settings, m);
+    if settings != before {
+        s.edit(label, |d, _| {
+            vectorcraft_cutting::set_settings(d, &settings);
+            Ok(())
+        })?;
+    }
+    Ok(())
+}
+
+/// `settings` with `m`'s tool settings and name (each operation keeping its tool: C10.2, C18.15).
+pub(super) fn with_material(settings: &mut CuttingSettings, m: &Material) {
     // Keys a newer version kept in the tool settings stay.
     let (cut_extra, score_extra) = (settings.operations.cut.extra.clone(), settings.operations.score.extra.clone());
     // The tool is the machine's (C10.2): a material leaves the one chosen.
@@ -240,13 +252,6 @@ fn set_material(s: &mut Session, m: &Material, label: &str) -> Result<()> {
     settings.operations.score = ToolSettings { extra: score_extra, tool: score_tool, ..score };
     settings.material = Some(m.name.clone());
     settings.mirror = m.mirror;
-    if settings != before {
-        s.edit(label, |d, _| {
-            vectorcraft_cutting::set_settings(d, &settings);
-            Ok(())
-        })?;
-    }
-    Ok(())
 }
 
 fn name_param(p: &Value, cmd: &str) -> Result<String> {

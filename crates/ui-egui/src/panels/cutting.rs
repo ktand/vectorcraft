@@ -22,6 +22,7 @@ pub mod patterns;
 mod picker;
 pub mod popup;
 pub mod print;
+pub mod projects;
 pub mod templates;
 
 pub const ID: &str = "cutting";
@@ -31,6 +32,8 @@ pub const ID: &str = "cutting";
 /// it on the mat.
 pub const PANELS: &[&str] = &[
     ID,
+    // C18.12: a guided project first: it is where a job can start.
+    projects::ID,
     mat::ID,
     lines::ID,
     lines::STENCIL_ID,

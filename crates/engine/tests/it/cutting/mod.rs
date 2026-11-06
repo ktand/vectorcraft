@@ -12,6 +12,7 @@ mod nest;
 mod ops;
 mod placement;
 mod popup;
+mod projects;
 mod puzzle;
 mod send;
 mod sketch;

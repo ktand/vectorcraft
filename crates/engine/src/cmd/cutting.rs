@@ -49,6 +49,8 @@ mod calibration;
 mod batch;
 // A sticker sheet in one step (C18.5).
 mod stickers;
+// C18.12: guided projects.
+mod projects;
 // Moving a piece to another sheet (C18.13).
 mod sheets;
 // Tiles larger than the mat (C14.7).
@@ -79,6 +81,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(calibration::specs());
     v.extend(batch::specs());
     v.extend(stickers::specs());
+    v.extend(projects::specs());
     v.extend(sheets::specs());
     v.extend(tile::specs());
     v.extend(machine::specs());
