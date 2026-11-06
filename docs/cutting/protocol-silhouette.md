@@ -265,6 +265,12 @@ copied.
   for the Deep-Cut and Kraft blades. The AutoBlade's 1–10 is therefore 0.1 mm a step, and an import sets it from
   the file; for blades set by hand (`adjustable`, the ratchet blade, Kraft, Deep-Cut) it is kept as the depth to
   set them to and never sent; **to confirm** with a test cut ([hardware-validation.md](hardware-validation.md) step 22).
+- An action goes with a tool (C18.15): `cut` with the AutoBlade, the Deep-Cut or the `adjustable` blade,
+  `kraft_cut` with `kraft` or `kraft2`, `score` with the AutoBlade, `sketch` and `stipple` with `pen2`, `punch`
+  with `puncher`, `rotary_cut` with `rotary` (and, oddly, a few with the AutoBlade or a pen). Both Kraft names
+  appear for the Cameo 4 and both go to 2.0 mm, so the file doesn't say which is the 2 mm blade and which the
+  3 mm one: an import gives the settings to both. **To confirm** which is which, if it matters.
+- The pen's rows all have a depth of 0.3; the punch's 0.1–0.4. Neither is a depth anyone sets, so neither is kept.
 
 ## Checks on the machine
 

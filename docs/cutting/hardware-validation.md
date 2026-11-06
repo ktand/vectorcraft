@@ -419,3 +419,18 @@ The line under the buttons says how many were added and which were skipped.
 
 Note: which material you compared, whether the numbers matched, and the dial's readings. If the dial is off,
 `{"depth": "auto"}` imports without depths until the conversion is fixed.
+
+## Step 23: a material's pen and punch settings (C18.15)
+
+With materials imported from Studio (step 22):
+
+1. Choose a card material that has a sketch row in Studio. In Cut Settings set the Cut's **Tool** to **Pen**:
+   Force and Speed should change to the sketch settings Studio shows for it. Draw a few lines with a pen in
+   holder 1.
+2. With the punch tool in holder 2 and a vinyl that has punch settings, set the Tool to **Punch tool** and
+   compare Force and Speed with Studio's punch settings.
+3. Choose a thick material with only Kraft settings, such as chipboard: with the AutoBlade the panel says it
+   has none for it; with the Kraft blade it says how deep to set the blade.
+
+Note: whether each tool's numbers matched Studio's, and which Kraft blade you have (2 or 3 mm), so we can tell
+which of Studio's two Kraft names is which.

@@ -4,12 +4,17 @@
 //! time. Applying one to the document sets its tool settings and remembers its name; the
 //! document's settings are then "changed" once a number is set by hand. A material cut from the
 //! back (C14.12) turns Cut Mirrored on when applied, and one saved while it is on is marked so.
+//! A material keeps settings per tool (C18.15): each operation takes the material's settings for
+//! the tool it is cut with (the pen's sketch, the punch), and choosing another tool while the
+//! settings are still the material's takes that tool's.
 
 use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use serde_json::{Value, json};
-use vectorcraft_cutjob::{CuttingSettings, Material, Peel, Press, Pressure, Price, ToolSettings, builtin_materials, read_materials, valid_name};
+use vectorcraft_cutjob::{
+    CuttingSettings, ForTool, Material, Peel, Press, Pressure, Price, ToolSettings, builtin_materials, read_materials, valid_name,
+};
 
 use super::{CommandSpec, Result, Session, bad, cmd, has_doc, str_param};
 
@@ -69,9 +74,41 @@ pub(super) fn find(name: &str) -> Option<Material> {
     all().into_iter().find(|m| m.name.eq_ignore_ascii_case(name.trim()))
 }
 
+/// An operation's tool as a material looks it up (C18.15): none for the usual one.
+pub(super) fn tool_key(tool: &Option<String>) -> Option<&str> {
+    tool.as_deref().filter(|id| *id != vectorcraft_cutter_silhouette::AUTOBLADE.id)
+}
+
+/// The cut's settings are no longer what `m` gives it with its tool.
+fn cut_changed(s: &CuttingSettings, m: &Material) -> bool {
+    !m.for_tool(tool_key(&s.operations.cut.tool), false).settings.same_setup(&s.operations.cut)
+}
+
+fn score_changed(s: &CuttingSettings, m: &Material) -> bool {
+    !m.for_tool(tool_key(&s.operations.score.tool), true).settings.same_setup(&s.operations.score)
+}
+
 /// `s`'s tool settings are no longer those of the material it names.
 fn changed(s: &CuttingSettings) -> bool {
-    s.material.as_deref().and_then(find).is_some_and(|m| !m.cut.same_setup(&s.operations.cut) || !m.score.same_setup(&s.operations.score))
+    s.material.as_deref().and_then(find).is_some_and(|m| cut_changed(s, &m) || score_changed(s, &m))
+}
+
+/// C18.15: `new`'s operations whose tool changed from `old`'s, set to what the material `old`
+/// names gives the new tool, when their settings were still the material's and none of their
+/// numbers was given (`given(op)`).
+pub(super) fn follow_tool(old: &CuttingSettings, new: &mut CuttingSettings, given: impl Fn(&str) -> bool) {
+    let Some(m) = old.material.as_deref().and_then(find) else { return };
+    if new.material != old.material {
+        return;
+    }
+    if new.operations.cut.tool != old.operations.cut.tool && !cut_changed(old, &m) && !given("cut") {
+        let t = &mut new.operations.cut;
+        *t = ToolSettings { tool: t.tool.clone(), extra: t.extra.clone(), ..m.for_tool(tool_key(&t.tool), false).settings };
+    }
+    if new.operations.score.tool != old.operations.score.tool && !score_changed(old, &m) && !given("score") {
+        let t = &mut new.operations.score;
+        *t = ToolSettings { tool: t.tool.clone(), extra: t.extra.clone(), ..m.for_tool(tool_key(&t.tool), true).settings };
+    }
 }
 
 pub fn specs() -> Vec<CommandSpec> {
@@ -81,7 +118,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Materials",
             [],
             None,
-            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, mirror: cut from the back (Send asks whether to cut mirrored), price: {amount, per: sheet|metre, wastePct} or null (C18.3), rollLeftMm: what's left of its roll, mm, or null (C18.11), press: {tempC, seconds, pressure, peel} or null (C18.8), handDepthMm: how deep to set a blade adjusted by hand, mm, or null (C18.14; never sent), cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since}",
+            "{} the materials (built-in starting points first, then the user's) → {materials: [{name, builtin, mirror: cut from the back (Send asks whether to cut mirrored), price: {amount, per: sheet|metre, wastePct} or null (C18.3), rollLeftMm: what's left of its roll, mm, or null (C18.11), press: {tempC, seconds, pressure, peel} or null (C18.8), handDepthMm: how deep to set a blade adjusted by hand, mm, or null (C18.14; never sent; for cutTool's blade), cutTool: the tool its cut settings were made for, or null for the AutoBlade (C18.15), tools: {toolId: {settings, handDepthMm}}: its settings for other tools, cut, score: {force, speedMmS, passes, overcutMm, depth, accel, cornerOvercutMm, bladeOffsetMm}}], current: the material the document's tool settings were set from or null, changed: whether they were changed by hand since, chosen: null or {cut, score: {tool, forTool: whether the material has settings for that tool (else its cut or score settings stand in), handDepthMm}}}",
             has_doc,
             list
         ),
@@ -90,7 +127,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Apply Cutting Material",
             [],
             None,
-            "{name} set the document's cut and score tool settings to the material's, and Cut Mirrored to whether it is cut from the back, one undo step → as cutting.materials",
+            "{name} set the document's cut and score tool settings to the material's for the tool each is cut with (C18.15), and Cut Mirrored to whether it is cut from the back, one undo step; choosing another tool afterwards (cutting.settings.set with only tool) takes the material's settings for it while they are unchanged → as cutting.materials",
             has_doc,
             apply
         ),
@@ -99,7 +136,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Save Cutting Material",
             [],
             None,
-            "{name} keep the document's cut and score tool settings as the user's material `name` (replacing one of that name; a built-in name is refused; cut from the back when Cut Mirrored is on), next to the preferences, and name it as the document's material → as cutting.materials",
+            "{name} keep the document's cut and score tool settings as the user's material `name`, each under the tool it is cut with (C18.15; saved again, its other tools' settings, price, roll and pressing stay; a built-in name is refused; cut from the back when Cut Mirrored is on), next to the preferences, and name it as the document's material → as cutting.materials",
             has_doc,
             save_cmd
         ),
@@ -135,7 +172,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Import Cutting Materials",
             [],
             None,
-            "{path? | text?: a material list exported from Silhouette Studio (CSV, at most 8 MB), machine?: the file's cutter class (default cameo4), depth?: file|auto (default file: the AutoBlade's depth from the file's mm, 0.1 mm a step of 1–10; auto: left to the machine; other blades' depth is set by hand: kept as the material's handDepthMm, never sent), replace?: bool (default false: a material of yours of the same name is skipped), preview?: bool (nothing kept)} the list's materials for the machine as the user's own (C18.14): a cut row (automatic, Kraft or Deep-Cut blade) and its score row each; force and speed the machine's steps as they are → as cutting.materials, and imported: [names], skipped: [{name, reason}], machines: [the file's cutter classes]",
+            "{path? | text?: a material list exported from Silhouette Studio (CSV, at most 8 MB), machine?: the file's cutter class (default cameo4), depth?: file|auto (default file: the AutoBlade's depth from the file's mm, 0.1 mm a step of 1–10; auto: left to the machine; other blades' depth is set by hand: kept as the material's handDepthMm, never sent), replace?: bool (default false: a material of yours of the same name is skipped), preview?: bool (nothing kept)} the list's materials for the machine as the user's own (C18.14): each tool's first row (C18.15: the AutoBlade's cut and score, the Deep-Cut, ratchet, Kraft and rotary blades', the pen's sketch, the punch's), a material without an AutoBlade cut having its first other tool's as its cut; force and speed the machine's steps as they are → as cutting.materials, and imported: [names], skipped: [{name, reason}], machines: [the file's cutter classes], unused: [the file's actions not used, such as stipple]",
             has_doc,
             import_cmd
         ),
@@ -155,9 +192,24 @@ fn listing(s: &Session) -> Result<Value> {
     let settings = vectorcraft_cutting::settings(&s.doc()?.doc);
     let materials: Vec<Value> = all()
         .iter()
-        .map(|m| json!({"name": m.name, "builtin": m.builtin, "mirror": m.mirror, "price": m.price.map(|p| p.to_value()), "rollLeftMm": m.roll_left_mm, "press": m.press.map(|p| p.to_value()), "handDepthMm": m.hand_depth_mm, "cut": m.cut.to_value(), "score": m.score.to_value()}))
+        .map(|m| {
+            let tools: serde_json::Map<String, Value> = m
+                .tools
+                .iter()
+                .map(|(id, t)| (id.clone(), json!({"settings": t.settings.to_value(), "handDepthMm": t.hand_depth_mm})))
+                .collect();
+            json!({"name": m.name, "builtin": m.builtin, "mirror": m.mirror, "price": m.price.map(|p| p.to_value()), "rollLeftMm": m.roll_left_mm, "press": m.press.map(|p| p.to_value()), "handDepthMm": m.hand_depth_mm, "cutTool": m.cut_tool, "tools": tools, "cut": m.cut.to_value(), "score": m.score.to_value()})
+        })
         .collect();
-    Ok(json!({"materials": materials, "current": settings.material, "changed": changed(&settings)}))
+    // C18.15: what the current material gives each operation with its tool.
+    let chosen = settings.material.as_deref().and_then(find).map(|m| {
+        let op = |tool: &Option<String>, score: bool| {
+            let c = m.for_tool(tool_key(tool), score);
+            json!({"tool": tool, "forTool": c.for_tool, "handDepthMm": c.hand_depth_mm})
+        };
+        json!({"cut": op(&settings.operations.cut.tool, false), "score": op(&settings.operations.score.tool, true)})
+    });
+    Ok(json!({"materials": materials, "current": settings.material, "changed": changed(&settings), "chosen": chosen}))
 }
 
 fn list(s: &mut Session, _: &Value) -> Result<Value> {
@@ -172,8 +224,11 @@ fn set_material(s: &mut Session, m: &Material, label: &str) -> Result<()> {
     let (cut_extra, score_extra) = (settings.operations.cut.extra.clone(), settings.operations.score.extra.clone());
     // The tool is the machine's (C10.2): a material leaves the one chosen.
     let (cut_tool, score_tool) = (settings.operations.cut.tool.clone(), settings.operations.score.tool.clone());
-    settings.operations.cut = ToolSettings { extra: cut_extra, tool: cut_tool, ..m.cut.clone() };
-    settings.operations.score = ToolSettings { extra: score_extra, tool: score_tool, ..m.score.clone() };
+    // C18.15: each operation takes the material's settings for its tool.
+    let cut = m.for_tool(tool_key(&cut_tool), false).settings;
+    let score = m.for_tool(tool_key(&score_tool), true).settings;
+    settings.operations.cut = ToolSettings { extra: cut_extra, tool: cut_tool, ..cut };
+    settings.operations.score = ToolSettings { extra: score_extra, tool: score_tool, ..score };
     settings.material = Some(m.name.clone());
     settings.mirror = m.mirror;
     if settings != before {
@@ -323,18 +378,7 @@ fn save_cmd(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad(CMD, format!("{name:?} is a built-in material: choose another name")));
     }
     let settings = vectorcraft_cutting::settings(&s.doc()?.doc);
-    let m = Material {
-        name: name.clone(),
-        cut: ToolSettings { tool: None, ..settings.operations.cut.clone() },
-        score: ToolSettings { tool: None, ..settings.operations.score.clone() },
-        builtin: false,
-        mirror: settings.mirror,
-        // Saved again under its name, it keeps its price (C18.3) and what's left of its roll (C18.11).
-        price: find(&name).and_then(|old| old.price),
-        roll_left_mm: find(&name).and_then(|old| old.roll_left_mm),
-        press: find(&name).and_then(|old| old.press),
-        hand_depth_mm: find(&name).and_then(|old| old.hand_depth_mm),
-    };
+    let m = saved(name.clone(), find(&name), &settings);
     {
         let mut st = store().lock().map_err(|_| bad(CMD, "the materials are damaged"))?;
         match st.user.iter_mut().find(|u| u.name.eq_ignore_ascii_case(&name)) {
@@ -350,6 +394,60 @@ fn save_cmd(s: &mut Session, p: &Value) -> Result<Value> {
     }
     set_material(s, &m, "Save Material")?;
     listing(s)
+}
+
+/// The material `name` as the document's settings save it over `old` (the one of that name, if
+/// any). Saved again, it keeps its price (C18.3), what's left of its roll (C18.11), its pressing
+/// and hand-set depths, and its settings for the tools not used now (C18.15): each operation's
+/// settings go to its tool's (the cut's, when both use one tool).
+fn saved(name: String, old: Option<Material>, settings: &CuttingSettings) -> Material {
+    let ops = &settings.operations;
+    let plain = |t: &ToolSettings| ToolSettings { tool: None, extra: Default::default(), ..t.clone() };
+    let (cut_tool, score_tool) = (tool_key(&ops.cut.tool), tool_key(&ops.score.tool));
+    let mut m = match old {
+        Some(old) => Material { name, builtin: false, mirror: settings.mirror, ..old },
+        None => Material {
+            name,
+            cut: plain(&ops.cut),
+            score: plain(&ops.score),
+            builtin: false,
+            mirror: settings.mirror,
+            price: None,
+            roll_left_mm: None,
+            press: None,
+            hand_depth_mm: None,
+            // A new material's cut is for the tool it was cut with.
+            cut_tool: cut_tool.map(str::to_string),
+            tools: Default::default(),
+        },
+    };
+    if cut_tool == m.cut_tool.as_deref() {
+        m.cut = plain(&ops.cut);
+    } else if let Some(t) = cut_tool {
+        let hand_depth_mm = m.tools.get(t).and_then(|e| e.hand_depth_mm);
+        m.tools.insert(t.to_string(), ForTool { settings: plain(&ops.cut), hand_depth_mm });
+    } else {
+        // Cut with the usual tool now: the cut is for it, and its old tool keeps its settings.
+        if let Some(old_tool) = m.cut_tool.take() {
+            let entry = ForTool { settings: m.cut.clone(), hand_depth_mm: m.hand_depth_mm.take() };
+            m.tools.entry(old_tool).or_insert(entry);
+        }
+        m.cut = plain(&ops.cut);
+    }
+    match score_tool {
+        None => m.score = plain(&ops.score),
+        Some(t) if Some(t) == cut_tool || Some(t) == m.cut_tool.as_deref() => {}
+        Some(t) => {
+            let hand_depth_mm = m.tools.get(t).and_then(|e| e.hand_depth_mm);
+            m.tools.insert(t.to_string(), ForTool { settings: plain(&ops.score), hand_depth_mm });
+        }
+    }
+    // At most the most kept: the ones in use now stay.
+    while m.tools.len() > vectorcraft_cutjob::MAX_TOOLS {
+        let Some(drop) = m.tools.keys().find(|k| Some(k.as_str()) != cut_tool && Some(k.as_str()) != score_tool).cloned() else { break };
+        m.tools.remove(&drop);
+    }
+    m
 }
 
 /// C18.14: materials from a list the user exported from the maker's software (only the file
@@ -416,6 +514,7 @@ fn import_cmd(s: &mut Session, p: &Value) -> Result<Value> {
         o.insert("imported".into(), json!(imported));
         o.insert("skipped".into(), Value::Array(skipped));
         o.insert("machines".into(), json!(got.machines));
+        o.insert("unused".into(), json!(got.unused));
     }
     Ok(out)
 }

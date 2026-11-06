@@ -224,13 +224,20 @@ starting points only: make a test cut before trusting them.
   "name (copy)".
 - **Update "name"** saves your changes into one of your own materials in one click.
 - **Delete** removes one of your own.
-- **Import…** adds the materials of a list you exported from Silhouette Studio (a CSV file): the Cameo 4's cut
-  and score settings for each, as materials of your own. Materials it can't use (only a rotary blade or a punch,
-  none for the Cameo 4) and names you already have are skipped, and the line under the buttons says which and
-  why. The AutoBlade's depth comes from the file too (Studio gives it in millimetres; each step of the 1–10 is
-  0.1 mm). For a blade you set by hand (Kraft, Deep-Cut, ratchet; the material's name says which), the panel
-  says how deep to set it under the material, for example "Set the blade by hand to 0.9 mm." Make a test cut
-  before trusting a material.
+- **Import…** adds the materials of a list you exported from Silhouette Studio (a CSV file), as materials of
+  your own: the Cameo 4's settings for each tool the material has them for (the AutoBlade's cut and score, the
+  pen's sketch, the punch, the Kraft, Deep-Cut and rotary blades). Materials it can't use (none for the Cameo 4,
+  or only things VectorCraft doesn't do, such as embossing) and names you already have are skipped, and the line
+  under the buttons says which and why, and which of the file's actions weren't used (such as stipple). The
+  AutoBlade's depth comes from the file too (Studio gives it in millimetres; each step of the 1–10 is 0.1 mm).
+  For a blade you set by hand (Kraft, Deep-Cut, ratchet), the panel says how deep to set it under the
+  material, for example "Set the blade by hand to 0.9 mm." Make a test cut before trusting a material.
+
+A material keeps settings for each tool. Choose the tool for Cut or Score and the material's settings for that
+tool are used: choose **Pen** and you get its sketch settings, **Punch tool** and its punch settings. If you
+change the tool after choosing the material, the numbers follow, unless you have already changed them by
+hand. When a material has no settings for the tool you chose, the panel says so and its cut settings are used.
+**Save as Material…** saves the numbers for the tool you are using and keeps the material's other tools.
 
 Some materials are cut from the back, such as **Heat Transfer Vinyl** (iron-on): choosing one turns **Cut
 Mirrored** on, and choosing another turns it off. When you press **Send** with such a material, a dialog asks

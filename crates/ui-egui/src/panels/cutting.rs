@@ -490,8 +490,17 @@ fn material_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     } else if current.as_deref().is_some_and(|c| list.iter().any(|(n, b)| n == c && *b)) {
         widgets::dim_label(ui, tl!("A starting point: make a test cut first."));
     }
-    // C18.14: a blade set by hand: how deep the material says to set it (never sent).
-    if let Some(d) = current.as_deref().and_then(|c| info["materials"].as_array()?.iter().find(|m| m["name"] == c)?["handDepthMm"].as_f64()) {
+    // C18.15: an operation's tool the material has no settings for; C18.14: a blade set by hand,
+    // how deep the material says to set it (never sent).
+    for op in ["cut", "score"] {
+        let chosen = &info["chosen"][op];
+        if let (Some(c), Some(false)) = (current.as_deref(), chosen["forTool"].as_bool()) {
+            let tool = silhouette::tool(chosen["tool"].as_str()).map_or(tl!("Unknown"), |t| t.label);
+            widgets::dim_label(ui, &no_tool_note(c, tool, op == "score"));
+        }
+    }
+    let depth = ["cut", "score"].iter().find_map(|op| info["chosen"][op]["handDepthMm"].as_f64());
+    if let Some(d) = depth {
         widgets::dim_label(ui, &hand_depth_note(d));
     }
     // The name field only once Save as Material… is clicked (C9.1).
@@ -646,14 +655,27 @@ fn hand_depth_note(d: f64) -> String {
     format!("{} {d:.1} mm.", tl!("Set the blade by hand to"))
 }
 
+/// The material `material` has no settings for `tool`, which the cut (or the score) is cut with.
+fn no_tool_note(material: &str, tool: &str, score: bool) -> String {
+    let used = if score { tl!("its score settings are used.") } else { tl!("its cut settings are used.") };
+    format!("{material}: {} {tool}; {used}", tl!("no settings for the"))
+}
+
 /// What an import (`cutting.material.import`'s answer) did, in a line: how many were added and
-/// which were skipped, and why.
+/// which were skipped, and why, and the list's actions not used.
 fn import_note(r: &Value) -> String {
     let n = r["imported"].as_array().map_or(0, Vec::len);
     let skipped: Vec<String> =
         r["skipped"].as_array().into_iter().flatten().filter_map(|k| Some(format!("{} ({})", k["name"].as_str()?, k["reason"].as_str()?))).collect();
-    let added = if n == 1 { tl!("1 material added.").to_string() } else { format!("{n} {}", tl!("materials added.")) };
-    if skipped.is_empty() { added } else { format!("{added} {} {}", tl!("Skipped:"), skipped.join("; ")) }
+    let unused: Vec<&str> = r["unused"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+    let mut note = if n == 1 { tl!("1 material added.").to_string() } else { format!("{n} {}", tl!("materials added.")) };
+    if !skipped.is_empty() {
+        note = format!("{note} {} {}", tl!("Skipped:"), skipped.join("; "));
+    }
+    if !unused.is_empty() {
+        note = format!("{note} {} {}.", tl!("Not used:"), unused.join(", "));
+    }
+    note
 }
 
 /// How each operation drives the blade: force and speed in the machine's own steps (C5.2),
@@ -946,19 +968,25 @@ mod tests {
         assert!(!tool_texts(&mut app, &ctx).iter().any(|t| t == "Import…"), "no open dialog here");
         app.services.pick_open = Some(Box::new(|_: &crate::FilePick| None));
         assert!(tool_texts(&mut app, &ctx).iter().any(|t| t == "Import…"));
-        let r = json!({"imported": ["A", "B"], "skipped": [{"name": "Felt", "reason": "only rotary_cut, which VectorCraft doesn't cut"}]});
-        assert_eq!(import_note(&r), "2 materials added. Skipped: Felt (only rotary_cut, which VectorCraft doesn't cut)");
+        let r = json!({"imported": ["A", "B"], "skipped": [{"name": "Felt", "reason": "only emboss, which VectorCraft doesn't do"}], "unused": ["emboss", "stipple"]});
+        assert_eq!(import_note(&r), "2 materials added. Skipped: Felt (only emboss, which VectorCraft doesn't do) Not used: emboss, stipple.");
         assert_eq!(import_note(&json!({"imported": ["A"], "skipped": []})), "1 material added.");
         super::super::set_pstate(&ctx, "cutting-material-imported", Some("1 material added.".to_string()));
         assert!(tool_texts(&mut app, &ctx).iter().any(|t| t == "1 material added."));
-        // A material for a blade set by hand says how deep to set it.
+        // C18.15: a material only cut with a Kraft blade: with the AutoBlade it says it has no
+        // settings for it; with the Kraft blade, how deep to set it by hand.
         let list = "full_name,cutter_class_id,(force.pressure),(speed),(tool.type),(blade_depth),category,uuid,parent_uuid,action\n\
                     UI Board,desktop,1,1,x,0,group,g,r,\nUI Board for M,cameo4,12,3,kraft2,0.9,leaf,l,g,kraft_cut\n";
         app.run("cutting.material.import", json!({"text": list})).unwrap();
-        app.run("cutting.material.apply", json!({"name": "UI Board (Kraft Blade)"})).unwrap();
-        let texts = tool_texts(&mut app, &ctx);
-        app.run("cutting.material.delete", json!({"name": "UI Board (Kraft Blade)"})).unwrap();
-        assert!(texts.iter().any(|t| t == "Set the blade by hand to 0.9 mm."), "{texts:?}");
+        app.run("cutting.material.apply", json!({"name": "UI Board"})).unwrap();
+        let auto = tool_texts(&mut app, &ctx);
+        app.run("cutting.settings.set", json!({"operations": {"cut": {"tool": "kraft3"}}})).unwrap();
+        let kraft = tool_texts(&mut app, &ctx);
+        app.run("cutting.material.delete", json!({"name": "UI Board"})).unwrap();
+        assert!(auto.iter().any(|t| t == "UI Board: no settings for the AutoBlade; its cut settings are used."), "{auto:?}");
+        assert!(!auto.iter().any(|t| t.starts_with("Set the blade by hand")), "{auto:?}");
+        assert!(kraft.iter().any(|t| t == "Set the blade by hand to 0.9 mm."), "{kraft:?}");
+        assert!(!kraft.iter().any(|t| t.contains("no settings for")), "{kraft:?}");
     }
 
     /// C9.1: cut and score side by side, one row each setting, no range squeezed into a field; the

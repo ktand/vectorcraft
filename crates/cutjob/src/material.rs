@@ -4,6 +4,8 @@
 //! cut on their machine, with the whole tool setup (blade depth and offset too, C5.5). No maker's
 //! material table is used.
 
+use std::collections::BTreeMap;
+
 use serde_json::{Value, json};
 
 use crate::read::object;
@@ -33,12 +35,48 @@ pub struct Material {
     /// How it is pressed onto what it decorates (C18.8), for the job sheet; none: not given.
     pub press: Option<Press>,
     /// How deep to set a blade adjusted by hand (Kraft, Deep-Cut, ratchet), mm (C18.14): shown
-    /// with the material, never sent; none: not given.
+    /// with the material, never sent; none: not given. It is for [`Material::cut_tool`]'s blade.
     pub hand_depth_mm: Option<f64>,
+    /// The tool [`Material::cut`] was made for, a driver's id (C18.15; none: the usual tool), as
+    /// for a board only cut with a Kraft blade.
+    pub cut_tool: Option<String>,
+    /// Settings for other tools, by a driver's tool id (C18.15): an operation cut with one of
+    /// them (the pen's sketch, the punch, a Kraft blade) takes these instead of `cut`.
+    pub tools: BTreeMap<String, ForTool>,
+}
+
+/// A material's settings for one tool (C18.15).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ForTool {
+    pub settings: ToolSettings,
+    /// How deep to set the blade by hand, mm (as [`Material::hand_depth_mm`]).
+    pub hand_depth_mm: Option<f64>,
+}
+
+/// The settings a material gives an operation (C18.15).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Chosen {
+    pub settings: ToolSettings,
+    /// How deep to set the blade by hand, mm, if the material says.
+    pub hand_depth_mm: Option<f64>,
+    /// The material has settings for the operation's tool; false: its cut (or score) settings,
+    /// made for another tool, stand in.
+    pub for_tool: bool,
 }
 
 /// The deepest a blade set by hand is said to be set, mm.
 pub const MAX_HAND_DEPTH_MM: f64 = 5.0;
+/// Most tools a material keeps settings for.
+pub const MAX_TOOLS: usize = 16;
+
+fn read_hand_depth(v: Option<&Value>) -> Option<f64> {
+    v.and_then(Value::as_f64).filter(|d| d.is_finite()).map(|d| d.clamp(0.0, MAX_HAND_DEPTH_MM))
+}
+
+fn tool_id(id: &str) -> Option<String> {
+    let id = id.trim();
+    (!id.is_empty() && id.len() <= ToolSettings::MAX_TOOL_ID).then(|| id.to_string())
+}
 
 /// How hard a heat press is closed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -165,6 +203,8 @@ pub fn builtin_materials() -> Vec<Material> {
         roll_left_mm: None,
         press: None,
         hand_depth_mm: None,
+        cut_tool: None,
+        tools: BTreeMap::new(),
     };
     vec![
         m("Paper (light)", tool(0.2, 100.0, 1), tool(0.08, 100.0, 1)),
@@ -199,7 +239,44 @@ impl Material {
         if let (Some(d), Some(m)) = (self.hand_depth_mm, v.as_object_mut()) {
             m.insert("handDepthMm".into(), json!(d));
         }
+        if let (Some(t), Some(m)) = (&self.cut_tool, v.as_object_mut()) {
+            m.insert("cutTool".into(), json!(t));
+        }
+        if let (false, Some(m)) = (self.tools.is_empty(), v.as_object_mut()) {
+            let tools: serde_json::Map<String, Value> = self
+                .tools
+                .iter()
+                .map(|(id, t)| {
+                    let mut e = json!({"settings": ToolSettings { tool: None, ..t.settings.clone() }.to_value()});
+                    if let (Some(d), Some(o)) = (t.hand_depth_mm, e.as_object_mut()) {
+                        o.insert("handDepthMm".into(), json!(d));
+                    }
+                    (id.clone(), e)
+                })
+                .collect();
+            m.insert("tools".into(), Value::Object(tools));
+        }
         v
+    }
+
+    /// The settings it gives an operation cut with `tool` (none: the usual tool; `score`: the
+    /// score operation): the tool's own, else the cut's (or the score's) standing in. The
+    /// returned settings name no tool: the tool is the machine's.
+    pub fn for_tool(&self, tool: Option<&str>, score: bool) -> Chosen {
+        if let Some(t) = tool.and_then(|t| self.tools.get(t)) {
+            return Chosen { settings: ToolSettings { tool: None, ..t.settings.clone() }, hand_depth_mm: t.hand_depth_mm, for_tool: true };
+        }
+        if score && tool.is_none() {
+            return Chosen { settings: self.score.clone(), hand_depth_mm: None, for_tool: true };
+        }
+        let base = if score { &self.score } else { &self.cut };
+        let made_for = !score && tool == self.cut_tool.as_deref();
+        Chosen { settings: base.clone(), hand_depth_mm: if made_for { self.hand_depth_mm } else { None }, for_tool: made_for }
+    }
+
+    /// The tools it has settings for, its cut's first (none: the usual tool).
+    pub fn tool_ids(&self) -> Vec<Option<&str>> {
+        std::iter::once(self.cut_tool.as_deref()).chain(self.tools.keys().map(|k| Some(k.as_str()))).collect()
     }
 
     /// One read from the user's file (leniently, as the document's settings are), `None` when it
@@ -210,14 +287,28 @@ impl Material {
         let defaults = crate::settings::Operations::default();
         Some(Material {
             name,
-            cut: ToolSettings::read_lenient(object(m, "cut"), defaults.cut),
+            cut: ToolSettings::read_lenient(object(m, "cut"), defaults.cut.clone()),
             score: ToolSettings::read_lenient(object(m, "score"), defaults.score),
             builtin: false,
             mirror: m.get("mirror").and_then(Value::as_bool) == Some(true),
             price: m.get("price").and_then(Price::from_value),
             press: m.get("press").and_then(Press::from_value),
             roll_left_mm: m.get("rollLeftMm").and_then(Value::as_f64).filter(|l| l.is_finite()).map(|l| l.clamp(0.0, MAX_ROLL_MM)),
-            hand_depth_mm: m.get("handDepthMm").and_then(Value::as_f64).filter(|d| d.is_finite()).map(|d| d.clamp(0.0, MAX_HAND_DEPTH_MM)),
+            hand_depth_mm: read_hand_depth(m.get("handDepthMm")),
+            cut_tool: m.get("cutTool").and_then(Value::as_str).and_then(tool_id),
+            tools: m
+                .get("tools")
+                .and_then(Value::as_object)
+                .into_iter()
+                .flatten()
+                .filter_map(|(id, e)| {
+                    let id = tool_id(id)?;
+                    let e = e.as_object()?;
+                    let settings = ToolSettings { tool: None, ..ToolSettings::read_lenient(object(e, "settings"), defaults.cut.clone()) };
+                    Some((id, ForTool { settings, hand_depth_mm: read_hand_depth(e.get("handDepthMm")) }))
+                })
+                .take(MAX_TOOLS)
+                .collect(),
         })
     }
 }
@@ -253,14 +344,25 @@ impl GroupSetup {
         })
     }
 
-    /// The setup `m` gives.
+    /// The setup `m` gives, cut with the usual tools.
     pub fn of_material(m: &Material) -> GroupSetup {
-        GroupSetup { material: Some(m.name.clone()), cut: m.cut.clone(), score: m.score.clone() }
+        GroupSetup::of_material_with(m, None, None)
     }
 
-    /// The setup is no longer `m`'s.
+    /// The setup `m` gives operations cut with `cut_tool` and `score_tool` (C18.15; none: the
+    /// usual tool); the setup names no tool, so the group keeps the document's.
+    pub fn of_material_with(m: &Material, cut_tool: Option<&str>, score_tool: Option<&str>) -> GroupSetup {
+        GroupSetup { material: Some(m.name.clone()), cut: m.for_tool(cut_tool, false).settings, score: m.for_tool(score_tool, true).settings }
+    }
+
+    /// The setup is no longer `m`'s for operations cut with the usual tools.
     pub fn differs_from(&self, m: &Material) -> bool {
-        !self.cut.same_setup(&m.cut) || !self.score.same_setup(&m.score)
+        self.differs_from_with(m, None, None)
+    }
+
+    /// The setup is no longer what `m` gives operations cut with `cut_tool` and `score_tool`.
+    pub fn differs_from_with(&self, m: &Material, cut_tool: Option<&str>, score_tool: Option<&str>) -> bool {
+        !self.cut.same_setup(&m.for_tool(cut_tool, false).settings) || !self.score.same_setup(&m.for_tool(score_tool, true).settings)
     }
 }
 
@@ -311,6 +413,8 @@ mod tests {
             roll_left_mm: None,
             press: None,
             hand_depth_mm: None,
+            cut_tool: None,
+            tools: BTreeMap::new(),
         };
         let file = json!([user.to_value()]);
         assert_eq!(read_materials(&file), std::slice::from_ref(&user));
@@ -323,6 +427,46 @@ mod tests {
         assert_eq!(read_materials(&json!([board.to_value()])), [board]);
         assert_eq!(read_materials(&json!([{"name": "x", "handDepthMm": 99}]))[0].hand_depth_mm, Some(MAX_HAND_DEPTH_MM));
         assert!(!read_materials(&json!([{"name": "x", "mirror": "yes"}]))[0].mirror, "read leniently");
+    }
+
+    /// C18.15: settings per tool round-trip, and an operation takes its tool's.
+    #[test]
+    fn settings_per_tool() {
+        let mut board = builtin_materials()[1].clone();
+        board.builtin = false;
+        board.name = "Board".into();
+        board.cut_tool = Some("kraft3".into());
+        board.hand_depth_mm = Some(1.2);
+        let pen = tool(0.1, 50.0, 1);
+        board.tools.insert("pen".into(), ForTool { settings: pen.clone(), hand_depth_mm: None });
+        board.tools.insert("deepcut".into(), ForTool { settings: tool(0.6, 30.0, 2), hand_depth_mm: Some(0.8) });
+        let back = read_materials(&json!([board.to_value()]));
+        assert_eq!(back, std::slice::from_ref(&board));
+        let pick = |t: Option<&str>, score| board.for_tool(t, score);
+        assert_eq!((pick(Some("pen"), false).settings, pick(Some("pen"), false).for_tool), (pen.clone(), true));
+        assert_eq!(pick(Some("pen"), true).settings, pen, "the pen sketches whichever operation it is in");
+        assert_eq!(pick(Some("deepcut"), false).hand_depth_mm, Some(0.8));
+        let kraft = pick(Some("kraft3"), false);
+        assert_eq!((kraft.settings, kraft.hand_depth_mm, kraft.for_tool), (board.cut.clone(), Some(1.2), true));
+        let auto = pick(None, false);
+        assert_eq!((auto.settings, auto.hand_depth_mm, auto.for_tool), (board.cut.clone(), None, false), "made for the Kraft blade");
+        let score = pick(None, true);
+        assert_eq!((score.settings, score.for_tool), (board.score.clone(), true));
+        assert!(!pick(Some("punch"), false).for_tool);
+        assert_eq!(board.tool_ids(), [Some("kraft3"), Some("deepcut"), Some("pen")]);
+        // Read leniently: bad entries left out, at most MAX_TOOLS, no tool named in the settings.
+        let mut many = serde_json::Map::new();
+        for i in 0..40 {
+            many.insert(format!("t{i}"), json!({"settings": {"force": 0.2, "tool": "x"}}));
+        }
+        many.insert("".into(), json!({"settings": {}}));
+        many.insert("junk".into(), json!(3));
+        let got = &read_materials(&json!([{"name": "x", "tools": many, "cutTool": ""}]))[0];
+        assert_eq!((got.tools.len(), got.cut_tool.clone()), (MAX_TOOLS, None));
+        assert!(got.tools.values().all(|t| t.settings.tool.is_none()));
+        // A group's setup for the pen is the pen's.
+        let g = GroupSetup::of_material_with(&board, Some("pen"), None);
+        assert!(!g.differs_from_with(&board, Some("pen"), None) && g.differs_from(&board));
     }
 
     /// C5.5: the blade's setup is kept with the material, as the force and speed are.
@@ -339,6 +483,8 @@ mod tests {
             roll_left_mm: None,
             press: None,
             hand_depth_mm: None,
+            cut_tool: None,
+            tools: BTreeMap::new(),
         };
         let back = read_materials(&json!([user.to_value()]));
         assert_eq!(back, std::slice::from_ref(&user));

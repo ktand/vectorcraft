@@ -4,8 +4,12 @@
 //! `docs/cutting/protocol-silhouette.md` › Material lists).
 //!
 //! A material is a group row; its settings are the rows under it (by parent id), one per machine
-//! and action. For the machine asked for: the first row that cuts (`cut`, else `kraft_cut`) with a
-//! blade this driver cuts with gives the cut settings, the first `score` row the score settings.
+//! and action. For the machine asked for, each tool this driver knows takes the first row for it
+//! (C18.15, [`use_of`]): the AutoBlade's `cut` row gives the cut settings and its `score` row the
+//! score settings; the Deep-Cut, ratchet, Kraft and rotary blades', the pen's (`sketch`) and the
+//! punch's are kept as the material's settings for that tool. A material with no AutoBlade cut
+//! has its first other tool's settings as its cut (for that tool, [`Material::cut_tool`]). Actions
+//! VectorCraft doesn't do (stipple, pop-out cards, embossing…) are listed as not used.
 //! Force and speed are the machine's own steps, which this driver sends as they are; passes,
 //! acceleration and the end overcut are taken as they are. The file's depth is in millimetres
 //! (the AutoBlade cuts at most 1 mm deep, the owner, 2026-11-05, and no AutoBlade row of their list
@@ -13,7 +17,9 @@
 //! by hand (Kraft, Deep-Cut, ratchet) keeps it as the depth to set it to, never sent
 //! ([`Material::hand_depth_mm`]).
 
-use vectorcraft_cutjob::{MAX_MATERIALS, MAX_NAME, Material, Operations, ToolSettings};
+use std::collections::BTreeMap;
+
+use vectorcraft_cutjob::{ForTool, MAX_HAND_DEPTH_MM, MAX_MATERIALS, MAX_NAME, Material, Operations, ToolSettings};
 
 use crate::{force_from_step, speed_from_step};
 
@@ -50,6 +56,8 @@ pub struct Imported {
     pub skipped: Vec<Skipped>,
     /// The machines the list has rows for, in the order first seen.
     pub machines: Vec<String>,
+    /// The machine's actions the list has that weren't used (the file's names, sorted).
+    pub unused: Vec<String>,
 }
 
 /// The CSV rows of `text`: fields split at commas, quoted fields with `""` for a quote; at most
@@ -148,17 +156,36 @@ struct Leaf<'a> {
     tool: String,
 }
 
-/// The blades this driver cuts with, by the file's tool names, and what an imported material's
-/// name says when it isn't the automatic blade (whose depth is sent; the others' is set by hand).
-fn blade(tool: &str) -> Option<Option<&'static str>> {
-    match tool {
-        "autoadjust" => Some(None),
-        "adjustable" => Some(Some("Ratchet Blade")),
-        "kraft" | "kraft2" => Some(Some("Kraft Blade")),
-        "deepcut" => Some(Some("Deep-Cut Blade")),
-        _ => None,
-    }
+/// What a settings row is used for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Use {
+    /// The AutoBlade's cut.
+    Cut,
+    /// The AutoBlade's score.
+    Score,
+    /// The settings for these tools of this driver ([`crate::TOOLS`] ids), and whether the blade's
+    /// depth is set by hand (kept as the depth to set it to).
+    Tools(&'static [&'static str], bool),
 }
+
+/// The use of a row with `action` and `tool` (the file's names), none when VectorCraft doesn't
+/// do it. The file doesn't say which Kraft blade (2 or 3 mm) a row is for: both take it.
+fn use_of(action: &str, tool: &str) -> Option<Use> {
+    Some(match (action, tool) {
+        ("cut", "autoadjust") => Use::Cut,
+        ("score", "autoadjust") => Use::Score,
+        ("cut", "deepcut") => Use::Tools(&["deepcut"], true),
+        ("cut", "adjustable") => Use::Tools(&["ratchet"], true),
+        ("kraft_cut", "kraft" | "kraft2") => Use::Tools(&["kraft3", "kraft2"], true),
+        ("rotary_cut", "rotary") => Use::Tools(&["rotary"], false),
+        ("sketch", "pen" | "pen2") => Use::Tools(&["pen"], false),
+        ("punch", "puncher") => Use::Tools(&["punch"], false),
+        _ => return None,
+    })
+}
+
+/// Which tool's settings become a material's cut when it has no AutoBlade cut, first first.
+const MAIN_TOOL: [&str; 7] = ["deepcut", "ratchet", "kraft3", "kraft2", "rotary", "pen", "punch"];
 
 fn cell(row: &[String], i: usize) -> &str {
     row.get(i).map_or("", |s| s.trim())
@@ -235,6 +262,7 @@ pub fn import(text: &str, machine: &str, depth: Depth) -> Result<Imported, Strin
         return Err("not a material list exported from Silhouette Studio: it has no materials".into());
     }
     let defaults = Operations::default();
+    let mut unused: Vec<String> = vec![];
     for (uuid, name) in groups {
         let skip = |reason: &str| Skipped { name: name.clone(), reason: reason.into() };
         if name.is_empty() {
@@ -245,28 +273,50 @@ pub fn import(text: &str, machine: &str, depth: Depth) -> Result<Imported, Strin
             out.skipped.push(skip(&format!("no settings for {machine}")));
             continue;
         }
-        let cutting = ["cut", "kraft_cut"].iter().find_map(|a| mine.iter().find(|l| l.action == *a && blade(&l.tool).is_some()));
-        let Some(cut_leaf) = cutting else {
-            let mut kinds: Vec<&str> = mine.iter().map(|l| l.action.as_str()).collect();
-            kinds.dedup();
-            out.skipped.push(skip(&format!("only {}, which VectorCraft doesn't cut", kinds.join(", "))));
-            continue;
+        let mut cut = None;
+        let mut score = None;
+        let mut tools: BTreeMap<String, ForTool> = BTreeMap::new();
+        let mut usable = false;
+        for l in &mine {
+            let Some(u) = use_of(&l.action, &l.tool) else {
+                if !l.action.is_empty() && !unused.contains(&l.action) {
+                    unused.push(l.action.clone());
+                }
+                continue;
+            };
+            usable = true;
+            match u {
+                Use::Cut if cut.is_none() => cut = settings(l.row, &c, &defaults.cut, depth, true),
+                Use::Score if score.is_none() => score = settings(l.row, &c, &defaults.score, depth, true),
+                Use::Tools(ids, by_hand) => {
+                    let Some(t) = settings(l.row, &c, &defaults.cut, depth, false) else { continue };
+                    let hand_depth_mm = number(l.row, c.depth).filter(|d| by_hand && *d > 0.0).map(|d| d.min(MAX_HAND_DEPTH_MM));
+                    for id in ids {
+                        tools.entry((*id).to_string()).or_insert_with(|| ForTool { settings: t.clone(), hand_depth_mm });
+                    }
+                }
+                _ => {}
+            }
+        }
+        let (cut, cut_tool, hand_depth_mm) = match cut {
+            Some(cut) => (cut, None, None),
+            None => {
+                let Some(main) = MAIN_TOOL.iter().find_map(|id| tools.remove_entry(*id)) else {
+                    let mut kinds: Vec<&str> = mine.iter().map(|l| l.action.as_str()).filter(|a| !a.is_empty()).collect();
+                    kinds.sort_unstable();
+                    kinds.dedup();
+                    let reason = if usable || kinds.is_empty() {
+                        "no cut, sketch or punch settings with a force and speed".to_string()
+                    } else {
+                        format!("only {}, which VectorCraft doesn't do", kinds.join(", "))
+                    };
+                    out.skipped.push(skip(&reason));
+                    continue;
+                };
+                (main.1.settings, Some(main.0), main.1.hand_depth_mm)
+            }
         };
-        let suffix = blade(&cut_leaf.tool).flatten();
-        let Some(cut) = settings(cut_leaf.row, &c, &defaults.cut, depth, suffix.is_none()) else {
-            out.skipped.push(skip("its cut has no force or speed"));
-            continue;
-        };
-        let score = mine
-            .iter()
-            .find(|l| l.action == "score" && blade(&l.tool).is_some())
-            .and_then(|l| settings(l.row, &c, &defaults.score, depth, blade(&l.tool).flatten().is_none()))
-            .unwrap_or_else(|| defaults.score.clone());
-        let full = match suffix {
-            Some(s) => fit(&format!("{name} ({s})")),
-            None => name.clone(),
-        };
-        if out.materials.iter().any(|m| m.name.eq_ignore_ascii_case(&full)) {
+        if out.materials.iter().any(|m| m.name.eq_ignore_ascii_case(&name)) {
             out.skipped.push(skip("a second material of the same name"));
             continue;
         }
@@ -274,21 +324,22 @@ pub fn import(text: &str, machine: &str, depth: Depth) -> Result<Imported, Strin
             out.skipped.push(skip(&format!("more than {MAX_MATERIALS} materials")));
             continue;
         }
-        // A blade set by hand: the depth to set it to.
-        let hand_depth_mm =
-            suffix.and_then(|_| number(cut_leaf.row, c.depth)).filter(|d| *d > 0.0).map(|d| d.min(vectorcraft_cutjob::MAX_HAND_DEPTH_MM));
         out.materials.push(Material {
-            name: full,
+            name: name.clone(),
             cut,
-            score,
+            score: score.unwrap_or_else(|| defaults.score.clone()),
             builtin: false,
             mirror: false,
             price: None,
             roll_left_mm: None,
             press: None,
             hand_depth_mm,
+            cut_tool,
+            tools,
         });
     }
+    unused.sort_unstable();
+    out.unused = unused;
     Ok(out)
 }
 
@@ -304,11 +355,18 @@ mod tests {
             "Test Paper,desktop,15,5,adjustable,0.3,1,1,0.1,Test Paper,group,g1,root,",
             "Test Paper for M1,m1,12,4,autoadjust,0.2,2,3,0.2,M1,leaf,l1,g1,cut",
             "Test Paper for M1,m1,6,5,autoadjust,0.1,1,3,0.1,M1,leaf,l2,g1,score",
+            "Test Paper for M1,m1,8,10,pen2,0.3,1,1,0,M1,leaf,l7,g1,sketch",
+            "Test Paper for M1,m1,9,10,pen2,0.3,1,1,0,M1,leaf,l8,g1,stipple",
+            "Test Paper for M1,m1,30,3,puncher,0.2,1,1,0,M1,leaf,l9,g1,punch",
+            "Test Paper for M1,m1,25,3,deepcut,1.2,1,1,0,M1,leaf,l10,g1,cut",
             "Test Paper for M2,m2,20,8,autoadjust,0.4,1,1,0.1,M2,leaf,l3,g1,cut",
             "\"Board, thick\",desktop,15,5,adjustable,0.3,1,1,0.1,\"Board, thick\",group,g2,root,",
             "Board for M1,m1,40,0.3,kraft2,1.5,3,5,0.1,M1,leaf,l4,g2,kraft_cut",
             "Felt,desktop,15,5,adjustable,0.3,1,1,0.1,Felt,group,g3,root,",
-            "Felt for M1,m1,20,5,rotary,0.3,1,1,0.1,M1,leaf,l5,g3,rotary_cut",
+            "Felt for M1,m1,20,5,autoadjust,0.3,1,1,0.1,M1,leaf,l5,g3,rotary_cut",
+            "Felt for M1,m1,20,5,embosser,0.3,1,1,0.1,M1,leaf,l11,g3,emboss",
+            "Cloth,desktop,15,5,adjustable,0.3,1,1,0.1,Cloth,group,g5,root,",
+            "Cloth for M1,m1,14,6,rotary,0.5,1,1,0.1,M1,leaf,l12,g5,rotary_cut",
             "Foil,desktop,15,5,adjustable,0.3,1,1,0.1,Foil,group,g4,root,",
             "Foil for M2,m2,20,5,autoadjust,0.3,1,1,0.1,M2,leaf,l6,g4,cut",
         ];
@@ -319,7 +377,7 @@ mod tests {
     fn a_machines_materials() {
         let got = import(&list(), "M1", Depth::Auto).unwrap();
         let names: Vec<&str> = got.materials.iter().map(|m| m.name.as_str()).collect();
-        assert_eq!(names, ["Test Paper", "Board, thick (Kraft Blade)"]);
+        assert_eq!(names, ["Test Paper", "Board, thick", "Cloth"]);
         let paper = &got.materials[0];
         // The machine's own steps, read back exactly.
         assert_eq!(crate::force_step(paper.cut.force), 12);
@@ -327,16 +385,28 @@ mod tests {
         assert_eq!((paper.cut.passes, paper.cut.accel, paper.cut.depth), (2, Some(3), None));
         assert!((paper.cut.overcut_mm - 0.2).abs() < 1e-9);
         assert_eq!(crate::force_step(paper.score.force), 6);
-        assert!(!paper.builtin && paper.cut.tool.is_none());
-        // A speed under a step, an acceleration over ours: brought into range.
+        assert!(!paper.builtin && paper.cut.tool.is_none() && paper.cut_tool.is_none());
+        // C18.15: the pen's sketch, the punch and the Deep-Cut blade's cut kept for those tools.
+        let ids: Vec<&str> = paper.tools.keys().map(String::as_str).collect();
+        assert_eq!(ids, ["deepcut", "pen", "punch"]);
+        assert_eq!(crate::force_step(paper.tools["pen"].settings.force), 8);
+        assert_eq!(crate::force_step(paper.tools["punch"].settings.force), 30);
+        assert_eq!((paper.tools["pen"].hand_depth_mm, paper.tools["deepcut"].hand_depth_mm), (None, Some(1.2)));
+        // A speed under a step, an acceleration over ours: brought into range. Only a Kraft cut: it
+        // is the material's cut, for the 3 mm Kraft blade, and the 2 mm one's too.
         let board = &got.materials[1];
+        assert_eq!(board.cut_tool.as_deref(), Some("kraft3"));
+        assert_eq!(board.tools.keys().collect::<Vec<_>>(), ["kraft2"]);
+        assert_eq!(board.tools["kraft2"].settings, board.cut);
+        assert_eq!(got.materials[2].cut_tool.as_deref(), Some("rotary"));
         assert_eq!((crate::force_step(board.cut.force), crate::speed_step(board.cut.speed_mm_s)), (33, 1));
         assert_eq!((board.cut.passes, board.cut.accel), (3, Some(3)));
         // No score row: the usual score settings.
         assert_eq!(board.score, Operations::default().score);
         assert_eq!(got.machines, ["m1", "m2"]);
         let skipped: Vec<(&str, &str)> = got.skipped.iter().map(|s| (s.name.as_str(), s.reason.as_str())).collect();
-        assert_eq!(skipped, [("Felt", "only rotary_cut, which VectorCraft doesn't cut"), ("Foil", "no settings for m1")]);
+        assert_eq!(skipped, [("Felt", "only emboss, rotary_cut, which VectorCraft doesn't do"), ("Foil", "no settings for m1")]);
+        assert_eq!(got.unused, ["emboss", "rotary_cut", "stipple"]);
     }
 
     #[test]
@@ -345,8 +415,12 @@ mod tests {
         assert_eq!(got.materials[0].cut.depth, Some(2));
         assert_eq!(got.materials[0].score.depth, Some(1));
         assert_eq!(got.materials[1].cut.depth, None);
+        assert_eq!(got.materials[0].tools["deepcut"].settings.depth, None);
         // The Kraft Blade's is kept as the depth to set it to, not sent.
         assert_eq!((got.materials[0].hand_depth_mm, got.materials[1].hand_depth_mm), (None, Some(1.5)));
+        assert_eq!(got.materials[1].tools["kraft2"].hand_depth_mm, Some(1.5));
+        // Not for a rotary blade.
+        assert_eq!(got.materials[2].hand_depth_mm, None);
     }
 
     #[test]

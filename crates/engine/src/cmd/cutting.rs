@@ -514,8 +514,12 @@ fn settings_set(s: &mut Session, p: &Value) -> Result<Value> {
     let current = vectorcraft_cutting::settings(d);
     let mut merged = current.to_value();
     merge(&mut merged, p);
-    let new = CuttingSettings::from_value(Some(&merged));
+    let mut new = CuttingSettings::from_value(Some(&merged));
     check_taken(given, &new.to_value(), "")?;
+    // C18.15: another tool chosen takes the material's settings for it, unless numbers were given.
+    let numbers_given =
+        |op: &str| given.get("operations").and_then(|o| o.get(op)).and_then(Value::as_object).is_some_and(|t| t.keys().any(|k| k != "tool"));
+    materials::follow_tool(&current, &mut new, numbers_given);
     // C12.1: insets below what can be set (older documents may have them) are refused.
     let lowest = vectorcraft_cutjob::marks::INSET_MM.0;
     let insets = [given.get("markInsetMm").map(|_| new.mark_inset_mm)]

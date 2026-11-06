@@ -30,8 +30,8 @@ pub use job::{
 pub use marks::{Mark, MarkLayout};
 pub use mat::{MAT_PRESETS, MatGeometry, ROLL, RectMm};
 pub use material::{
-    GroupSetup, MAX_HAND_DEPTH_MM, MAX_MATERIALS, MAX_NAME, MAX_ROLL_MM, Material, Peel, Press, Pressure, Price, builtin_materials, read_materials,
-    valid_name,
+    Chosen, ForTool, GroupSetup, MAX_HAND_DEPTH_MM, MAX_MATERIALS, MAX_NAME, MAX_ROLL_MM, MAX_TOOLS, Material, Peel, Press, Pressure, Price,
+    builtin_materials, read_materials, valid_name,
 };
 pub use native::{Native, Piece};
 pub use settings::{

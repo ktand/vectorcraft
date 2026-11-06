@@ -38,9 +38,17 @@ pub fn specs() -> Vec<CommandSpec> {
     ]
 }
 
-/// Whether `g` is no longer the setup of the material it names.
-fn changed(g: &GroupSetup) -> bool {
-    g.material.as_deref().and_then(super::materials::find).is_some_and(|m| g.differs_from(&m))
+/// Whether `g` is no longer the setup of the material it names, for the tools it is cut with
+/// (its own, else the document's `ops`', C18.15).
+fn changed(g: &GroupSetup, ops: &vectorcraft_cutjob::Operations) -> bool {
+    let (cut, score) = tools_of(g, ops);
+    g.material.as_deref().and_then(super::materials::find).is_some_and(|m| g.differs_from_with(&m, cut.as_deref(), score.as_deref()))
+}
+
+/// The tools `g`'s operations are cut with, as a material looks them up.
+fn tools_of(g: &GroupSetup, ops: &vectorcraft_cutjob::Operations) -> (Option<String>, Option<String>) {
+    let pick = |own: &Option<String>, doc: &Option<String>| super::materials::tool_key(if own.is_some() { own } else { doc }).map(str::to_string);
+    (pick(&g.cut.tool, &ops.cut.tool), pick(&g.score.tool, &ops.score.tool))
 }
 
 fn listing(s: &Session) -> Result<Value> {
@@ -50,7 +58,7 @@ fn listing(s: &Session) -> Result<Value> {
         .into_iter()
         .map(|name| {
             let setup = setups::setup_of(d, &settings, &name)
-                .map(|g| json!({"material": g.material, "changed": changed(&g), "cut": g.cut.to_value(), "score": g.score.to_value()}));
+                .map(|g| json!({"material": g.material, "changed": changed(&g, &settings.operations), "cut": g.cut.to_value(), "score": g.score.to_value()}));
             let o = settings.group_options(&name);
             json!({"name": name, "setup": setup, "on": !o.off, "pause": o.pause})
         })
@@ -149,7 +157,11 @@ fn set(s: &mut Session, p: &Value) -> Result<Value> {
         });
         if let Some(m) = material {
             let found = super::materials::find(m).ok_or_else(|| bad(SET, format!("no material {m:?}")))?;
-            g = GroupSetup::of_material(&found);
+            let (cut, score) = tools_of(&g, &settings.operations);
+            // The group's own tools stay (the tool is the machine's).
+            let (own_cut, own_score) = (g.cut.tool.clone(), g.score.tool.clone());
+            g = GroupSetup::of_material_with(&found, cut.as_deref(), score.as_deref());
+            (g.cut.tool, g.score.tool) = (own_cut, own_score);
         }
         if let Some(ops) = ops {
             let ops = ops.as_object().ok_or_else(|| bad(SET, "operations must be an object"))?;

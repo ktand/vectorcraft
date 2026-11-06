@@ -1,6 +1,7 @@
 //! C5.1: materials: built-in starting points and the user's own, applied to the document's tool
 //! settings as one undo step, saved to and read back from their file. One test: the store is the
 //! process's. C5.5: a material keeps the blade's depth and offset with the rest of the setup.
+//! C18.15: and settings per tool, which an operation cut with that tool takes.
 
 use serde_json::{Value, json};
 use vectorcraft_engine::Session;
@@ -110,6 +111,67 @@ fn imports(s: &mut Session, file: &std::path::Path) {
     let _ = std::fs::remove_file(path);
 }
 
+/// C18.15: a material's settings per tool: imported, applied to an operation cut with that tool,
+/// followed when another tool is chosen (unless numbers were set by hand), and saved to the tool.
+fn per_tool(s: &mut Session) {
+    use vectorcraft_cutter_silhouette::force_step;
+    let list = [
+        "full_name,cutter_class_id,(force.pressure),(speed),(tool.type),(blade_depth),(nth_pass),(force.acceleration),name_resolved,category,uuid,parent_uuid,action",
+        "Ink Card,desktop,15,5,adjustable,0.3,1,1,Ink Card,group,g1,root,",
+        "Ink Card for M,cameo4,20,3,autoadjust,0.4,1,1,M,leaf,l1,g1,cut",
+        "Ink Card for M,cameo4,8,10,pen2,0.3,1,1,M,leaf,l2,g1,sketch",
+        "Ink Card for M,cameo4,9,10,pen2,0.3,1,1,M,leaf,l3,g1,stipple",
+        "Ink Card for M,cameo4,30,3,puncher,0.2,1,1,M,leaf,l4,g1,punch",
+        "Thick Board,desktop,15,5,adjustable,0.3,1,1,Thick Board,group,g2,root,",
+        "Thick Board for M,cameo4,33,1,kraft2,1.5,3,1,M,leaf,l5,g2,kraft_cut",
+    ]
+    .join("\n");
+    let r = s.execute("cutting.material.import", &json!({"text": list})).unwrap();
+    assert_eq!((r["imported"].clone(), r["unused"].clone()), (json!(["Ink Card", "Thick Board"]), json!(["stipple"])));
+    let ink = r["materials"].as_array().unwrap().iter().find(|m| m["name"] == "Ink Card").unwrap().clone();
+    assert_eq!((ink["cutTool"].clone(), ink["tools"].as_object().unwrap().len()), (Value::Null, 2), "{ink}");
+    let cut = |s: &mut Session| s.execute("cutting.settings.get", &json!({})).unwrap()["settings"]["operations"]["cut"].clone();
+    let step = |v: &Value| force_step(v["force"].as_f64().unwrap());
+
+    s.execute("cutting.material.apply", &json!({"name": "Ink Card"})).unwrap();
+    assert_eq!(step(&cut(s)), 20);
+    let m = materials(s);
+    assert_eq!((m["chosen"]["cut"]["forTool"].clone(), m["changed"].clone()), (json!(true), json!(false)));
+    // The pen chosen: its sketch settings, still the material's.
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"tool": "pen"}}})).unwrap();
+    assert_eq!((step(&cut(s)), cut(s)["tool"].clone()), (8, json!("pen")));
+    assert_eq!(materials(s)["changed"], json!(false));
+    // The punch with a force given: the force as given.
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"tool": "punch", "force": 0.5}}})).unwrap();
+    assert_eq!((cut(s)["force"].clone(), materials(s)["changed"].clone()), (json!(0.5), json!(true)));
+    // Changed by hand: another tool leaves the numbers.
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"tool": "pen"}}})).unwrap();
+    assert_eq!(cut(s)["force"], json!(0.5));
+    // Applied again with the pen chosen: the pen's.
+    s.execute("cutting.material.apply", &json!({"name": "Ink Card"})).unwrap();
+    assert_eq!(step(&cut(s)), 8);
+    // Saved with the pen: the pen's settings change, the cut's stay.
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"passes": 2}}})).unwrap();
+    let r = s.execute("cutting.material.save", &json!({"name": "Ink Card"})).unwrap();
+    let ink = r["materials"].as_array().unwrap().iter().find(|m| m["name"] == "Ink Card").unwrap().clone();
+    assert_eq!((ink["tools"]["pen"]["settings"]["passes"].clone(), force_step(ink["cut"]["force"].as_f64().unwrap())), (json!(2), 20));
+    assert_eq!(r["changed"], json!(false));
+    // Back to the AutoBlade: the cut's.
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"tool": null}}})).unwrap();
+    assert_eq!(step(&cut(s)), 20);
+
+    // Only a Kraft cut: the AutoBlade has none of its own, the Kraft blade its depth.
+    s.execute("cutting.material.apply", &json!({"name": "Thick Board"})).unwrap();
+    assert_eq!(materials(s)["chosen"]["cut"]["forTool"], json!(false));
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"tool": "kraft3"}}})).unwrap();
+    let chosen = materials(s)["chosen"]["cut"].clone();
+    assert_eq!((chosen["forTool"].clone(), chosen["handDepthMm"].clone()), (json!(true), json!(1.5)));
+    s.execute("cutting.settings.set", &json!({"operations": {"cut": {"tool": null}}})).unwrap();
+    for name in ["Ink Card", "Thick Board"] {
+        s.execute("cutting.material.delete", &json!({"name": name})).unwrap();
+    }
+}
+
 #[test]
 fn materials_are_applied_saved_and_kept() {
     let dir = std::env::temp_dir().join(format!("vectorcraft-materials-{}", std::process::id()));
@@ -176,6 +238,7 @@ fn materials_are_applied_saved_and_kept() {
 
     prices(&mut s);
     imports(&mut s, &file);
+    per_tool(&mut s);
 
     // Built-in names and unknown ones are refused; the user's own can go.
     assert!(s.execute("cutting.material.save", &json!({"name": "Vinyl"})).is_err());
