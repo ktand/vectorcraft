@@ -15,6 +15,12 @@ use vectorcraft_doc::Document;
 
 use crate::VectorcraftApp;
 
+/// C1.5: the repository the fork's build takes its updates from (`UPDATE_APP.repo`). Its only
+/// release is the `windows-latest` pre-release, which the updater skips, so the fork build
+/// offers no update rather than upstream's, which would replace it with an app without cutting.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) const UPDATE_REPO: &str = "ktand/vectorcraft";
+
 /// A document's cut job, its stats and the blade's run through it.
 pub(crate) struct Made {
     pub job: CutJob,
@@ -248,4 +254,14 @@ fn playback_label(ui: &mut egui::Ui, sim: &Simulation, p: &Playback) {
     let blade = sim.at_mm(p.mm.unwrap_or(sim.total_mm));
     let path = blade.path.map_or(String::new(), |i| format!(" · {} {}", tl!("path"), i + 1));
     crate::widgets::dim_label(ui, &format!("{:.0} / {:.0} s{path} (×{SPEEDUP})", blade.done_seconds, sim.total_seconds));
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod update_tests {
+    /// C1.5: a merge from upstream that brings back its repository fails here.
+    #[test]
+    fn the_fork_updates_only_from_the_fork() {
+        assert_eq!(crate::UPDATE_APP.repo, "ktand/vectorcraft");
+        assert!(crate::UPDATE_APP.releases_url().starts_with("https://github.com/ktand/vectorcraft/"));
+    }
 }

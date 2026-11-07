@@ -11,6 +11,9 @@
 pub const UPDATE_APP: craft_update::app::App = craft_update::app::App {
     icon_png: Some(include_bytes!("../../../assets/app-icon/hicolor/128x128/apps/ai.storyteller.vectorcraft.png")),
     accent: Some([0xe8, 0x57, 0x3f]),
+    // Fork (C1.5): updates come from the fork's releases, never upstream's, which have no
+    // cutting workspace and would replace this build with one that lacks it.
+    repo: crate::cutting::UPDATE_REPO,
     ..craft_update::suite::VECTORCRAFT
 };
 
