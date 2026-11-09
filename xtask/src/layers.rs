@@ -68,6 +68,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("cutting", Class::Layer(3)),
     ("cutter", Class::Layer(2)),
     ("cutter-silhouette", Class::Layer(3)),
+    ("js", Class::Standalone),
 ];
 
 /// Explicit orderings *within* a layer (earlier may be used by later).
