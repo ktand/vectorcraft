@@ -1413,7 +1413,8 @@ mod tests {
         assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Stroke Edge"));
     }
 
-    /// Every cutting panel is on the Window menu and in the icon column's group.
+    /// Every cutting panel is on the Window menu; of them, only Cut Settings is in the default icon
+    /// column (the feature panels' icons are the Cutting workspace's own column).
     #[test]
     fn every_cutting_panel_is_on_the_window_menu() {
         let app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
@@ -1425,7 +1426,8 @@ mod tests {
                     && e.path.iter().map(String::as_str).take(2).eq(["Window", "Cutting"])),
                 "{panel} on the Window menu"
             );
-            assert!(crate::state::ICON_PANEL_GROUPS.iter().any(|g| g.contains(&panel)), "{panel} in a group");
+            let in_column = crate::state::ICON_PANEL_GROUPS.iter().any(|g| g.contains(&panel));
+            assert_eq!(in_column, panel == ID, "{panel} in the default icon column");
         }
     }
 

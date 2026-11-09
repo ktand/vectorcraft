@@ -245,8 +245,10 @@ pub const ICON_PANEL_GROUPS: &[&[&str]] = &[
     &["character", "paragraph", "glyphs"],
     &["history", "actions", "info", "navigator"],
     &["variables"],
-    // Fork: the cutting workspace (the Cutting workspace opens it from here).
-    crate::panels::cutting::PANELS,
+    // Fork: the cutting workspace. Only Cut Settings: the feature panels have their own icon column
+    // in the Cutting workspace (`cutting::workspace_layout`) and are on Window › Cutting; all 14
+    // here ran the column past a 1000-point-tall window.
+    &[crate::panels::cutting::ID],
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
