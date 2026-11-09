@@ -113,6 +113,30 @@ fn the_preview_exports_as_svg_and_json() {
     assert!(s.execute("cutting.preview.export", &json!({"format": "pdf"})).is_err());
 }
 
+/// C3.8: the preview is written only to a path ending in its format's extension; a junk path
+/// (the command sweep's `"on"`) leaves no file behind.
+#[test]
+fn the_preview_writes_only_to_a_path_with_its_extension() {
+    let mut s = new_doc();
+    square(&mut s, 10.0, 10.0, 10.0);
+    let dir = std::env::temp_dir().join(format!("vectorcraft-preview-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let bare = dir.join("on");
+    let r = s.execute("cutting.preview.export", &json!({"path": bare.to_string_lossy()}));
+    assert!(r.is_err(), "{r:?}");
+    assert!(!bare.exists());
+    let wrong = dir.join("preview.svg");
+    assert!(s.execute("cutting.preview.export", &json!({"path": wrong.to_string_lossy(), "format": "json"})).is_err());
+    assert!(!wrong.exists());
+    let svg = dir.join("preview.SVG");
+    s.execute("cutting.preview.export", &json!({"path": svg.to_string_lossy()})).unwrap();
+    assert!(std::fs::read_to_string(&svg).unwrap().contains("<svg"));
+    let json_path = dir.join("preview.json");
+    s.execute("cutting.preview.export", &json!({"path": json_path.to_string_lossy(), "format": "json"})).unwrap();
+    assert!(json_path.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// C3.10: two overlapping squares set to Cut Outline are cut as one outline.
 #[test]
 fn cut_outline_unites_overlapping_shapes() {

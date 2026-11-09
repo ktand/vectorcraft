@@ -211,7 +211,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Export Cutting Preview",
             [],
             None,
-            "{path?, format?: svg (default)|json} the cut job as an SVG at the mat's size (mm user units: the mat, the travel dashed, each path in its operation's colour with data-order and data-op, numbered) or as cutting.job's JSON; with path, written there → {path, bytes}; without → {text, name: <document>-cut.svg|json}",
+            "{path?, format?: svg (default)|json} the cut job as an SVG at the mat's size (mm user units: the mat, the travel dashed, each path in its operation's colour with data-order and data-op, numbered) or as cutting.job's JSON; with path (ending in .svg or .json, as the format), written there → {path, bytes}; without → {text, name: <document>-cut.svg|json}",
             has_doc,
             preview_export
         ),
@@ -309,6 +309,11 @@ fn preview_export(s: &mut Session, p: &Value) -> Result<Value> {
     let name = super::fileio::default_name(d, ext).replacen(&format!(".{ext}"), &format!("-cut.{ext}"), 1);
     match str_param(p, "path") {
         Some(path) => {
+            // A path that doesn't end in the format's extension is refused, so a junk `path`
+            // (`"on"`) never leaves a file behind under a name nothing would open.
+            if !std::path::Path::new(path).extension().is_some_and(|e| e.eq_ignore_ascii_case(ext)) {
+                return Err(bad(CMD, format!("path must end in .{ext}, not {path:?}")));
+            }
             super::fileio::write_file(path, text.as_bytes())?;
             Ok(json!({"path": path, "bytes": text.len()}))
         }
