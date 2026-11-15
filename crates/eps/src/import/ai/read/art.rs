@@ -234,11 +234,10 @@ impl<'a> Reader<'a> {
         }
         let kind = NodeKind::Path { path, rule: gs.rule, live: None, clipping: clip, guide };
         let mut node = self.new_node(kind, &gs);
-        // A ruler guide is written as a straight `(N) *` guide path on its layer.
+        // A ruler guide is written as a straight `(N) *` guide path on its layer, shown or hidden.
         if guide
             && op == "N"
             && !hidden
-            && !gs.hidden
             && !clip
             && self.pattern.is_none()
             && matches!(self.frames.last(), Some(Frame { kind: Kind::Layer(_), .. }))
@@ -370,15 +369,18 @@ impl<'a> Reader<'a> {
 
     // ---- images ----------------------------------------------------------------------------
 
-    /// The samples after `XI`, its operands on the stack.
-    pub(super) fn image(&mut self, data: &[u8]) -> Result<(), String> {
+    /// The samples after `XI`, its operands on the stack; `hidden` when they are on `%_` lines.
+    pub(super) fn image(&mut self, data: &[u8], hidden: bool) -> Result<(), String> {
         let vals = self.operands();
         // Operands that came before an `XI` on their own line.
         let vals = match self.raster.as_mut().and_then(|r| r.operands.take()) {
             Some(before) if !vals.iter().any(|v| matches!(v, V::Arr(_))) => before,
             _ => vals,
         };
-        self.image_from(vals, data, false)
+        self.image_hidden = hidden;
+        let read = self.image_from(vals, data, false);
+        self.image_hidden = false;
+        read
     }
 
     /// The matrix and the numbers of an image's operands (`[a b c d tx ty] llx lly urx ury w h bits
@@ -472,10 +474,34 @@ impl<'a> Reader<'a> {
             return Ok(());
         };
         let opacity = opacity.filter(|_| alpha_len > 0);
+        // An image in one ink's Separation space (`XC`): its samples are the ink's tints, the most
+        // at 100 % (255, or a set bit). It comes in as a grayscale image of them, black at 100 %,
+        // that the ink colorizes, as a Separation image opens from a PDF; its alpha channel
+        // becomes its opacity mask.
+        let ink = if channels == 1 && !image_mask { self.raster.as_mut().and_then(|r| r.ink.take()) } else { None };
+        let inverted;
+        let samples = if ink.is_some() {
+            inverted = samples.iter().map(|b| !b).collect::<Vec<u8>>();
+            inverted.as_slice()
+        } else {
+            samples
+        };
+        let ink = ink.map(|(paint, named)| {
+            // Its colour counts toward the document's colour model, as a fill's does (Registration
+            // says nothing of it).
+            let registration = matches!(&paint, Paint::Solid { swatch: Some(s), .. } if s == vectorcraft_color::swatch::REGISTRATION);
+            match paint.color().filter(|_| !registration) {
+                Some(vectorcraft_color::Color::Rgb { .. }) => self.rgb_colors += 1,
+                Some(vectorcraft_color::Color::Cmyk { .. }) => self.cmyk_colors += 1,
+                _ => {}
+            }
+            self.spots.extend(named);
+            paint
+        });
         let gray1 = *bits == 1.0 && channels == 1 && opacity.is_none();
         if k > 1 || w * h > raster::SMALL || (gray1 && !image_mask) {
-            // An image mask keeps the color that colorizes it.
-            let colorize = (image_mask && channels == 1 && *bits == 1.0).then(|| self.mask_paint());
+            // An image mask keeps the color that colorizes it, an ink image its ink.
+            let colorize = if image_mask && channels == 1 && *bits == 1.0 { Some(self.mask_paint()) } else { ink };
             return self.large_image(samples, opacity, shape, k, &m, colorize);
         }
         // CMYK samples keep their ink amounts as a CMYK TIFF, as the PDF importer keeps a CMYK
@@ -487,7 +513,11 @@ impl<'a> Reader<'a> {
             return self.add_raster(blob, opacity, &m, (w as u32, h as u32), None);
         }
         if image_mask && channels == 1 && *bits == 1.0 {
-            return self.colorized_raster(samples, row, opacity, &m, (w as u32, h as u32));
+            let paint = self.mask_paint();
+            return self.colorized_raster(samples, (row, 1), opacity, &m, (w as u32, h as u32), paint);
+        }
+        if let Some(paint) = ink {
+            return self.colorized_raster(samples, (row, *bits as u8), opacity, &m, (w as u32, h as u32), paint);
         }
         let mut rgba = Vec::with_capacity((w * h * 4) as usize);
         for y in 0..h as usize {
@@ -526,15 +556,24 @@ impl<'a> Reader<'a> {
         self.add_raster(ImageBlob::new("image/png", png), None, &m, (w as u32, h as u32), None)
     }
 
-    /// A 1-bit gray image whose ImageMask is 1 (`samples`, `row` bytes a row): a grayscale image
-    /// colorized with the fill color. Its 0 bits, which open black with ImageMask 0, take that color,
-    /// and its 1 bits are transparent. A fill that isn't a solid color colorizes it black.
-    fn colorized_raster(&mut self, samples: &[u8], row: usize, alpha: Option<&[u8]>, m: &[f64], (w, h): (u32, u32)) -> Result<(), String> {
+    /// A one-channel image (`samples` of `bits` bits, `row` bytes a row) as a grayscale image
+    /// colorized with `paint`: a 1-bit gray image whose ImageMask is 1, with the fill color (its 0
+    /// bits, which open black with ImageMask 0, take that color, and its 1 bits are transparent; a
+    /// fill that isn't a solid color colorizes it black), or an ink's tints, inverted, with the ink.
+    fn colorized_raster(
+        &mut self,
+        samples: &[u8],
+        (row, bits): (usize, u8),
+        alpha: Option<&[u8]>,
+        m: &[f64],
+        (w, h): (u32, u32),
+        paint: Paint,
+    ) -> Result<(), String> {
         let mut gray = Vec::with_capacity(w as usize * h as usize);
         for y in 0..h as usize {
             let line = samples.get(y * row..(y + 1) * row).unwrap_or_default();
             for x in 0..w as usize {
-                let v = line.get(x / 8).map_or(0, |b| ((b >> (7 - x % 8)) & 1) * 255);
+                let v = if bits == 1 { line.get(x / 8).map_or(0, |b| ((b >> (7 - x % 8)) & 1) * 255) } else { line.get(x).copied().unwrap_or(0) };
                 gray.push(v);
             }
         }
@@ -544,7 +583,6 @@ impl<'a> Reader<'a> {
             self.image_left_out("an image VectorCraft can't read was left out");
             return Ok(());
         }
-        let paint = self.mask_paint();
         self.add_raster(ImageBlob::new("image/png", png), alpha, m, (w, h), Some(paint))
     }
 
@@ -625,12 +663,15 @@ impl<'a> Reader<'a> {
             return self.add_raster(ImageBlob::new("image/png", png), None, m, (ow, oh), colorize);
         }
         let cmyk = s.channels == 4;
-        let (pixels, mask) = raster::reduce(samples, opacity, s, k, !cmyk);
+        // A colorized image's alpha channel becomes its opacity mask, as at its full size: a
+        // grayscale image whose pixels have alpha takes only a spot color, black or white.
+        let inline = !cmyk && colorize.is_none();
+        let (pixels, mask) = raster::reduce(samples, opacity, s, k, inline);
         let blob = if cmyk {
             Inks::new(ow, oh, pixels).and_then(|i| ImageBlob::cmyk_tiff(&i))
         } else {
             use image::ImageEncoder as _;
-            let colour = match (s.channels, opacity.is_some()) {
+            let colour = match (s.channels, inline && opacity.is_some()) {
                 (1, false) => image::ExtendedColorType::L8,
                 (1, true) => image::ExtendedColorType::La8,
                 (_, false) => image::ExtendedColorType::Rgb8,
@@ -674,7 +715,8 @@ impl<'a> Reader<'a> {
 
     /// Add the image `blob` (`w` × `h` pixels), which the matrix `m` maps into art space, with
     /// `alpha` (its alpha channel, one byte a pixel) as its opacity mask when it hides part of the
-    /// image, and `colorize` as the color that colorizes it.
+    /// image, and `colorize` as the color that colorizes it. It is on `%_` lines when its samples
+    /// are ([`Self::image`]).
     fn add_raster(&mut self, blob: ImageBlob, alpha: Option<&[u8]>, m: &[f64], (w, h): (u32, u32), colorize: Option<Paint>) -> Result<(), String> {
         // The matrix is an art-space matrix (y up) applied to the pixels with their rows running
         // downwards, (u, -v): pixels → (u, -v) → art space. Flipping the matrix's result instead
@@ -696,7 +738,8 @@ impl<'a> Reader<'a> {
         let key = blob.content_key();
         self.doc.images.entry(key.clone()).or_insert(blob);
         let im = ImageObject { key, width: w, height: h, xf, link: None, placement: Default::default(), pixels: None };
-        self.add_image_colorized(im, mask, colorize, false)
+        // An image on `%_` lines is the copy of a styled object, as the other objects there are.
+        self.add_image_colorized(im, mask, colorize, self.image_hidden)
     }
 
     /// An image that isn't read is left out, with `warning`; in a symbol's art, the symbol isn't

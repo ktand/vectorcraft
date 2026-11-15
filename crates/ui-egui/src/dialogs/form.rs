@@ -120,7 +120,7 @@ fn suffix(kind: &str, key: &str) -> Option<&'static str> {
 /// The fields of the form dialogs ([`grid`]) that the dialog's own body draws, by dialog kind.
 fn own_rows(kind: &str) -> &'static [&'static str] {
     match kind {
-        "artboardOptions" => &["color", super::artboard_options::PIXEL_ASPECT],
+        "artboardOptions" => &["color", super::artboard_options::GUIDE_LABEL, super::artboard_options::PIXEL_ASPECT],
         // The grids' Reference Point is their 9-point locator.
         "rectangularGrid" | "polarGrid" => &["reference"],
         _ => &[],
@@ -453,7 +453,14 @@ pub(super) fn param_fields(
                 if is_length(&k) {
                     // An effect's documented range keeps the field to the distance it applies.
                     let range = vectorcraft_effects::length_range(&d.str("__effect"), &k);
-                    if spinners {
+                    // A command's own range refuses a distance typed outside it.
+                    if let Some(bounds) = super::command::length_range(&d.str("__command"), &k) {
+                        let value = d.fields.contains_key(&k).then(|| d.f64(&k, 0.0));
+                        if let Some(x) = crate::widgets::num_field_refusing(ui, ("dlg-len", k.as_str()), value, unit, 140.0, bounds) {
+                            d.fields.insert(k.clone(), json!(x));
+                            changed = true;
+                        }
+                    } else if spinners {
                         let bounds = range.unwrap_or(if k == "blur" { 0.0..=f64::INFINITY } else { crate::widgets::ANY });
                         let value = d.fields.contains_key(&k).then(|| d.f64(&k, 0.0));
                         if let Some(x) = crate::widgets::spin_length_within(ui, ("dlg-len", k.as_str()), value, unit, 140.0, bounds) {
@@ -966,6 +973,19 @@ fn rail_ends_w(ui: &mut egui::Ui, width: f32, (left, right): (&str, &str)) {
 /// The field where [`preview`] keeps the parameters it last previewed.
 pub(super) const PREVIEWED: &str = "__previewed";
 
+/// The field holding why the dialog's command last refused its values, for the dialog to show.
+pub(super) const REFUSED: &str = "__refused";
+
+/// Keeps why the command refused the dialog's values in [`REFUSED`]: a refused value's message is
+/// written for the user, so it goes without the command's id that the error's text puts before it.
+pub(super) fn note_refusal(d: &mut Dialog, e: &vectorcraft_engine::EngineError) {
+    let why = match e {
+        vectorcraft_engine::EngineError::BadParams { msg, .. } => msg.clone(),
+        other => other.to_string(),
+    };
+    d.fields.insert(REFUSED.into(), json!(why));
+}
+
 /// The Preview checkbox of a dialog that previews `cmd` on the canvas: while it is on, `params` run
 /// again on the interaction's snapshot whenever they differ from the last preview (whether a widget
 /// or `ui.dialog.set` changed them); turning it off rolls back.
@@ -1022,8 +1042,14 @@ pub(super) fn preview_now(app: &mut crate::VectorcraftApp, d: &mut Dialog, label
     if d.fields.get(PREVIEWED) != Some(&params) || !app.session.in_interaction() {
         let _ = app.session.begin_interaction(label);
         match app.session.preview(cmd, &params) {
-            Ok(r) => result = Some(r),
-            Err(e) => app.status(e.to_string()),
+            Ok(r) => {
+                d.fields.remove(REFUSED);
+                result = Some(r);
+            }
+            Err(e) => {
+                note_refusal(d, &e);
+                app.status(e.to_string());
+            }
         }
         d.fields.insert(PREVIEWED.into(), params);
     }

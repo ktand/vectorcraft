@@ -151,7 +151,8 @@ fn along(w: &mut Walk, n: &Node, path: &PathData, rule: FillRule) -> BezPath {
 fn walk(d: &Document, w: &mut Walk, n: &Node, depth: usize, paths: &mut Vec<BezPath>) {
     let next = depth + 1;
     match &n.kind {
-        NodeKind::Path { guide: true, .. } | NodeKind::Path { clipping: true, .. } => {}
+        // Guides (guide paths, ruler guides) and clipping paths draw nothing to cut.
+        NodeKind::Path { guide: true, .. } | NodeKind::Path { clipping: true, .. } | NodeKind::RulerGuide { .. } => {}
         NodeKind::Path { path, rule, .. } => paths.push(along(w, n, path, *rule)),
         NodeKind::Compound { children, rule } => {
             let subpaths = children.iter().filter_map(|c| c.path_data()).flat_map(|p| p.subpaths.iter().cloned()).collect();

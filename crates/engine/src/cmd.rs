@@ -2,7 +2,10 @@
 
 pub mod actionset;
 mod addons;
+mod apiref;
 pub(crate) mod appearance;
+pub mod arrowheads;
+mod artboardalign;
 mod assets;
 mod attributes;
 pub mod brushlib;
@@ -40,10 +43,11 @@ pub(crate) mod graph;
 mod halftone;
 pub mod help;
 pub mod importmatches;
+mod info;
 pub(crate) mod inline;
 mod interactivity;
 mod intertwine;
-mod layer;
+pub(crate) mod layer;
 mod layerpanel;
 pub mod library;
 pub mod linkfiles;
@@ -69,6 +73,7 @@ pub mod pdfcmds;
 pub mod perspgrid;
 pub mod place;
 pub mod plugin;
+pub(crate) mod plugin_call;
 pub mod prefscmds;
 pub mod print;
 pub(crate) mod printadvanced;
@@ -78,7 +83,7 @@ pub mod rasterfx;
 mod recolor;
 pub mod recovery;
 pub mod scripts;
-mod select;
+pub(crate) mod select;
 pub(crate) mod shaper;
 pub mod shortcutset;
 pub(crate) mod slices;
@@ -103,6 +108,7 @@ mod variablecmds;
 pub(crate) mod views;
 pub mod wand;
 pub mod webexport;
+mod wireframe;
 mod xform;
 // Fork: the cutting workspace (docs/cutting/ARCHITECTURE.md); public for the materials store.
 pub mod cutting;
@@ -132,6 +138,9 @@ pub struct CommandSpec {
     pub run: Run,
     /// Record in the journal (false for queries and selection-only helpers).
     pub journal: bool,
+    /// The parameters' schema: [`Session::execute`] checks the params against it before the
+    /// command runs, and `params` is the text it writes ([`crate::schemas`]).
+    pub schema: Option<&'static vectorcraft_apischema::ParamSchema>,
 }
 
 /// Serializable command metadata.
@@ -145,11 +154,29 @@ pub struct CommandInfo {
     pub enabled: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled_reason: Option<String>,
+    /// The parameters' schema as a JSON Schema 2020-12 object schema, for a command that has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schema: Option<Value>,
+    /// The same schema in the form an MCP tool's `inputSchema` takes ([`input_schema`]).
+    #[serde(rename = "inputSchema", skip_serializing_if = "Option::is_none")]
+    pub input_schema: Option<Value>,
+}
+
+/// `schema` as an MCP tool input schema: the root `type` is `"object"`, since the arguments are
+/// always an object, and every other keyword is kept. The root of [`CommandInfo::schema`] also
+/// takes null when no parameter is required.
+pub(crate) fn input_schema(schema: &Value) -> Value {
+    let mut o = schema.clone();
+    if let Some(map) = o.as_object_mut() {
+        map.insert("type".into(), "object".into());
+    }
+    o
 }
 
 impl CommandSpec {
     pub fn info(&self, s: &Session) -> CommandInfo {
         let e = (self.enabled)(s);
+        let schema = self.schema.map(vectorcraft_apischema::ParamSchema::to_json);
         CommandInfo {
             id: self.id,
             label: self.label,
@@ -158,6 +185,8 @@ impl CommandSpec {
             params: self.params,
             enabled: e.is_ok(),
             disabled_reason: e.err(),
+            input_schema: schema.as_ref().map(input_schema),
+            schema,
         }
     }
 }
@@ -219,6 +248,12 @@ pub fn has_selected_member(s: &Session) -> std::result::Result<(), String> {
     let Some(root) = ordinary_isolation(st) else { return has_selection(s) };
     if st.selection.objects.iter().any(|id| inside_isolation(&st.doc, root, *id)) { Ok(()) } else { Err("nothing selected".into()) }
 }
+/// [`has_selected_member`], or a ruler guide is selected outside isolation mode: Object › Lock ›
+/// Selection and Object › Hide › Selection.
+pub fn has_selected_member_or_guide(s: &Session) -> std::result::Result<(), String> {
+    let st = s.active().ok_or("no document open")?;
+    if ordinary_isolation(st).is_none() && !st.selection.guides.is_empty() { Ok(()) } else { has_selected_member(s) }
+}
 /// Whether `id` lies inside the isolated object `root` (the root itself does not).
 pub(crate) fn inside_isolation(d: &vectorcraft_doc::Document, root: vectorcraft_doc::NodeId, id: vectorcraft_doc::NodeId) -> bool {
     id != root && d.ancestry(id).is_some_and(|a| a.contains(&root))
@@ -240,10 +275,17 @@ pub fn has_clipboard(s: &Session) -> std::result::Result<(), String> {
 
 macro_rules! cmd {
     ($id:literal, $label:literal, [$($m:literal),*], $sc:expr, $params:literal, $en:expr, $run:expr) => {
-        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: true }
+        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: true, schema: None }
     };
     (query $id:literal, $label:literal, [$($m:literal),*], $sc:expr, $params:literal, $en:expr, $run:expr) => {
-        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: false }
+        $crate::cmd::CommandSpec { id: $id, label: $label, menu: &[$($m),*], shortcut: $sc, params: $params, enabled: $en, run: $run, journal: false, schema: None }
+    };
+    // With a parameter schema: `schema: &SCHEMA` after the run function.
+    ($id:literal, $label:literal, [$($m:literal),*], $sc:expr, $params:literal, $en:expr, $run:expr, schema: $schema:expr) => {
+        $crate::cmd::CommandSpec { schema: Some($schema), ..$crate::cmd::cmd!($id, $label, [$($m),*], $sc, $params, $en, $run) }
+    };
+    (query $id:literal, $label:literal, [$($m:literal),*], $sc:expr, $params:literal, $en:expr, $run:expr, schema: $schema:expr) => {
+        $crate::cmd::CommandSpec { schema: Some($schema), ..$crate::cmd::cmd!(query $id, $label, [$($m),*], $sc, $params, $en, $run) }
     };
 }
 pub(crate) use cmd;
@@ -267,6 +309,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         // Split out of `paint` (M3.8); kept next to it so lists in registry order (the command
         // palette, `engine.commands`) show them where they always were.
         v.extend(stroke::specs());
+        v.extend(arrowheads::specs());
         v.extend(appearance::specs());
         v.extend(style::specs());
         v.extend(swatch::specs());
@@ -278,6 +321,7 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(draw2::specs());
         v.extend(xform::specs());
         v.extend(effectcmd::specs());
+        v.extend(wireframe::specs());
         v.extend(pathops::specs());
         v.extend(compoundshape::specs());
         v.extend(typecmd::specs());
@@ -303,7 +347,9 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(docmenu::specs());
         v.extend(variablecmds::specs());
         v.extend(docinfo::specs());
+        v.extend(info::specs());
         v.extend(panelcmds::specs());
+        v.extend(artboardalign::specs());
         v.extend(buildcmds::specs());
         v.extend(shaper::specs());
         v.extend(brushsym::specs());
@@ -358,6 +404,8 @@ pub fn command_specs() -> &'static [CommandSpec] {
         v.extend(addons::specs());
         // Fork: the cutting workspace.
         v.extend(cutting::specs());
+        // Last, so the reference it writes ends with its own section.
+        v.extend(apiref::specs());
         v
     })
 }
@@ -374,6 +422,14 @@ pub(crate) fn run_spec(s: &mut Session, spec: &CommandSpec, p: &Value) -> Result
     if plugin::is_command_id(spec.id) { plugin::run_command(s, spec.id, p) } else { (spec.run)(s, p) }
 }
 
+/// [`run_spec`] for a command run outside [`Session::execute`]: with params checked against the
+/// command's schema, and the defaults of omitted values filled in, as `execute` does
+/// ([`crate::schemas::check`]).
+pub(crate) fn run_checked(s: &mut Session, spec: &CommandSpec, p: &Value) -> Result<Value> {
+    let checked = crate::schemas::check(spec, p, s.replaying())?;
+    run_spec(s, spec, checked.as_ref().unwrap_or(p))
+}
+
 // ---------- param helpers ----------
 
 pub(crate) fn bad(cmd: &str, msg: impl Into<String>) -> EngineError {
@@ -382,8 +438,22 @@ pub(crate) fn bad(cmd: &str, msg: impl Into<String>) -> EngineError {
 pub(crate) fn f64_or(p: &Value, key: &str, default: f64) -> f64 {
     p.get(key).and_then(Value::as_f64).unwrap_or(default)
 }
+/// The number `p` gives for `key`. A missing key or null is "missing number `{key}`"; any other
+/// value, such as `"40"`, is "`{key}` must be a number, not {v}", as [`number_or`] words it.
 pub(crate) fn f64_req(p: &Value, key: &str, cmd: &str) -> Result<f64> {
-    p.get(key).and_then(Value::as_f64).ok_or_else(|| bad(cmd, format!("missing number `{key}`")))
+    match p.get(key) {
+        None | Some(Value::Null) => Err(bad(cmd, format!("missing number `{key}`"))),
+        Some(v) => v.as_f64().ok_or_else(|| bad(cmd, format!("`{key}` must be a number, not {v}"))),
+    }
+}
+/// The whole number of 0 or more that `p` gives for `key`. A missing key or null is "missing integer
+/// `{key}`"; any other value, such as `"3"`, `2.5`, `-1` or `true`, is "`{key}` must be a whole
+/// number", as [`object_param`] words it.
+pub(crate) fn u64_req(p: &Value, key: &str, cmd: &str) -> Result<u64> {
+    match p.get(key) {
+        None | Some(Value::Null) => Err(bad(cmd, format!("missing integer `{key}`"))),
+        Some(v) => v.as_u64().ok_or_else(|| bad(cmd, format!("`{key}` must be a whole number"))),
+    }
 }
 /// The number `p` gives for `key`, or `default` when `p` leaves it out or gives null. Any other
 /// value, such as `"40"`, is an error: "`{key}` must be a number, not {v}".
@@ -457,8 +527,13 @@ fn id_entry(value: &Value, key: &str, index: usize, cmd: &str) -> Result<NodeId>
 /// them), each checked ([`checked_id`]): a malformed one, or one naming no object, is an error,
 /// never the selection. `None` when it gives neither (or gives them as `null`).
 pub(crate) fn given_objects(s: &Session, p: &Value, command: &str) -> Result<Option<Vec<NodeId>>> {
+    given_nodes(s, p, command, false)
+}
+/// The nodes `p` gives `command`, as [`given_objects`] reads them; ruler guide nodes are taken
+/// too when `guides`, else refused.
+pub(crate) fn given_nodes(s: &Session, p: &Value, command: &str, guides: bool) -> Result<Option<Vec<NodeId>>> {
     if p.get("ids").is_some_and(|v| !v.is_null()) {
-        return checked_ids_param(s, p, "ids", command).map(Some);
+        return checked_nodes_param(s, p, "ids", command, guides).map(Some);
     }
     match p.get("id").filter(|v| !v.is_null()) {
         None => Ok(None),
@@ -466,32 +541,78 @@ pub(crate) fn given_objects(s: &Session, p: &Value, command: &str) -> Result<Opt
         Some(Value::String(r)) if r.starts_with('$') => {
             Err(bad(command, format!("`id` is the step reference {r:?}, which only `run` and `command_batch` resolve")))
         }
-        Some(v) => Ok(Some(vec![checked_id(s, v, command)?])),
+        Some(v) => Ok(Some(vec![checked_node(s, v, command, guides)?])),
+    }
+}
+/// The objects `p` gives `command`, as [`given_objects`] reads them, checked only for their form:
+/// for a command that looks its objects up itself, outside the document's layers too.
+pub(crate) fn given_object_ids(p: &Value, command: &str) -> Result<Option<Vec<NodeId>>> {
+    if p.get("ids").is_some_and(|v| !v.is_null()) {
+        return ids_param(p, "ids", command);
+    }
+    match p.get("id").filter(|v| !v.is_null()) {
+        None => Ok(None),
+        Some(Value::String(r)) if r.starts_with('$') => {
+            Err(bad(command, format!("`id` is the step reference {r:?}, which only `run` and `command_batch` resolve")))
+        }
+        Some(v) => {
+            let id = v.as_u64().map(NodeId).ok_or_else(|| bad(command, format!("invalid object id {v}: expected a non-negative integer")))?;
+            Ok(Some(vec![id]))
+        }
     }
 }
 /// `v` as an index, a count or a byte offset: past `usize::MAX` reads as `usize::MAX`, past the end of any list.
 pub(crate) fn index(v: u64) -> usize {
     usize::try_from(v).unwrap_or(usize::MAX)
 }
+/// The whole number of 0 or more that `p` gives for `key`, read with [`index`], or `None` when `p`
+/// leaves it out or gives null. Any other value, such as `"3"`, `2.5`, `-1` or `true`, is an error
+/// under `cmd`: "`{key}` must be a whole number".
+pub(crate) fn index_opt(p: &Value, key: &str, cmd: &str) -> Result<Option<usize>> {
+    match p.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(v) => v.as_u64().map(|n| Some(index(n))).ok_or_else(|| bad(cmd, format!("`{key}` must be a whole number"))),
+    }
+}
 /// Validate all explicit targets before a command changes the document or selection.
 pub(crate) fn checked_ids_param(s: &Session, p: &Value, key: &str, command: &str) -> Result<Vec<NodeId>> {
+    checked_nodes_param(s, p, key, command, false)
+}
+/// The `key` list as [`checked_ids_param`] checks it; ruler guide nodes are taken too when
+/// `guides`, else refused.
+pub(crate) fn checked_nodes_param(s: &Session, p: &Value, key: &str, command: &str, guides: bool) -> Result<Vec<NodeId>> {
     let values =
         p.get(key).and_then(Value::as_array).ok_or_else(|| bad(command, format!("{key} must be an array of non-negative integer object ids")))?;
-    values.iter().enumerate().map(|(index, value)| id_entry(value, key, index, command).and_then(|_| checked_id(s, value, command))).collect()
+    values
+        .iter()
+        .enumerate()
+        .map(|(index, value)| id_entry(value, key, index, command).and_then(|_| checked_node(s, value, command, guides)))
+        .collect()
 }
 
 /// The objects a command acts on: `ids` when given (every one checked, and those inside another
-/// given one dropped), else the selected objects.
+/// given one dropped), else (`ids` left out or null) the selected objects.
 pub(crate) fn checked_ids_or_selection(s: &Session, p: &Value, command: &str) -> Result<Vec<NodeId>> {
-    if p.get("ids").is_some() { Ok(edit::outermost(&s.doc()?.doc, checked_ids_param(s, p, "ids", command)?)) } else { edit::selected_roots(s) }
+    if p.get("ids").is_some_and(|v| !v.is_null()) {
+        Ok(edit::outermost(&s.doc()?.doc, checked_ids_param(s, p, "ids", command)?))
+    } else {
+        edit::selected_roots(s)
+    }
 }
 
 pub(crate) fn checked_id(s: &Session, value: &Value, command: &str) -> Result<NodeId> {
+    checked_node(s, value, command, false)
+}
+/// `value` as the id of a node of the active document; a ruler guide's is taken only when
+/// `guides`.
+pub(crate) fn checked_node(s: &Session, value: &Value, command: &str, guides: bool) -> Result<NodeId> {
     let id = value.as_u64().map(NodeId).ok_or_else(|| bad(command, format!("invalid object id {value}: expected a non-negative integer")))?;
-    if s.doc()?.doc.node(id).is_none() {
-        return Err(bad(command, format!("no such object id {value}")));
+    match s.doc()?.doc.node(id) {
+        None => Err(bad(command, format!("no such object id {value}"))),
+        // The guide commands take ruler guides by index.
+        Some(n) if n.is_ruler_guide() && !guides => Err(bad(command, format!("id {value} is a ruler guide, not an object"))),
+        Some(_) => Ok(id),
     }
-    Ok(id)
 }
 
 /// `v` as exactly `N` finite numbers (`[x, y]`, `[x, y, width, height]`…): `None` when it isn't an
@@ -651,10 +772,11 @@ pub(crate) fn leaf_targets(s: &Session, ids: &[NodeId]) -> Result<Vec<NodeId>> {
     let compound = |id: NodeId| d.parent_of(id).filter(|p| d.node(*p).is_some_and(owns));
     let mut out = vec![];
     for id in ids {
-        let Some(n) = d.node(*id) else { continue };
+        // A ruler guide has no appearance to paint, given or in a layer.
+        let Some(n) = d.node(*id).filter(|n| !n.is_ruler_guide()) else { continue };
         match &n.kind {
             NodeKind::Group { .. } | NodeKind::Layer { .. } if !n.is_compound_shape() => n.walk(&mut |c| {
-                if !c.is_container() || owns(c) {
+                if (!c.is_container() && !c.is_ruler_guide()) || owns(c) {
                     out.push(c.id)
                 }
             }),
@@ -704,9 +826,15 @@ pub(crate) fn unique_name_from(base: &str, next: &mut std::collections::HashMap<
 /// The most presets one presets file imports: each is looked up among the saved ones.
 pub(crate) const MAX_IMPORTED_PRESETS: usize = 1000;
 
+pub(crate) use addons::{DecodedImages, refresh_color_masks};
+/// Document Info's category titles and the Objects category's count labels.
+pub use docinfo::{CATEGORIES, OBJECT_LABELS};
+pub use docmenu::guide_indexes;
 pub(crate) use edit::{settle_interaction, typing_in_progress};
 pub(crate) use object::bounds_rewrite;
 pub(crate) use object::{keep_aligned_in, refresh_pixel_aligned};
+pub use plugin_call::{Location, ParamsPlace, key_location, location_in, location_keys};
+pub use select::SIMILAR;
 pub(crate) use vectorcraft_doc::range::parse_range;
 
 /// A date param in Unix seconds that defaults to the clock: `None` when absent (now, see
@@ -770,6 +898,10 @@ pub use buildcmds::live_paint_gaps;
 /// Whether Reset Transformation changes a symbol instance (the Symbols panel menu and the
 /// Control bar enable it when it changes one).
 pub use brushsym::reset_transformation_changes;
+
+/// The byte order of UTF-16 text without a byte-order mark, by Import Data Sets' rule (the Graph
+/// Data window reads files by it too).
+pub use variablecmds::utf16_order_without_mark;
 
 /// Command ids kept only so older scripts keep working: `(alias, the command it duplicates)`.
 /// They run as before but the command palette leaves them out (it lists the command once).

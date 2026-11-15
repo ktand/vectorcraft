@@ -163,3 +163,15 @@ fn a_compound_path_is_one_item() {
     let compound = add(&mut d, layer, compound);
     assert_eq!(ids(&cut(&d)), [compound]);
 }
+
+#[test]
+fn ruler_guides_are_left_out() {
+    let (mut d, layer) = doc();
+    let s = square(&mut d, 10.0, 10.0);
+    let s = add(&mut d, layer, s);
+    // A ruler guide has no bounds, so it isn't left out as off the artboard: it must be skipped
+    // as a guide, or the job lists it as an object to cut.
+    let guide = Node::new(d.alloc_id(), NodeKind::RulerGuide { vertical: true, pos: 50.0, artboard: None });
+    d.insert(Some(layer), 0, guide).unwrap();
+    assert_eq!(ids(&cut(&d)), [s]);
+}

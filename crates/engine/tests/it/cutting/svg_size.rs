@@ -100,6 +100,8 @@ fn a_pixel_document_warns_and_scales_from_96_px_per_inch() {
     assert!(warned(&mut s));
     assert!(s.execute("cutting.scaleFromPixels", &json!({"pxPerInch": 0})).is_err());
     assert!(s.execute("cutting.scaleFromPixels", &json!({"pxPerInch": "96"})).is_err());
+    // A ruler guide (a layer node, which transforms leave alone) scales with the art.
+    s.execute("guide.add", &json!({"vertical": true, "pos": px})).unwrap();
     let r = s.execute("cutting.scaleFromPixels", &json!({})).unwrap();
     assert!((r["scale"].as_f64().unwrap() - 0.75).abs() < 1e-12, "{r}");
     let d = (*s.doc().unwrap().doc).clone();
@@ -109,6 +111,8 @@ fn a_pixel_document_warns_and_scales_from_96_px_per_inch() {
     let mut widths = vec![];
     d.walk(|n| widths.extend(n.appearance.stroke().map(|k| k.width)));
     assert!(widths.len() == 1 && (widths[0] - 3.0).abs() < 1e-9, "the stroke scales too: {widths:?}");
+    let guides = d.ruler_guides();
+    assert!(guides.len() == 1 && (guides[0].pos * MM - 100.0).abs() < 1e-9, "the guide scales too: {guides:?}");
     assert!(!warned(&mut s));
     assert!(s.execute("cutting.scaleFromPixels", &json!({})).is_err(), "not in pixels any more");
     s.execute("edit.undo", &json!({})).unwrap();

@@ -102,7 +102,8 @@ fn visit(n: &Node, inherited: (Op, Edge), artboard: Rect, clips: &mut Vec<NodeId
                 clips.pop();
             }
         }
-        NodeKind::Path { guide: true, .. } | NodeKind::Path { clipping: true, .. } => {}
+        // Guides (guide paths, ruler guides) and clipping paths draw nothing to cut.
+        NodeKind::Path { guide: true, .. } | NodeKind::Path { clipping: true, .. } | NodeKind::RulerGuide { .. } => {}
         _ => {
             let kind = match op {
                 Op::Cut | Op::Outline | Op::Perforate => OpKind::Cut,

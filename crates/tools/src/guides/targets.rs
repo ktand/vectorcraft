@@ -36,7 +36,8 @@ pub struct Targets {
     pub(super) xs: Vec<(f64, Point, Kind)>,
     pub(super) ys: Vec<(f64, Point, Kind)>,
     /// Path segments and their control bounds, which a point lands on ("path"): gathered only for
-    /// dragged anchors ([`Self::for_anchor_drag`]).
+    /// dragged anchors ([`Self::for_anchor_drag`]) and selections moved by an anchor
+    /// ([`Self::for_move_by_anchor`]).
     pub(super) segments: Vec<(Rect, PathSeg)>,
     /// Ruler guides, which pull a point into line where they run (Snap to Point).
     pub(super) rulers: Vec<Ruler>,
@@ -168,13 +169,24 @@ impl Targets {
     /// or nothing for a copy, which leaves it behind), styled as `cx` asks, and with Smart Guides ›
     /// Spacing Guides the objects it spaces itself evenly with ([`Self::snap_rect`]). With Smart
     /// Guides › Snap to Last Location, a move (not a copy, which has nothing in `exclude`) goes back
-    /// to where it began when it comes near ([`Self::snap_back`]), unless Snap to Pixel is on.
+    /// to where it began when it comes near ([`Self::snap_back`]), unless Snap to Pixel snaps moves.
     pub fn for_move(cx: &ToolContext, exclude: &[NodeId]) -> Self {
-        let mut t = Self::collect(cx.doc, exclude, None).styled(cx);
+        Self::moving(cx, exclude, Gather::Bounds)
+    }
+
+    /// [`Self::for_move`]'s targets for a selection moved by one of its anchors (#7411): the path
+    /// segments of the art but `exclude` too, which that anchor lands on ([`Self::snap_onto_path`]),
+    /// as a dragged anchor does with Direct Selection.
+    pub fn for_move_by_anchor(cx: &ToolContext, exclude: &[NodeId]) -> Self {
+        Self::moving(cx, exclude, Gather::Segments)
+    }
+
+    fn moving(cx: &ToolContext, exclude: &[NodeId], gather: Gather) -> Self {
+        let mut t = Self::collect_inner(cx.doc, exclude, None, None, gather).styled(cx);
         if cx.spacing_guides {
             t.boxes = object_boxes(cx.doc, &cx.selection.objects);
         }
-        t.last_location = cx.snap_to_last_location && !cx.snap_to_pixel && !exclude.is_empty();
+        t.last_location = cx.snap_to_last_location && !cx.snaps_to_pixel(crate::PixelOp::Moving) && !exclude.is_empty();
         t
     }
 
@@ -189,9 +201,9 @@ impl Targets {
     /// Targets that hold nothing but Smart Guides › Snap to Last Location ([`Self::snap_back`]),
     /// styled as `cx` asks: for a move of the selection whose other snaps come from other targets,
     /// such as paths selected whole that Direct Selection moves held by an anchor. Snap to Pixel
-    /// turns it off, as it does every Smart Guides snap.
+    /// snapping moves turns it off, as it does every Smart Guides snap.
     pub fn last_location(cx: &ToolContext) -> Self {
-        Self { last_location: cx.snap_to_last_location && !cx.snap_to_pixel, ..Self::default() }.styled(cx)
+        Self { last_location: cx.snap_to_last_location && !cx.snaps_to_pixel(crate::PixelOp::Moving), ..Self::default() }.styled(cx)
     }
 
     /// Targets for scaling the selection: the other art, styled as `cx` asks, and with Smart Guides ›
@@ -209,6 +221,17 @@ impl Targets {
         t.push_paths(doc, exclude, true);
         if let Some(o) = glyphs {
             t.push_glyphs(doc, exclude, visible, o);
+        }
+        t.index()
+    }
+
+    /// Targets for the ends of a measurement: [`Self::collect`]'s, and with `glyphs` (Snap to Glyph
+    /// on) the guides those options ask for from the live text in `visible` (all of it for None),
+    /// without the outlines' anchor points, which Anchor Point gives the Pen and moved objects.
+    pub fn for_measure(doc: &Document, visible: Option<Rect>, glyphs: Option<GlyphSnap>) -> Self {
+        let mut t = Self::collect(doc, &[], None);
+        if let Some(o) = glyphs {
+            t.push_glyphs(doc, &[], visible, GlyphSnap { anchors: false, ..o });
         }
         t.index()
     }
@@ -557,8 +580,10 @@ impl Targets {
     }
 
     /// View → Snap to Point: only these targets' anchors pull, and the ruler guides (shown and
-    /// unlocked, as the selection tools pick them) pull the pointer into line where they run.
-    pub(super) fn for_snap_to_point(self, cx: &ToolContext) -> Self {
+    /// unlocked, as the selection tools pick them) pull the pointer into line where they run. It
+    /// snaps without Smart Guides, so it draws none of their labels and lines.
+    pub(super) fn for_snap_to_point(mut self, cx: &ToolContext) -> Self {
+        self.style = GuideStyle { lines: false, labels: false, ..GuideStyle::of(cx) };
         self.anchors_only().with_rulers(cx)
     }
 
@@ -568,7 +593,7 @@ impl Targets {
         if cx.guides {
             self.rulers = cx
                 .doc
-                .guides
+                .ruler_guides()
                 .iter()
                 .filter(|g| cx.doc.guide_shown(g))
                 .map(|g| Ruler { vertical: g.vertical, pos: g.pos, span: cx.doc.guide_span(g) })
@@ -845,6 +870,21 @@ impl Targets {
         self.line(from, q).into_iter().chain(self.label(q, "align")).collect()
     }
 
+    /// A point `p` near no target anchor or center landed where two target paths cross
+    /// ("intersect"), else on the nearest target path ("path"), within `tol`: the point and its
+    /// label, as [`Self::snap_point`] lands it. The ruler guides of `rulers` count as paths that
+    /// cross ([`Self::rulers`]). None when no path is in reach, or the targets hold no segments.
+    pub(crate) fn snap_onto_path(&self, p: Point, tol: f64, rulers: Option<&Targets>) -> Option<(Point, Vec<Overlay>)> {
+        if self.segments.is_empty() {
+            return None;
+        }
+        if let Some(q) = self.crossing_with(p, tol, rulers.map_or(&self.rulers, |r| &r.rulers)) {
+            return Some((q, self.label(q, "intersect").into_iter().collect()));
+        }
+        let q = self.on_segment(p, tol)?;
+        Some((q, self.label(q, Kind::Edge.label()).into_iter().collect()))
+    }
+
     /// The nearest point within `tol` of `p` on a target segment.
     fn on_segment(&self, p: Point, tol: f64) -> Option<Point> {
         self.segments
@@ -859,6 +899,11 @@ impl Targets {
     /// Where two target paths, a path and a ruler guide, or two ruler guides cross, the crossing
     /// nearest `p` within `tol` ("intersect", #1602).
     fn crossing(&self, p: Point, tol: f64) -> Option<Point> {
+        self.crossing_with(p, tol, &self.rulers)
+    }
+
+    /// [`Self::crossing`] with the ruler guides `rulers`.
+    fn crossing_with(&self, p: Point, tol: f64, rulers: &[Ruler]) -> Option<Point> {
         // A ruler guide running past, as a short line through the reach of `p`.
         let ruler = |r: &Ruler| {
             let (pos, ..) = r.line_at(p, tol)?;
@@ -872,7 +917,7 @@ impl Targets {
             .iter()
             .filter(|(b, c)| b.inflate(tol, tol).contains(p) && c.nearest(p, 1e-6).distance_sq <= tol * tol)
             .map(|(_, c)| *c)
-            .chain(self.rulers.iter().filter_map(ruler))
+            .chain(rulers.iter().filter_map(ruler))
             // shortcut: the first 32 lines in reach are paired, raise it if busier crossings matter
             .take(32)
             .collect();
@@ -1181,6 +1226,47 @@ impl Targets {
             ov.extend(self.label(p + d, "align"));
         }
         (d, ov, held.contains(&true))
+    }
+
+    /// [`Self::snap_moved_to_rulers`] for a selection a move Shift keeps to its line (through the
+    /// grabbed point `p`, along `dir`), its bounds now `r`: the edge or centre of `r` that a ruler
+    /// guide runs past within `tol` goes onto it by sliding along the line, the way needing the
+    /// shortest slide winning and at most twice `tol` (a line nearly parallel to a guide would
+    /// carry the selection far to meet it). Returns the shift along the line and the guides.
+    pub(crate) fn snap_moved_along_to_rulers(&self, p: Point, r: Rect, dir: Vec2, tol: f64) -> (Vec2, Vec<Overlay>) {
+        let len = dir.hypot();
+        if !len.is_finite() || len <= 1e-9 {
+            return (Vec2::ZERO, vec![]);
+        }
+        let u = dir / len;
+        // The way along the line, where the guide is and where it starts, and whether it is upright.
+        let mut best: Option<(f64, f64, Point, bool)> = None;
+        for (vertical, c) in [(true, u.x), (false, u.y)] {
+            if c.abs() <= 1e-9 {
+                continue;
+            }
+            let vs = if vertical { [r.x0, r.center().x, r.x1] } else { [r.y0, r.center().y, r.y1] };
+            let (mid, half) =
+                if vertical { (Point::new(0.0, r.center().y), r.height() / 2.0) } else { (Point::new(r.center().x, 0.0), r.width() / 2.0) };
+            for (t, from, _) in self.rulers.iter().filter(|g| g.vertical == vertical).filter_map(|g| g.line_at(mid, tol + half)) {
+                for v in vs {
+                    let s = (t - v) / c;
+                    if (t - v).abs() <= tol && s.abs() <= 2.0 * tol && best.is_none_or(|b| s.abs() < b.0.abs()) {
+                        best = Some((s, t, from, vertical));
+                    }
+                }
+            }
+        }
+        let Some((s, t, from, vertical)) = best else { return (Vec2::ZERO, vec![]) };
+        let moved = r + u * s;
+        let line = if vertical {
+            self.line(Point::new(t, from.y.min(moved.y0)), Point::new(t, from.y.max(moved.y1)))
+        } else {
+            self.line(Point::new(from.x.min(moved.x0), t), Point::new(from.x.max(moved.x1), t))
+        };
+        let mut ov: Vec<Overlay> = line.into_iter().collect();
+        ov.extend(self.label(p + u * s, "align"));
+        (u * s, ov)
     }
 
     /// Snap a bounding-box resize. `a` is the scale [`crate::bbox::scale_for_drag`] gave for

@@ -69,6 +69,7 @@ pub const TABLE: &[(&str, Class)] = &[
     ("cutter", Class::Layer(2)),
     ("cutter-silhouette", Class::Layer(3)),
     ("js", Class::Standalone),
+    ("apischema", Class::Standalone),
 ];
 
 /// Explicit orderings *within* a layer (earlier may be used by later).
@@ -91,6 +92,9 @@ pub const INTRA_LAYER_ORDER: &[&[&str]] = &[
     &["pathops", "three-d"],
     // Fork: the cutting core's golden tests open hand-written SVGs (a dev-dependency only).
     &["svg", "cutting"],
+    // Outline Object on an image's fill or stroke follows the outline Image Trace makes of its
+    // opaque area.
+    &["trace", "effects"],
 ];
 
 fn intra_layer_allowed(from: &str, to: &str) -> bool {
