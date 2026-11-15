@@ -25,7 +25,7 @@ pub fn specs() -> Vec<CommandSpec> {
         "Batch from Data Sets",
         [],
         None,
-        "{ids?: the template (default: the selection), datasets?: [names] (default: every data set, in order), gapMm?: 0–50 (default 2), rotate?: bool (default true)} one copy of the template for each data set (Window › Variables), grouped and named after it, the record's text in the copy's objects bound to its text variables and its showing in those bound to its visibility variables; the copies nested onto as few sheets as hold them (new artboards Sheet 2, Sheet 3… past the cutting artboard, each cut on its own), the template hidden; a record too large for the mat refused by name; one undo step → {records: [{name, id}], sheets: [artboards used], created: new sheets}",
+        "{ids?: the template (default: the selection), datasets?: [names] (default: every data set, in order), gapMm?: 0–50 (default 2), rotate?: bool (default true: the copies may be turned a quarter turn, clockwise or counter-clockwise, as nesting does)} one copy of the template for each data set (Window › Variables), grouped and named after it, the record's text in the copy's objects bound to its text variables and its showing in those bound to its visibility variables; the copies nested onto as few sheets as hold them (new artboards Sheet 2, Sheet 3… past the cutting artboard, each cut on its own), the template hidden; a record too large for the mat refused by name; one undo step → {records: [{name, id}], sheets: [artboards used], created: new sheets}",
         has_doc,
         batch
     )]

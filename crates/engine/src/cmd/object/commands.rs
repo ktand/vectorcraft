@@ -7,7 +7,7 @@ use super::props::set_props;
 use super::shape::{expand_shape, set_live_shape};
 use super::transform::{move_cmd, nudge, reflect, rotate, scale, shear, transform, transform_again};
 use super::{CommandSpec, cmd, has_doc, has_multi, has_selection, has_selection_or_guides};
-use crate::cmd::has_selected_member;
+use crate::cmd::has_selected_member_or_guide;
 
 pub fn specs() -> Vec<CommandSpec> {
     vec![
@@ -43,7 +43,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Scale…",
             ["Object", "Transform"],
             None,
-            "{ids?: [id…] (selected first; default: the selection), sx: %, sy?: %, origin?: [x,y], copy?, strokes?: bool (Scale Strokes & Effects: stroke weights, dashes and effect distances scale; off keeps them, type strokes included), corners?: bool (Scale Corners: live corner radii scale), objects?: bool (Transform Objects, default true; false: the art stays and, with patterns, only its pattern tiles transform), patterns?: bool (Transform Patterns: pattern fills and strokes transform with the art; default: prefs transformPatternTiles), typeAreas?: bool (area type: the frame is reshaped and the text reflows at its size)} (strokes/corners default to the preferences). With anchors selected with Direct Selection (and no copy), only those anchors and their handles transform, about the centre of their own box.",
+            "{ids?: [id…] (selected first; default: the selection), sx: % (along the bounding box's width), sy?: % (along its height), origin?: [x,y] (a page point), basis?: \"box\"|\"page\" (box, the default: sx and sy follow the bounding box, turned with rotated objects until Reset Bounding Box; page: the page's axes; a saved step without basis, recorded before it, plays along the page's axes), copy?, strokes?: bool (Scale Strokes & Effects: stroke weights, dashes and effect distances scale; off keeps them, type strokes included), corners?: bool (Scale Corners: live corner radii scale), objects?: bool (Transform Objects, default true; false: the art stays and, with patterns, only its pattern tiles transform), patterns?: bool (Transform Patterns: pattern fills and strokes transform with the art; default: prefs transformPatternTiles), typeAreas?: bool (area type: the frame is reshaped and the text reflows at its size)} (strokes/corners default to the preferences). With anchors selected with Direct Selection (and no copy), only those anchors and their handles transform, about the centre of their own box.",
             has_selection,
             scale
         ),
@@ -52,7 +52,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Reflect…",
             ["Object", "Transform"],
             None,
-            "{ids?: [id…] (selected first; default: the selection), axis: \"vertical\"|\"horizontal\"|deg, origin?, copy?, objects?: bool (Transform Objects, default true; false: the art stays and, with patterns, only its pattern tiles transform), patterns?: bool (Transform Patterns: pattern fills and strokes transform with the art; default: prefs transformPatternTiles), typeAreas?: bool (area type: the frame is reshaped and the text reflows at its size)}. With anchors selected with Direct Selection (and no copy), only those anchors and their handles transform, about the centre of their own box.",
+            "{ids?: [id…] (selected first; default: the selection), axis: \"vertical\"|\"horizontal\"|deg (the mirror line, counter-clockwise from horizontal; 0: horizontal; omitted: vertical; vertical and horizontal are the bounding box's own axes, deg a line on the page), origin?, basis?: \"box\"|\"page\" (for a named axis; box, the default: the bounding box's axes, turned with rotated objects until Reset Bounding Box; page: the page's axes; a saved step without basis, recorded before it, plays along the page's axes), copy?, objects?: bool (Transform Objects, default true; false: the art stays and, with patterns, only its pattern tiles transform), patterns?: bool (Transform Patterns: pattern fills and strokes transform with the art; default: prefs transformPatternTiles), typeAreas?: bool (area type: the frame is reshaped and the text reflows at its size)}. With anchors selected with Direct Selection (and no copy), only those anchors and their handles transform, about the centre of their own box.",
             has_selection,
             reflect
         ),
@@ -61,7 +61,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Shear…",
             ["Object", "Transform"],
             None,
-            "{ids?: [id…] (selected first; default: the selection), angle: deg, axis?: \"horizontal\"|\"vertical\", origin?, copy?, objects?: bool (Transform Objects, default true; false: the art stays and, with patterns, only its pattern tiles transform), patterns?: bool (Transform Patterns: pattern fills and strokes transform with the art; default: prefs transformPatternTiles), typeAreas?: bool (area type: the frame is reshaped and the text reflows at its size)}. With anchors selected with Direct Selection (and no copy), only those anchors and their handles transform, about the centre of their own box.",
+            "{ids?: [id…] (selected first; default: the selection), angle: deg (positive turns the vertical edges clockwise with the horizontal axis, the top to the right; the horizontal edges clockwise with the vertical axis, the right side down), axis?: \"horizontal\"|\"vertical\", origin?, copy?, objects?: bool (Transform Objects, default true; false: the art stays and, with patterns, only its pattern tiles transform), patterns?: bool (Transform Patterns: pattern fills and strokes transform with the art; default: prefs transformPatternTiles), typeAreas?: bool (area type: the frame is reshaped and the text reflows at its size)}. With anchors selected with Direct Selection (and no copy), only those anchors and their handles transform, about the centre of their own box.",
             has_selection,
             shear
         ),
@@ -151,8 +151,8 @@ pub fn specs() -> Vec<CommandSpec> {
             "Selection",
             ["Object", "Lock"],
             Some("Cmd+2"),
-            "{ids?: [id…] (selected first; default: the selection; in isolation mode, only those inside the isolated object)}",
-            has_selected_member,
+            "{ids?: [id…] (selected first; default: the selection, selected ruler guides included; in isolation mode, only the objects inside the isolated object)}",
+            has_selected_member_or_guide,
             lock
         ),
         cmd!(
@@ -160,7 +160,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Unlock All",
             ["Object"],
             Some("Cmd+Alt+2"),
-            "{scope?: \"document\"|\"group\" (default document, which in isolation mode is the isolated object; group: only the objects inside the groups that hold the selected objects, a selected group holding its own; the in-window menu item chosen with Shift+Alt)} unlock the locked objects and select them → {count}",
+            "{scope?: \"document\"|\"group\" (default document, which in isolation mode is the isolated object; group: only the objects inside the groups that hold the selected objects, a selected group holding its own; the in-window menu item chosen with Shift+Alt)} unlock the locked objects and select them; document scope outside isolation mode also unlocks ruler guides locked on their own → {count}",
             has_doc,
             unlock_all
         ),
@@ -169,8 +169,8 @@ pub fn specs() -> Vec<CommandSpec> {
             "Selection",
             ["Object", "Hide"],
             Some("Cmd+3"),
-            "{ids?: [id…] (selected first; default: the selection; in isolation mode, only those inside the isolated object)}",
-            has_selected_member,
+            "{ids?: [id…] (selected first; default: the selection, selected ruler guides included; in isolation mode, only the objects inside the isolated object)}",
+            has_selected_member_or_guide,
             hide
         ),
         cmd!(
@@ -178,7 +178,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Show All",
             ["Object"],
             Some("Cmd+Alt+3"),
-            "{scope?: \"document\"|\"group\" (default document, which in isolation mode is the isolated object; group: only the objects inside the groups that hold the selected objects, a selected group holding its own; the in-window menu item chosen with Shift+Alt)} show the hidden objects and select them → {count}",
+            "{scope?: \"document\"|\"group\" (default document, which in isolation mode is the isolated object; group: only the objects inside the groups that hold the selected objects, a selected group holding its own; the in-window menu item chosen with Shift+Alt)} show the hidden objects and select them; document scope outside isolation mode also shows ruler guides hidden on their own → {count}",
             has_doc,
             show_all
         ),
@@ -251,7 +251,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Object Properties",
             [],
             None,
-            "{ids?|id?, name?, visible?, locked? (visible: false or locked: true deselects every selected object hidden or locked after the call, the key object included), opacity?: 0..100, blend?: \"Multiply\"…, isolate?, knockout?: \"on\"|\"off\"|\"neutral\"|bool (true = on, false = neutral), knockoutShape?: bool, data?: {key: \"value\" | null (removes it)} (the object's own data, SVG data-* attributes: {pivot: \"100,180\"} is data-pivot; document.node → attrs.data)}. On a path directly in a graph series, the graph also stores the object's opacity and blend mode (exceptions: docs/mcp.md)",
+            "{ids?|id?, name?, visible?, locked? (visible: false or locked: true deselects every selected object hidden or locked after the call, the key object included), opacity?: 0..100, blend?: \"Multiply\"…, isolate?, knockout?: \"on\"|\"off\"|\"neutral\"|bool (true = on, false = neutral), knockoutShape?: bool, data?: {key: \"value\" | null (removes it)} (the object's own data, SVG data-* attributes: {pivot: \"100,180\"} is data-pivot; document.node → attrs.data)}. On a path directly in a graph series, the graph also stores the object's opacity and blend mode, and on a series group the group's opacity, blend mode, isolate, knockout and knockoutShape (exceptions: docs/mcp.md); on a graph label, the graph stores the label's opacity and blend mode for every label of its kind",
             has_doc,
             set_props
         ),
@@ -287,7 +287,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Bounds",
             [],
             None,
-            "{x?, y?, width?, height?, reference?: 0..8 (9-point grid; a number past 8 is read as 8), proportional?, strokes?, corners?, copy?: bool, patterns?: bool (Transform Patterns), typeAreas?: bool (area type: the frame is reshaped and the text reflows at its size), objects?: bool (Transform Objects, as object.move)} (Transform panel; width/height and the reference point follow the bounding box, rotated with rotated objects; x, y are page coordinates; with Use Preview Bounds the values measure the visual bounds; strokes/corners as object.scale; with anchor points selected (Direct Selection) and no copy, the values are the box around those points, square to the page, and only they move or scale, as with object.move (#1824))",
+            "{x?, y?, width?, height?, reference?: 0..8 (9-point grid; a number past 8 is read as 8), proportional?, strokes?, corners?, copy?: bool, patterns?: bool (Transform Patterns), typeAreas?: bool (area type: the frame is reshaped and the text reflows at its size), objects?: bool (Transform Objects, as object.move)} (Transform panel; width/height and the reference point follow the bounding box, rotated with rotated objects; x, y are page coordinates; with Use Preview Bounds the values measure the visual bounds; with the typeGlyphBounds preference, each point type object selected as an object (not inside a selected group) is measured by its glyphs' ink (underline and strikethrough included), which the scale gives the size asked for; strokes/corners as object.scale; with anchor points selected (Direct Selection) and no copy, the values are the box around those points, square to the page, and only they move or scale, as with object.move (#1824))",
             has_selection,
             set_bounds
         ),
@@ -297,7 +297,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Live Shape Properties",
             [],
             None,
-            "{id?, ids?, radius?: pt (or % of each corner's maximum when `relativeRadii` is true), kind?: \"round\"|\"invertedRound\"|\"chamfer\", relativeRadii?: bool (Relative rounding, as in the reference app: store radii as fractions of each corner's maximum so they scale with the shape), corners?: [i…], items?: [{id, corners?: [i…]}] (several objects, each with its own corners, in place of ids and corners: the canvas's corner widgets across a selection), sides?: n, polygonAngle?: degrees (counterclockwise from its first vertex straight up), polygonRadius?: pt (centre to vertex), sideLength?: pt (sets the radius), makeSidesEqual?: true (a polygon scaled unevenly: drops the uneven scale and shear, keeping its centre, angle and mean radius), pieStart?, pieEnd?: degrees (an ellipse's pie, counterclockwise from 3 o'clock; 0 to 360 is the whole ellipse), invertPie?: true (swaps them: the other part of the ellipse)} (Live Corners on any path: radius and kind set its corners (anchors that aren't smooth, where two sides, straight or curved (#1144), meet at an angle): `corners` (anchor indices of the path with its corners uncut, counting every subpath's anchors in order: a rectangle's 0 top-left, 1 top-right, 2 bottom-right, 3 bottom-left; a polygon's from the first vertex clockwise), else the corners with a Direct-Selected anchor, else every corner; each radius is drawn no larger than half the corner's shorter side allows; a path that isn't a live shape keeps its uncut outline so its corners stay editable, and is plain again once none is cut; sides: a polygon's, which keep the radius they shared; the polygon params apply in that order: sides, makeSidesEqual, polygonAngle, then sideLength or else polygonRadius)",
+            "{id?, ids?, radius?: pt (or % of each corner's maximum when `relativeRadii` is true), kind?: \"round\"|\"invertedRound\"|\"chamfer\", relativeRadii?: bool (Relative rounding, as in the reference app: store radii as fractions of each corner's maximum so they scale with the shape), corners?: [i…], items?: [{id, corners?: [i…]}] (several objects, each with its own corners, in place of ids and corners: the canvas's corner widgets across a selection), sides?: n, polygonAngle?: degrees (counter-clockwise from its first vertex straight up), polygonRadius?: pt (centre to vertex), sideLength?: pt (sets the radius), makeSidesEqual?: true (a polygon scaled unevenly: drops the uneven scale and shear, keeping its centre, angle and mean radius), pieStart?, pieEnd?: degrees (an ellipse's pie, counter-clockwise from 3 o'clock; 0 to 360 is the whole ellipse), invertPie?: true (swaps them: the other part of the ellipse)} (Live Corners on any path: radius and kind set its corners (anchors that aren't smooth, where two sides, straight or curved (#1144), meet at an angle): `corners` (anchor indices of the path with its corners uncut, counting every subpath's anchors in order: a rectangle's 0 top-left, 1 top-right, 2 bottom-right, 3 bottom-left; a polygon's from the first vertex clockwise), else the corners with a Direct-Selected anchor, else every corner; each radius is drawn no larger than half the corner's shorter side allows; a path that isn't a live shape keeps its uncut outline so its corners stay editable, and is plain again once none is cut; sides: a polygon's, which keep the radius they shared; the polygon params apply in that order: sides, makeSidesEqual, polygonAngle, then sideLength or else polygonRadius)",
             has_selection,
             set_live_shape
         ),

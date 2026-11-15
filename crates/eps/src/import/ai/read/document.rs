@@ -467,6 +467,10 @@ pub struct Symbols {
     /// The global and spot colors the symbols' art is linked to, as swatches, as [`read`] adds
     /// them to a document read from the layers.
     pub swatches: Vec<Swatch>,
+    /// The data's declared large canvas scale (1 when it declares none), not applied to the art.
+    pub canvas_scale: f64,
+    /// [`Structure::symbols_own_size`].
+    pub own_size: bool,
 }
 
 /// The symbols of the editing data `data`, for a file whose layers aren't read (a symbol library
@@ -529,7 +533,7 @@ pub fn symbols(data: &[u8], names: &mut obj::Names) -> Option<Symbols> {
         .chain(art_names(symbols.iter().map(|(s, _)| &*s.art)))
         .collect();
     names.absorb_among(std::mem::take(&mut r.names), &used);
-    Some(Symbols { symbols, images, swatches })
+    Some(Symbols { symbols, images, swatches, canvas_scale: r.canvas_scale, own_size: r.symbols_own_size })
 }
 
 /// [`artboards`] as far as reading `data` from its start gets: those read before an error, and
@@ -647,6 +651,10 @@ impl<'a> Reader<'a> {
     pub(super) fn program_header(&mut self, outer: Reader<'_>) {
         if self.author.is_none() {
             self.author = outer.author;
+        }
+        // Ruler units the editing data doesn't give: the file still records them (#5820).
+        if self.ruler_units.is_none() {
+            self.ruler_units = outer.ruler_units;
         }
         self.names.absorb(outer.names);
         for n in outer.custom_colors {
@@ -863,9 +871,15 @@ impl<'a> Reader<'a> {
     // ---- the document ----------------------------------------------------------------------
 
     /// The artboard of a file without artboards or crop marks: its size around the template
-    /// box's centre (half a point off the grid).
+    /// box's center (half a point off the grid). The program of a `.ai` of versions 3 and 4
+    /// ([`Reader::legacy_ai`], no `%AI5_FileFormat`), which don't record the artboard's size, has
+    /// VectorCraft's own default there, a US Letter artboard (612 × 792 pt); an EPS, or a newer
+    /// file without `%AI5_ArtSize`, has none (its page is its bounding box).
     fn sized_board(&self) -> Option<Rect> {
-        let ((w, h), (cx, cy)) = (self.art_size?, self.template_center?);
+        let (cx, cy) = self.template_center?;
+        let [_, _, letter_w, letter_h] = crate::import::LETTER;
+        let letter = self.legacy_ai && !self.file_format;
+        let (w, h) = self.art_size.or(letter.then_some((letter_w, letter_h)))?;
         // Rounded out, but not off a whole point the decimals in the file only just miss.
         let near = |v: f64| (v - v.round()).abs() < 1e-6;
         let (left, top) = (cx - w / 2.0, cy + h / 2.0);
@@ -1143,7 +1157,7 @@ impl<'a> Reader<'a> {
                 continue;
             }
             let Some(st) = self.styles.get(&name) else { continue };
-            let Some(mut appearance) = appearance_from_art_style(st) else { continue };
+            let Some(mut appearance) = appearance_from_art_style(st, &self.gradients) else { continue };
             // A Large Canvas copy's styles are at its art's scale ([`Self::ensure_space`]).
             if let Some(s) = self.large_canvas.filter(|s| *s != 1.0) {
                 appearance.scale_strokes(s);
@@ -1161,13 +1175,14 @@ impl<'a> Reader<'a> {
     }
 
     pub(super) fn finish(mut self) -> Result<Structure, String> {
-        if self.graph.take().is_some() {
+        if self.graph.is_some() {
+            self.graph_plain();
+            self.graph = None;
             self.warn(super::types::GRAPH_UNENDED);
         }
         // Envelopes whose plugin never closed them keep their drawn art.
-        if !self.envelopes.is_empty() {
-            self.envelopes.clear();
-            self.warn(crate::import::ai::envelope::DRAWN);
+        for p in std::mem::take(&mut self.envelopes) {
+            self.warn(crate::import::ai::envelope::drawn_note(p.typed));
         }
         if !self.unknown.is_empty() {
             let ops: Vec<String> = self.unknown.iter().map(|o| format!("`{o}`")).collect();
@@ -1189,6 +1204,11 @@ impl<'a> Reader<'a> {
         drop_commented_copies(&mut self.doc.layers, &self.hidden_ids);
         super::on_path::apply(&mut self.doc, &self.on_path);
         let mut doc = std::mem::replace(&mut self.doc, Document::new(1.0, 1.0));
+        // A Large Canvas copy's symbols are at its art's scale too ([`Self::ensure_space`]), except
+        // in data VectorCraft wrote.
+        if let Some(s) = self.large_canvas.filter(|s| *s != 1.0 && !self.symbols_own_size) {
+            crate::import::scale_symbols(&mut doc, s);
+        }
         // The active artboard, when it is not the first (the default).
         let active = self.active_board.filter(|i| *i > 0 && *i < self.artboards.len());
         let boards: Vec<AiArtboard> = if self.artboards.is_empty() {
@@ -1210,6 +1230,7 @@ impl<'a> Reader<'a> {
                 show_video_safe_areas: b.safe_areas,
                 video_ruler_pixel_aspect_ratio: b.par,
                 color: None,
+                guide_label: None,
             })
             .collect();
         if doc.artboards.is_empty() {
@@ -1224,6 +1245,7 @@ impl<'a> Reader<'a> {
                 show_video_safe_areas: false,
                 video_ruler_pixel_aspect_ratio: 1.0,
                 color: None,
+                guide_label: None,
             }];
         }
         doc.opened_artboard = active.and_then(|i| doc.artboards.get(i)).map(|a| a.id);
@@ -1239,9 +1261,9 @@ impl<'a> Reader<'a> {
                     None => None,
                 };
                 let pos = if vertical { p.x } else { p.y };
-                pos.is_finite().then_some(Guide { vertical, pos, artboard, layer: None })
+                pos.is_finite().then_some(Guide { artboard, ..Guide::new(vertical, pos) })
             };
-            take_ruler_guides(&mut doc.layers, &pick, &mut doc.guides, 0);
+            take_ruler_guides(&mut doc.layers, &pick, 0);
         }
         let mut brushes = self.brush_library();
         if let Some((lib, _)) = &brushes {
@@ -1254,6 +1276,7 @@ impl<'a> Reader<'a> {
         }
         if let Some(u) = self.ruler_units.and_then(ruler_unit) {
             doc.units = u;
+            doc.units_from_file = true;
         }
         // The file's own swatches in place of the defaults, in its order and colour groups.
         let own_palette = match self.palette_swatches(&doc.patterns) {
@@ -1297,6 +1320,11 @@ impl<'a> Reader<'a> {
             for w in &mut self.warped_type {
                 vectorcraft_doc::swatches::map_node_solid_paints(&mut w.look, &mut follow);
             }
+            for e in &mut self.typed_envelopes {
+                for n in e.before.iter_mut().chain(e.inner.iter_mut()) {
+                    vectorcraft_doc::swatches::map_node_solid_paints(n, &mut follow);
+                }
+            }
         }
         let mut warnings = self.warnings;
         if let Some((lib, unread)) = brushes {
@@ -1324,6 +1352,17 @@ impl<'a> Reader<'a> {
             doc.limit_depth_noting(&mut warnings);
         }
         warnings.extend(self.names.notes());
+        // The patterns of the styles that are one paint, which the text document's characters
+        // name for their fills and strokes: those that place in the document.
+        let text_patterns = self
+            .styles
+            .iter()
+            .filter_map(|(style, st)| {
+                let Some(crate::import::ai::style::StyleItem::Pattern { name, matrix, controls }) = &st.simple_pattern else { return None };
+                let paint = super::ops::style_pattern(name, *matrix, controls, &self.pattern_tiles, &self.v7_patterns, &self.global_names, to_doc)?;
+                Some((style.clone(), paint))
+            })
+            .collect();
         Ok(Structure {
             doc,
             to_doc,
@@ -1341,12 +1380,16 @@ impl<'a> Reader<'a> {
             envelopes_drawn: self.envelopes_drawn,
             warped_type: super::super::envelope::WarpedType {
                 looks: self.warped_type,
+                envelopes: self.typed_envelopes,
                 checks: self.envelope_checks,
                 spent: self.envelope_spent,
                 page,
+                alone: None,
             },
             styles_read,
+            text_patterns,
             canvas_scale: self.canvas_scale,
+            symbols_own_size: self.symbols_own_size,
             xml_ids: self.xml_ids,
             bindings,
             bindings_skipped,
@@ -1417,9 +1460,10 @@ fn ruler_guide(a: Point, b: Point, centre: Option<(f64, f64)>, boards: &[Rect]) 
     }
 }
 
-/// Moves the children of the layers and sublayers of `nodes` that `pick` makes a guide of into
-/// `guides`, each on its layer.
-fn take_ruler_guides(nodes: &mut [Arc<Node>], pick: &dyn Fn(NodeId) -> Option<Guide>, guides: &mut Vec<Guide>, depth: usize) {
+/// Makes the children of the layers and sublayers of `nodes` that `pick` makes a guide of into
+/// ruler guide nodes with the same ids, names, locks and visibility, moved to the top of their layer
+/// in their order.
+fn take_ruler_guides(nodes: &mut [Arc<Node>], pick: &dyn Fn(NodeId) -> Option<Guide>, depth: usize) {
     if depth > MAX_DEPTH {
         return;
     }
@@ -1427,16 +1471,21 @@ fn take_ruler_guides(nodes: &mut [Arc<Node>], pick: &dyn Fn(NodeId) -> Option<Gu
         if !matches!(n.kind, NodeKind::Layer { .. }) {
             continue;
         }
-        let id = n.id;
         let Some(kids) = Arc::make_mut(n).children_mut() else { continue };
+        let mut guides = vec![];
         kids.retain(|k| match pick(k.id) {
             Some(g) => {
-                guides.push(Guide { layer: Some(id), ..g });
+                let mut n = Node::new(k.id, NodeKind::RulerGuide { vertical: g.vertical, pos: g.pos, artboard: g.artboard });
+                n.name = k.name.clone();
+                n.locked = k.locked;
+                n.visible = k.visible;
+                guides.push(Arc::new(n));
                 false
             }
             None => true,
         });
-        take_ruler_guides(kids, pick, guides, depth + 1);
+        take_ruler_guides(kids, pick, depth + 1);
+        kids.extend(guides);
     }
 }
 

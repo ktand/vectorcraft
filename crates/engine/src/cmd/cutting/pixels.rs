@@ -58,14 +58,13 @@ fn scale_document(d: &mut Document, k: f64) {
     for id in layers {
         if let Some(n) = d.node_mut(id) {
             n.transform(a, sc);
+            // Ruler guides are layer nodes that a transform leaves where they are.
+            n.map_ruler_guide_positions(&mut |_, pos| *pos *= k);
         }
     }
     for b in &mut d.artboards {
         let r = b.rect;
         b.rect = Rect::new(r.x0 * k, r.y0 * k, r.x1 * k, r.y1 * k);
-    }
-    for g in &mut d.guides {
-        g.pos *= k;
     }
     d.ruler_origin = (d.ruler_origin.to_vec2() * k).to_point();
     for o in d.artboard_ruler_origins.values_mut() {

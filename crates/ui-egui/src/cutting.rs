@@ -21,6 +21,15 @@ use crate::VectorcraftApp;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) const UPDATE_REPO: &str = "ktand/vectorcraft";
 
+/// The cutting workspace's View menu items that the app runs itself and that can be steps of an
+/// action, as upstream's show and hide items are (`menus::entries::plays_in_app`).
+pub(crate) const UI_STEP_COMMANDS: [&str; 3] = ["view.cutting", TOOLPATHS_COMMAND, CUT_BORDER_COMMAND];
+
+/// Cutting commands with no menu item that a key press can't run with no params: each reads the
+/// file its panel's button asks for. The Keyboard Shortcuts editor leaves them out, as it does
+/// upstream's library loaders (`shortcut_editor::needs_a_value`).
+pub(crate) const NEEDS_A_PARAM: [&str; 2] = ["cutting.material.import", "cutting.papercraft"];
+
 /// A document's cut job, its stats and the blade's run through it.
 pub(crate) struct Made {
     pub job: CutJob,
