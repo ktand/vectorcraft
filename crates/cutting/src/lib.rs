@@ -37,6 +37,7 @@ pub mod group;
 pub mod hatch;
 pub mod jobsheet;
 pub mod knockout;
+pub mod layered;
 pub mod live;
 pub mod marks;
 pub mod nest;

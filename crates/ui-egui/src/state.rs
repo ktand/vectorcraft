@@ -227,6 +227,7 @@ pub const ICON_PANELS: &[(&str, &str, &str)] = &[
     (crate::panels::cutting::lines::ID, "Contour", "pen-tool"),
     (crate::panels::cutting::lines::STENCIL_ID, "Stencil", "squares-subtract"),
     (crate::panels::cutting::lines::WEEDING_ID, "Weeding", "eraser"),
+    (crate::panels::cutting::lines::VINYL_ID, "Vinyl Layers", "swatch-book"),
     (crate::panels::cutting::patterns::ID, "Sketch Fill", "pencil"),
     (crate::panels::cutting::patterns::RHINESTONES_ID, "Rhinestones", "sparkles"),
     (crate::panels::cutting::patterns::PUZZLE_ID, "Puzzle", "shapes"),

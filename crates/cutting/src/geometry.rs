@@ -16,7 +16,9 @@
 
 use std::collections::HashSet;
 
+use vectorcraft_color::Paint;
 use vectorcraft_cutjob::{JobWarning, OpKind, SourceRef};
+use vectorcraft_doc::appearance::AppearanceItem;
 use vectorcraft_doc::{Document, MAX_DEPTH, Node, NodeKind, SymbolBoxes};
 use vectorcraft_effects::preview::drawn_art;
 use vectorcraft_geom::{BezPath, FillRule, PathData, PathEl};
@@ -61,6 +63,59 @@ struct Walk<'a> {
     /// Along each path, or round what it paints ([`Edge`]).
     edge: Edge,
     notes: Notes,
+    /// Set by [`painted`]: what each path paints is gathered here, not what it is cut along.
+    painted: Option<Vec<Painted>>,
+}
+
+/// One area an object paints in one paint, as drawn (C18.30): a fill's area (its subpaths
+/// closed) or a stroke's outline, in document points.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Painted {
+    pub path: PathData,
+    pub rule: FillRule,
+    pub paint: Paint,
+}
+
+/// What `item` paints, bottom first: each path's shown fills and strokes in its appearance's
+/// order (fills closed, strokes as their outlines, as the canvas draws them), type as its glyphs,
+/// symbols and live art as their art; with what it left out. Not clipped to `item.clips`.
+pub fn painted(d: &Document, item: &Item) -> (Vec<Painted>, Vec<JobWarning>) {
+    let symbols = d.symbol_boxes();
+    let Some(n) = d.node(item.id) else { return (vec![], vec![]) };
+    let mut w = Walk { symbols: &symbols, edge: Edge::Path, notes: Notes::default(), painted: Some(vec![]) };
+    collect(d, &mut w, n, 0, &mut vec![]);
+    let out = w.painted.take().unwrap_or_default();
+    (out, warnings_of(&w.notes, item.id.0))
+}
+
+/// The areas `n` paints along `path` (fill rule `rule`), bottom first.
+fn paints_of(n: &Node, path: &PathData, rule: FillRule) -> Vec<Painted> {
+    let mut out = vec![];
+    for i in &n.appearance.items {
+        match i {
+            AppearanceItem::Fill(f) if f.visible && !f.paint.is_none() && f.opacity > 0.0 => {
+                let closed = PathData::new(
+                    path.subpaths
+                        .iter()
+                        .cloned()
+                        .map(|mut sp| {
+                            sp.closed = true;
+                            sp
+                        })
+                        .collect(),
+                );
+                out.push(Painted { path: closed, rule, paint: f.paint.clone() });
+            }
+            AppearanceItem::Stroke(st) if st.visible && !st.paint.is_none() && st.opacity > 0.0 => {
+                let outline = vectorcraft_effects::stroke::outline_region(path, rule, st);
+                if !outline.is_empty() {
+                    out.push(Painted { path: outline, rule: FillRule::NonZero, paint: st.paint.clone() });
+                }
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 /// The outlines `items` cut along, in their order, and what they leave out.
@@ -70,7 +125,7 @@ pub fn outlines(d: &Document, items: &[Item]) -> (Vec<Outline>, Vec<JobWarning>)
     for item in items {
         let Some(n) = d.node(item.id) else { continue };
         let mut paths = vec![];
-        let mut w = Walk { symbols: &symbols, edge: item.edge, notes: Notes::default() };
+        let mut w = Walk { symbols: &symbols, edge: item.edge, notes: Notes::default(), painted: None };
         collect(d, &mut w, n, 0, &mut paths);
         let mut notes = w.notes;
         let mut subs: Vec<(BezPath, bool)> = paths.iter().flat_map(subpaths).collect();
@@ -104,22 +159,29 @@ pub fn outlines(d: &Document, items: &[Item]) -> (Vec<Outline>, Vec<JobWarning>)
             out.push(Outline { op: item.op, outline: item.outline, source: SourceRef { node: item.id.0, subpath: index }, closed, path });
             index += 1;
         }
-        let source = Some(SourceRef { node: item.id.0, subpath: 0 });
-        let mut warn = |on: bool, message: &str| {
-            if on {
-                warnings.push(JobWarning { source, message: message.to_string() });
-            }
-        };
-        warn(notes.images, "an image has no line to cut and is left out");
-        warn(notes.meshes, "a gradient mesh has no line to cut and is left out");
-        warn(notes.clipped, "clipping masks inside symbols and live objects aren't applied yet: the art inside one is cut whole");
-        warn(notes.clip_failed, "a clipping mask couldn't be applied to some of the art: it is cut whole");
-        warn(notes.too_deep, "art nested too deep is left out");
-        warn(notes.no_outline, "type couldn't be outlined (is its font missing?) and is left out");
-        warn(notes.too_many, "only the first 100000 outlines of an object are cut");
-        warn(notes.edge_failed, "the stroke's edge couldn't be worked out: it is cut along its path");
+        warnings.extend(warnings_of(&notes, item.id.0));
     }
     (out, warnings)
+}
+
+/// What a walk of object `node` ran into, as warnings.
+fn warnings_of(notes: &Notes, node: u64) -> Vec<JobWarning> {
+    let source = Some(SourceRef { node, subpath: 0 });
+    let mut warnings = vec![];
+    let mut warn = |on: bool, message: &str| {
+        if on {
+            warnings.push(JobWarning { source, message: message.to_string() });
+        }
+    };
+    warn(notes.images, "an image has no line to cut and is left out");
+    warn(notes.meshes, "a gradient mesh has no line to cut and is left out");
+    warn(notes.clipped, "clipping masks inside symbols and live objects aren't applied yet: the art inside one is cut whole");
+    warn(notes.clip_failed, "a clipping mask couldn't be applied to some of the art: it is cut whole");
+    warn(notes.too_deep, "art nested too deep is left out");
+    warn(notes.no_outline, "type couldn't be outlined (is its font missing?) and is left out");
+    warn(notes.too_many, "only the first 100000 outlines of an object are cut");
+    warn(notes.edge_failed, "the stroke's edge couldn't be worked out: it is cut along its path");
+    warnings
 }
 
 /// `n`'s paths as drawn, added to `paths`.
@@ -150,15 +212,25 @@ fn along(w: &mut Walk, n: &Node, path: &PathData, rule: FillRule) -> BezPath {
     path.to_bezpath()
 }
 
+/// Path `path` of `n`: what it paints into `w.painted` when gathering that, else what it is cut
+/// along into `paths`.
+fn leaf(w: &mut Walk, n: &Node, path: &PathData, rule: FillRule, paths: &mut Vec<BezPath>) {
+    if let Some(p) = w.painted.as_mut() {
+        p.extend(paints_of(n, path, rule));
+        return;
+    }
+    paths.push(along(w, n, path, rule));
+}
+
 fn walk(d: &Document, w: &mut Walk, n: &Node, depth: usize, paths: &mut Vec<BezPath>) {
     let next = depth + 1;
     match &n.kind {
         // Guides (guide paths, ruler guides) and clipping paths draw nothing to cut.
         NodeKind::Path { guide: true, .. } | NodeKind::Path { clipping: true, .. } | NodeKind::RulerGuide { .. } => {}
-        NodeKind::Path { path, rule, .. } => paths.push(along(w, n, path, *rule)),
+        NodeKind::Path { path, rule, .. } => leaf(w, n, path, *rule, paths),
         NodeKind::Compound { children, rule } => {
             let subpaths = children.iter().filter_map(|c| c.path_data()).flat_map(|p| p.subpaths.iter().cloned()).collect();
-            paths.push(along(w, n, &PathData::new(subpaths), *rule));
+            leaf(w, n, &PathData::new(subpaths), *rule, paths);
         }
         NodeKind::Layer { children, .. } | NodeKind::Group { children, .. } | NodeKind::Intertwine { children } => {
             let clip = matches!(n.kind, NodeKind::Group { clip: true, .. } | NodeKind::Layer { clip: true, .. });

@@ -57,6 +57,8 @@ mod calibrate;
 mod sheets;
 // Tiles larger than the mat (C14.7).
 mod tile;
+// A design made into layered vinyl (C18.30).
+mod vinyl;
 // The machine's origin adjustment (C4.6).
 pub mod machine;
 
@@ -87,6 +89,7 @@ pub fn specs() -> Vec<CommandSpec> {
     v.extend(calibrate::specs());
     v.extend(sheets::specs());
     v.extend(tile::specs());
+    v.extend(vinyl::specs());
     v.extend(machine::specs());
     v.extend(vec![
         cmd!(

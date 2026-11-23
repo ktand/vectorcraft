@@ -1,6 +1,7 @@
 //! Fork: the panels that add cut lines to cut the art out (C12.2, one panel each since C14.9): the
 //! Contour panel, a contour round the art (C11.1); the Stencil panel, stencil bridges (C11.5); and
-//! the Weeding panel, weeding's box and lines (C8.2, C8.3). The designs made from the art (sketch
+//! the Weeding panel, weeding's box and lines (C8.2, C8.3); and the Vinyl Layers panel, a design
+//! made into layered vinyl (C18.30). The designs made from the art (sketch
 //! fill, rhinestones, puzzles) are in [`super::patterns`].
 
 use egui::Ui;
@@ -15,6 +16,7 @@ use crate::widgets;
 pub const ID: &str = "cuttingLines";
 pub const STENCIL_ID: &str = "cuttingStencil";
 pub const WEEDING_ID: &str = "cuttingWeeding";
+pub const VINYL_ID: &str = "cuttingVinyl";
 
 /// Weeding (C8.2, C8.3): a box round the design and lines from it in to the design, cut by the
 /// job (not added to the art), so vinyl's waste comes away easily.
@@ -213,6 +215,87 @@ fn bridge_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
     crate::panels::set_pstate(&ctx, "cutting-bridges", c);
 }
 
+/// What the Vinyl Layers panel keeps between frames: the base and overlap asked for, and what the
+/// last Make Vinyl Layers said.
+#[derive(Clone, Debug, Default)]
+struct VinylChoice {
+    /// `None`: automatic; `Some("none")`: no base; else a colour's name.
+    base: Option<String>,
+    overlap_mm: f64,
+    note: Option<(bool, String)>,
+}
+
+/// Layered vinyl (C18.30): the base colour (automatic, none or one of the selection's colours),
+/// the overlap, and Make Vinyl Layers (`cutting.vinylLayers`, one undo step).
+fn vinyl_rows(app: &mut VectorcraftApp, ui: &mut Ui) {
+    let t = Tokens::get(ui.ctx());
+    let ctx = ui.ctx().clone();
+    let mut c: VinylChoice = crate::panels::pstate(&ctx, "cutting-vinyl");
+    super::intro(
+        ui,
+        tl!(
+            "Makes the selected design into layered vinyl: one shape for each colour, what shows of it, each on a layer of its own, stacked on a base that is the whole design's outline."
+        ),
+    );
+    let ids: Vec<vectorcraft_doc::NodeId> = app.session.active().map(|st| st.selection.objects.to_vec()).unwrap_or_default();
+    let colours = app.session.active().map(|st| vectorcraft_cutting::layered::colours(&st.doc, &ids)).unwrap_or_default();
+    let mut labels: Vec<String> = vec![tl!("Automatic").to_string(), tl!("No Base").to_string()];
+    labels.extend(colours.iter().cloned());
+    let shown = match c.base.as_deref() {
+        None => 0,
+        Some("none") => 1,
+        Some(name) => colours.iter().position(|n| n == name).map_or(0, |i| i + 2),
+    };
+    let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+    widgets::label_row(ui, tl!("Base"), LABEL_W, |ui| {
+        if let Some(i) = widgets::dropdown(ui, ("cutting", "vinyl-base"), refs.get(shown).copied().unwrap_or("Automatic"), &refs, super::CHOICE_W) {
+            c.base = match i {
+                0 => None,
+                1 => Some("none".into()),
+                _ => colours.get(i - 2).cloned(),
+            };
+        }
+    });
+    widgets::label_row(ui, tl!("Overlap"), LABEL_W, |ui| {
+        let (lo, hi) = vectorcraft_cutting::layered::OVERLAP_MM;
+        if let Some(v) = mm_field(ui, "vinyl-overlap", c.overlap_mm, lo) {
+            c.overlap_mm = v.clamp(lo, hi);
+        }
+    });
+    widgets::dim_label(ui, tl!("How far each colour runs under the colours above it. With a base, 0 is usually right."));
+    let selected = !ids.is_empty();
+    if ui
+        .add_enabled(selected, egui::Button::new(tl!("Make Vinyl Layers")))
+        .on_hover_text(tl!(
+            "Replaces the selected art with one filled shape for each colour, each on a layer of its own; the job is then cut by layer."
+        ))
+        .clicked()
+    {
+        let base = c.base.clone().unwrap_or_else(|| "auto".into());
+        c.note = Some(match app.run("cutting.vinylLayers", json!({ "base": base, "overlapMm": c.overlap_mm })) {
+            Ok(r) => {
+                let names: Vec<String> =
+                    r["layers"].as_array().into_iter().flatten().filter_map(|l| l["name"].as_str().map(str::to_string)).collect();
+                (false, format!("{} {}: {}", names.len(), tl!("layers, bottom first"), names.join(", ")))
+            }
+            Err(e) => (true, e),
+        });
+        c.base = None;
+    }
+    super::select_hint(ui, selected, "Select the design first.");
+    if let Some((bad, note)) = &c.note {
+        ui.label(egui::RichText::new(note).color(if *bad { t.warning } else { t.text_dim }));
+    }
+    crate::panels::set_pstate(&ctx, "cutting-vinyl", c);
+}
+
+/// The Vinyl Layers panel.
+pub fn show_vinyl(app: &mut VectorcraftApp, ui: &mut Ui) {
+    if super::has_document(app, ui) {
+        vinyl_rows(app, ui);
+    }
+}
+
 /// The Contour panel.
 pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     if super::has_document(app, ui) {
@@ -276,6 +359,24 @@ mod tests {
         let texts = panel_texts(&mut app, &ctx, show_weeding);
         assert!(texts.iter().any(|t| t == "Spacing") && !texts.iter().any(|t| t == "Strip Size" || t == "Between Pieces"), "{texts:?}");
         assert!(app.run("cutting.settings.set", json!({"weedMarginMm": 80})).is_err(), "out of range");
+    }
+
+    /// C18.30: the Vinyl Layers panel lists the selection's colours as bases; Make Vinyl Layers
+    /// replaces the art with a layer for each colour.
+    #[test]
+    fn the_panel_makes_vinyl_layers() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        let texts = panel_texts(&mut app, &ctx, show_vinyl);
+        assert!(texts.iter().any(|t| t == "Make Vinyl Layers") && texts.iter().any(|t| t == "Select the design first."), "{texts:?}");
+        app.run("shape.ellipse", json!({"x": 10, "y": 10, "width": 100, "height": 80})).unwrap();
+        app.run("stroke.set", json!({"weight": 6})).unwrap();
+        let texts = panel_texts(&mut app, &ctx, show_vinyl);
+        assert!(texts.iter().any(|t| t == "Automatic"), "{texts:?}");
+        let made = app.run("cutting.vinylLayers", json!({})).unwrap();
+        assert!(!made["layers"].as_array().unwrap().is_empty(), "{made}");
+        assert!(app.session.active().unwrap().doc.layers.iter().any(|l| l.name.as_deref().is_some_and(|n| n.ends_with("(base)"))));
     }
 
     /// C11.1: the Contour section; Add Contour works on the selection.

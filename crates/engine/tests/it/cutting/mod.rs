@@ -21,3 +21,4 @@ mod stones;
 mod svg_size;
 mod template;
 mod tile;
+mod vinyl;

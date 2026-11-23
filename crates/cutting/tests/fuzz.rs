@@ -295,6 +295,15 @@ proptest! {
                 prop_assert!(a.as_coeffs().iter().all(|v| v.is_finite()));
             }
         }
+        // C18.30: vinyl layers of everything: layers inside the art, or a reason.
+        let ids: Vec<_> = d.layers.iter().map(|l| l.id).collect();
+        let _ = vectorcraft_cutting::layered::colours(&d, &ids);
+        for base in [vectorcraft_cutting::layered::Base::Auto, vectorcraft_cutting::layered::Base::None] {
+            match vectorcraft_cutting::layered::layered(&d, &ids, &vectorcraft_cutting::layered::Options { base, overlap_mm: 0.5 }) {
+                Ok(l) => prop_assert!(l.layers.iter().all(|v| v.region.subpaths.iter().all(|sp| sp.anchors.iter().all(|a| a.p.x.is_finite() && a.p.y.is_finite())))),
+                Err(e) => prop_assert!(!e.is_empty()),
+            }
+        }
         let mut sheets = d.clone();
         let _ = vectorcraft_cutting::nest::nest_sheets(&mut sheets, &pieces, vectorcraft_cutting::nest::Options { gap_mm: 1.0, rotate: true, fine: true });
         prop_assert!(sheets.artboards.len() <= d.artboards.len() + vectorcraft_cutting::nest::MAX_SHEETS);

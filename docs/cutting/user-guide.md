@@ -215,6 +215,32 @@ How to use it:
 Only closed shapes set to Cut are knocked out; shapes of the same colour don't cut holes in each other. A colour
 that's covered completely isn't cut at all, and the Send window says so.
 
+#### Vinyl Layers: a design made into layered vinyl
+
+Knockout works on shapes already drawn one colour each. Most designs aren't: a cartoon has a skin-coloured fill
+with a thick black border, white eyes with black pupils, black lines for the mouth. **Window › Cutting › Vinyl
+Layers** makes such a design into layered vinyl in one step:
+
+1. Select the design.
+2. Choose the **Base**. **Automatic** takes the colour along most of the design's outer edge (the black border in
+   the cartoon). Or choose one of the design's colours, or **No Base**.
+3. **Overlap** (0 at first) makes each colour run that far under the colours above it. With a base it's rarely
+   needed, as the base fills any gap.
+4. Press **Make Vinyl Layers**.
+
+The design is replaced by one filled shape for each colour, each on a layer of its own (named after the colour,
+numbered bottom first), and **Groups** is set to **By Layer**, so each colour is cut with a pause to load its vinyl.
+Strokes count as what they paint, as wide as they're drawn, and type as its letters:
+
+- The **base** is the design's whole outline in one piece, with no holes except the design's own (the inside of an
+  O). Everything else is pressed on top of it.
+- Each **other colour** is just what shows of it: the cartoon's skin has holes where the eyes and the mouth line
+  are, and the eyes' whites have holes for the pupils. The base's colour shows through those holes, so the black
+  lines and pupils are never cut as pieces of their own.
+- Shapes of one colour that touch become one piece.
+
+Gradients and patterns are each cut as one colour, and images aren't cut. Undo (Ctrl+Z) brings the design back.
+
 **Align Marks** (also shown once the job is cut in groups) cuts a small cross in the same place on every colour,
 just outside the design's corner. Weed the cross with the design; when pressing or applying, lay each colour's
 cross exactly over the one before, and the layers line up.

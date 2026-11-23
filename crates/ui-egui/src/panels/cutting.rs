@@ -38,6 +38,7 @@ pub const PANELS: &[&str] = &[
     lines::ID,
     lines::STENCIL_ID,
     lines::WEEDING_ID,
+    lines::VINYL_ID,
     patterns::ID,
     patterns::RHINESTONES_ID,
     patterns::PUZZLE_ID,
@@ -59,7 +60,7 @@ pub(crate) fn has_document(app: &VectorcraftApp, ui: &mut Ui) -> bool {
 
 pub(crate) const LABEL_W: f32 = 80.0;
 /// The Cut Settings panel's dropdowns: one width, so their arrows line up.
-const CHOICE_W: f32 = 150.0;
+pub(crate) const CHOICE_W: f32 = 150.0;
 
 /// A feature panel's first line: what it does, in a sentence (dim, wrapped).
 pub(crate) fn intro(ui: &mut Ui, text: &str) {

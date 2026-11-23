@@ -697,6 +697,7 @@ pub fn menu_tree_named(english_names: bool) -> Vec<(&'static str, Vec<Item>)> {
                         panel("Contour", lines::ID),
                         panel("Stencil", lines::STENCIL_ID),
                         panel("Weeding", lines::WEEDING_ID),
+                        panel("Vinyl Layers", lines::VINYL_ID),
                         panel("Sketch Fill", patterns::ID),
                         panel("Rhinestones", patterns::RHINESTONES_ID),
                         panel("Puzzle", patterns::PUZZLE_ID),
