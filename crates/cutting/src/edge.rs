@@ -2,7 +2,9 @@
 //! cut on the path itself, so a stroke is cut down its centre line. Set to its stroke's edge, it
 //! is cut round what it paints instead: its strokes' outlines (width, caps, joins, dashes,
 //! alignment and arrowheads, as on the canvas) united with its fill. Thick lettering and line art
-//! then cut as they look.
+//! then cut as they look. Set to its stroke's outline (C11.6), it is cut round its strokes'
+//! outlines alone, the fill left out: a filled shape with a thick border cuts as a ring, both sides
+//! of the stroke, as it would with no fill (and the fill still prints for Print & Cut).
 //!
 //! Kept as a second foreign attribute in the cutting namespace, `cut:edge="stroke"`, inherited
 //! like the operation ([`crate::ops`]): an object without one takes its nearest group's or
@@ -26,6 +28,8 @@ pub enum Edge {
     Path,
     /// The edge of what it paints: its strokes' outlines and its fill.
     Stroke,
+    /// Its strokes' outlines alone: both sides of each stroke, whatever the fill.
+    StrokeOutline,
 }
 
 impl Edge {
@@ -33,6 +37,7 @@ impl Edge {
         match self {
             Edge::Path => "path",
             Edge::Stroke => "stroke",
+            Edge::StrokeOutline => "strokeOutline",
         }
     }
 
@@ -40,8 +45,14 @@ impl Edge {
         match s {
             "path" => Some(Edge::Path),
             "stroke" => Some(Edge::Stroke),
+            "strokeOutline" => Some(Edge::StrokeOutline),
             _ => None,
         }
+    }
+
+    /// Whether it is cut round a stroke, not along its path.
+    pub fn round_stroke(self) -> bool {
+        self != Edge::Path
     }
 }
 
@@ -97,9 +108,9 @@ pub fn resolve(d: &Document, id: NodeId) -> Option<(Edge, Option<NodeId>)> {
 }
 
 /// The edge of what `n` paints along `path` (fill rule `rule`): its painted strokes' outlines and,
-/// when it is filled, the fill, united. `None` when it paints no stroke (it is cut along its path)
-/// or the outlines couldn't be united.
-pub fn painted_edge(n: &Node, path: &PathData, rule: FillRule) -> Option<PathData> {
+/// with `with_fill` when it is filled, the fill, united. `None` when it paints no stroke (it is
+/// cut along its path) or the outlines couldn't be united.
+pub fn painted_edge(n: &Node, path: &PathData, rule: FillRule, with_fill: bool) -> Option<PathData> {
     let strokes: Vec<PathData> =
         n.appearance.painted_strokes().map(|st| vectorcraft_effects::stroke::outline_region(path, rule, st)).filter(|p| !p.is_empty()).collect();
     if strokes.is_empty() {
@@ -107,7 +118,7 @@ pub fn painted_edge(n: &Node, path: &PathData, rule: FillRule) -> Option<PathDat
     }
     let filled = n.appearance.items.iter().any(|i| matches!(i, AppearanceItem::Fill(f) if f.visible && !f.paint.is_none()));
     let mut inputs: Vec<(&PathData, FillRule)> = strokes.iter().map(|p| (p, FillRule::NonZero)).collect();
-    if filled {
+    if with_fill && filled {
         inputs.push((path, rule));
     }
     vectorcraft_pathops::try_unite_all(&inputs).ok().filter(|p| !p.is_empty())
@@ -129,7 +140,12 @@ mod tests {
 
     fn edge_of(n: &Node) -> Option<PathData> {
         let NodeKind::Path { path, rule, .. } = &n.kind else { return None };
-        painted_edge(n, path, *rule)
+        painted_edge(n, path, *rule, true)
+    }
+
+    fn outline_of(n: &Node) -> Option<PathData> {
+        let NodeKind::Path { path, rule, .. } = &n.kind else { return None };
+        painted_edge(n, path, *rule, false)
     }
 
     #[test]
@@ -176,6 +192,24 @@ mod tests {
         let edge = edge_of(&stroked(&mut d, 10.0, true)).unwrap();
         assert_eq!(edge.subpaths.len(), 1, "the fill fills the inside");
         assert!((edge.bounds().unwrap().x0 + 5.0).abs() < 1e-6);
+    }
+
+    /// C11.6: the stroke's outline leaves the fill out, so a filled rectangle with a 10 pt border
+    /// cuts both sides of the border, 5 pt out and 5 pt in, as it would unfilled.
+    #[test]
+    fn a_strokes_outline_leaves_the_fill_out() {
+        let mut d = Document::new(200.0, 200.0);
+        let filled = outline_of(&stroked(&mut d, 10.0, true)).unwrap();
+        assert_eq!(filled.subpaths.len(), 2, "the outer edge and the inner one");
+        assert_eq!(filled, outline_of(&stroked(&mut d, 10.0, false)).unwrap(), "the fill makes no difference");
+        let inner =
+            filled.subpaths.iter().filter_map(|sp| PathData::single(sp.clone()).bounds()).min_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
+        assert!((inner.x0 - 5.0).abs() < 1e-6 && (inner.x1 - 95.0).abs() < 1e-6 && (inner.y1 - 45.0).abs() < 1e-6, "{inner:?}");
+        assert_eq!(Edge::parse(Edge::StrokeOutline.id()), Some(Edge::StrokeOutline));
+        assert!(Edge::StrokeOutline.round_stroke() && Edge::Stroke.round_stroke() && !Edge::Path.round_stroke());
+        let mut n = stroked(&mut d, 10.0, true);
+        n.appearance = Appearance::basic(Paint::solid(Color::BLACK), Paint::None, 10.0).into();
+        assert_eq!(outline_of(&n), None, "no stroke: cut along its path");
     }
 
     #[test]

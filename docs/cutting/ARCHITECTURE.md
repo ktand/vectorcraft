@@ -158,9 +158,10 @@ mark settings change. An image's bleed is a copy with its edge pixels stretched,
 `cut-bleed:<key>:<pixels>`; the copies the layer no longer shows are let go.
 
 **What an object is cut along (C11.4).** A second per-object attribute in the namespace, `cut:edge`, with the
-value `"path"` or `"stroke"`, inherited as the operation is (an object without one takes its nearest group's or
+value `"path"`, `"stroke"` or `"strokeOutline"` (C11.6), inherited as the operation is (an object without one takes its nearest group's or
 layer's, else `"path"`). `"stroke"` cuts round the edge of what each path paints, its strokes' outlines as drawn
-united with its fill (`vectorcraft_cutting::edge`); `"path"`, or no stroke, cuts along the path. It is separate
+united with its fill (`vectorcraft_cutting::edge`); `"strokeOutline"` the strokes' outlines alone, the fill left
+out, so both sides of a stroke are cut whatever the fill; `"path"`, or no stroke, cuts along the path. It is separate
 from `cut:op`, so any operation can be cut either way. `cutting.edge.set` sets it; `cutting.op.get` reports it.
 
 ### 4.3 What is never stored

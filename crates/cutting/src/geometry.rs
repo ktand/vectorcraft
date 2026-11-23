@@ -3,7 +3,8 @@
 //!
 //! A path or compound path is cut along its path after its geometry effects ([`drawn_art`]), on
 //! the path itself: a stroke is cut on its centre line, not around its outline, unless the object
-//! is set to its stroke's edge ([`crate::edge`]), when it is cut round what it paints. Type is cut
+//! is set to its stroke's edge ([`crate::edge`]), when it is cut round what it paints, or to its
+//! stroke's outline, when it is cut round its strokes alone. Type is cut
 //! along its glyph outlines, a symbol instance along its symbol's art, and blends, envelopes,
 //! repeats and placed documents along their evaluated art. Images and gradient meshes have no
 //! line to cut and are left out with a warning. An outline drawn twice in the same object (type's
@@ -20,6 +21,7 @@ use vectorcraft_doc::{Document, MAX_DEPTH, Node, NodeKind, SymbolBoxes};
 use vectorcraft_effects::preview::drawn_art;
 use vectorcraft_geom::{BezPath, FillRule, PathData, PathEl};
 
+use crate::edge::Edge;
 use crate::select::Item;
 
 /// One subpath to cut, in document points.
@@ -56,8 +58,8 @@ struct Notes {
 /// How an object's art is walked: what it is cut along, and what the walk ran into.
 struct Walk<'a> {
     symbols: &'a SymbolBoxes<'a>,
-    /// Round the edge of what each path paints, not along the path.
-    stroke_edge: bool,
+    /// Along each path, or round what it paints ([`Edge`]).
+    edge: Edge,
     notes: Notes,
 }
 
@@ -68,7 +70,7 @@ pub fn outlines(d: &Document, items: &[Item]) -> (Vec<Outline>, Vec<JobWarning>)
     for item in items {
         let Some(n) = d.node(item.id) else { continue };
         let mut paths = vec![];
-        let mut w = Walk { symbols: &symbols, stroke_edge: item.stroke_edge, notes: Notes::default() };
+        let mut w = Walk { symbols: &symbols, edge: item.edge, notes: Notes::default() };
         collect(d, &mut w, n, 0, &mut paths);
         let mut notes = w.notes;
         let mut subs: Vec<(BezPath, bool)> = paths.iter().flat_map(subpaths).collect();
@@ -136,11 +138,11 @@ fn collect(d: &Document, w: &mut Walk, n: &Node, depth: usize, paths: &mut Vec<B
     walk(d, w, n, depth, paths);
 }
 
-/// What path `path` of `n` is cut along: the path, or with `w.stroke_edge` the edge of what `n`
-/// paints along it (the path when it paints no stroke).
+/// What path `path` of `n` is cut along: the path, or round its stroke as `w.edge` says (the
+/// path when it paints no stroke).
 fn along(w: &mut Walk, n: &Node, path: &PathData, rule: FillRule) -> BezPath {
-    if w.stroke_edge && n.appearance.painted_strokes().next().is_some() {
-        match crate::edge::painted_edge(n, path, rule) {
+    if w.edge.round_stroke() && n.appearance.painted_strokes().next().is_some() {
+        match crate::edge::painted_edge(n, path, rule, w.edge == Edge::Stroke) {
             Some(edge) => return edge.to_bezpath(),
             None => w.notes.edge_failed = true,
         }

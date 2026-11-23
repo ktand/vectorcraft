@@ -26,8 +26,8 @@ pub struct Item {
     /// Set to Cut Outline: cut, along the outline it makes with the others set to it
     /// ([`crate::weld`]).
     pub outline: bool,
-    /// Cut round the edge of what it paints, not along its path (C11.4, [`crate::edge`]).
-    pub stroke_edge: bool,
+    /// What it is cut along: its path, or round its stroke (C11.4, C11.6, [`crate::edge`]).
+    pub edge: Edge,
     /// Cut in dashes (C14.4, [`crate::perforate`]).
     pub perforate: bool,
     /// The clip groups and clipping layers around it, outermost first.
@@ -115,14 +115,7 @@ fn visit(n: &Node, inherited: (Op, Edge), artboard: Rect, clips: &mut Vec<NodeId
             if n.geometric_bounds().is_some_and(|b| !touches(b, artboard)) {
                 return;
             }
-            out.push(Item {
-                id: n.id,
-                op: kind,
-                outline: op == Op::Outline,
-                stroke_edge: edge == Edge::Stroke,
-                perforate: op == Op::Perforate,
-                clips: clips.clone(),
-            });
+            out.push(Item { id: n.id, op: kind, outline: op == Op::Outline, edge, perforate: op == Op::Perforate, clips: clips.clone() });
         }
     }
 }

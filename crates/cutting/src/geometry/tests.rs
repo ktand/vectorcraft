@@ -12,7 +12,7 @@ fn square(d: &mut Document, x: f64, y: f64, side: f64) -> Node {
 }
 
 fn item(id: NodeId) -> Item {
-    Item { id, op: OpKind::Cut, outline: false, stroke_edge: false, perforate: false, clips: vec![] }
+    Item { id, op: OpKind::Cut, outline: false, edge: crate::edge::Edge::Path, perforate: false, clips: vec![] }
 }
 
 /// `n` added to a fresh 200 × 200 pt document: the document and its id.
@@ -163,7 +163,7 @@ fn a_stroke_edge_is_cut_round_the_stroke() {
         let a = Appearance::basic(Paint::None, Paint::solid(Color::BLACK), 10.0);
         Node::path(d.alloc_id(), shapes::line(Point::new(20.0, 50.0), Point::new(120.0, 50.0)), a)
     });
-    let edge = Item { stroke_edge: true, ..item(id) };
+    let edge = Item { edge: crate::edge::Edge::Stroke, ..item(id) };
     let (out, warnings) = outlines(&d, std::slice::from_ref(&edge));
     assert!(warnings.is_empty(), "{warnings:?}");
     assert_eq!(out.len(), 1);
@@ -173,6 +173,27 @@ fn a_stroke_edge_is_cut_round_the_stroke() {
     let (along, _) = outlines(&d, &[item(id)]);
     assert!(!along[0].closed, "along its path, as before");
     let (d, id) = with(|d| square(d, 10.0, 20.0, 30.0));
-    let (out, _) = outlines(&d, &[Item { stroke_edge: true, ..item(id) }]);
+    let (out, _) = outlines(&d, &[Item { edge: crate::edge::Edge::Stroke, ..item(id) }]);
     assert!(close(bounds(&out[0]), Rect::new(10.0, 20.0, 40.0, 50.0)), "no stroke: the path");
+}
+
+/// C11.6: a filled ellipse with a 10 pt stroke set to its stroke's outline is cut on both sides of
+/// the stroke, a ring; set to its stroke's edge, the fill fills it and only the outside is cut.
+#[test]
+fn a_strokes_outline_is_cut_on_both_sides() {
+    use vectorcraft_color::{Color, Paint};
+    let (d, id) = with(|d| {
+        let a = Appearance::basic(Paint::solid(Color::WHITE), Paint::solid(Color::BLACK), 10.0);
+        Node::path(d.alloc_id(), shapes::ellipse(Rect::new(20.0, 20.0, 120.0, 80.0)), a)
+    });
+    let (ring, warnings) = outlines(&d, &[Item { edge: crate::edge::Edge::StrokeOutline, ..item(id) }]);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(ring.len(), 2, "outside and inside");
+    assert!(ring.iter().all(|o| o.closed));
+    let mut b: Vec<Rect> = ring.iter().map(bounds).collect();
+    b.sort_by(|p, q| p.width().total_cmp(&q.width()));
+    assert!((b[0].x0 - 25.0).abs() < 0.05 && (b[0].y1 - 75.0).abs() < 0.05, "inside, 5 pt in: {:?}", b[0]);
+    assert!((b[1].x0 - 15.0).abs() < 0.05 && (b[1].y1 - 85.0).abs() < 0.05, "outside, 5 pt out: {:?}", b[1]);
+    let (disc, _) = outlines(&d, &[Item { edge: crate::edge::Edge::Stroke, ..item(id) }]);
+    assert_eq!(disc.len(), 1, "the stroke's edge: the outside alone");
 }

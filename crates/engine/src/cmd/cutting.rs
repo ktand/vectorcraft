@@ -121,7 +121,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Set Cut Edge",
             [],
             None,
-            "{ids?, edge: path|stroke|inherit} what the selected objects (or ids: objects, groups or layers) are cut along: path, the path itself (a stroke down its centre line); stroke, round the edge of what each path paints (its strokes' outlines, as drawn, united with its fill; a path with no stroke along its path); inherit removes their own, so they take their nearest group's or layer's, else path; one undo step → {ids: those that changed}",
+            "{ids?, edge: path|stroke|strokeOutline|inherit} what the selected objects (or ids: objects, groups or layers) are cut along: path, the path itself (a stroke down its centre line); stroke, round the edge of what each path paints (its strokes' outlines, as drawn, united with its fill; a path with no stroke along its path); strokeOutline, round its strokes' outlines alone, the fill left out (both sides of the stroke); inherit removes their own, so they take their nearest group's or layer's, else path; one undo step → {ids: those that changed}",
             has_doc,
             edge_set
         ),
@@ -130,7 +130,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Operation",
             [],
             None,
-            "{ids?} the cutting operation of each selected object (or ids) → {objects: [{id, op: cut|score|none|outline|perforate, own: its own op or null, source: own|inherited|default, from?: id of the group or layer it inherits from, edge: path|stroke (what it is cut along, cutting.edge.set), edgeFrom: id of the object, group or layer that sets it, or null}]}",
+            "{ids?} the cutting operation of each selected object (or ids) → {objects: [{id, op: cut|score|none|outline|perforate, own: its own op or null, source: own|inherited|default, from?: id of the group or layer it inherits from, edge: path|stroke|strokeOutline (what it is cut along, cutting.edge.set), edgeFrom: id of the object, group or layer that sets it, or null}]}",
             has_doc,
             op_get
         ),
@@ -609,8 +609,8 @@ fn edge_set(s: &mut Session, p: &Value) -> Result<Value> {
     use vectorcraft_cutting::edge::{self, Edge};
     let e = match str_param(p, "edge") {
         Some("inherit") => None,
-        Some(id) => Some(Edge::parse(id).ok_or_else(|| bad(EDGE_SET, format!("edge must be path, stroke or inherit, not {id:?}")))?),
-        None => return Err(bad(EDGE_SET, "edge is required: path, stroke or inherit")),
+        Some(id) => Some(Edge::parse(id).ok_or_else(|| bad(EDGE_SET, format!("edge must be path, stroke, strokeOutline or inherit, not {id:?}")))?),
+        None => return Err(bad(EDGE_SET, "edge is required: path, stroke, strokeOutline or inherit")),
     };
     let ids = objects(s, p, EDGE_SET)?;
     if ids.is_empty() {

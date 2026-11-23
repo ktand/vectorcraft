@@ -92,7 +92,7 @@ fn stroke() -> impl Strategy<Value = Option<f64>> {
 }
 
 fn edge() -> impl Strategy<Value = Option<String>> {
-    prop_oneof![3 => Just(None), 2 => Just(Some("stroke".to_string())), 1 => Just(Some("path".to_string())), 1 => ".{0,8}".prop_map(Some)]
+    prop_oneof![3 => Just(None), 2 => Just(Some("stroke".to_string())), 1 => Just(Some("strokeOutline".to_string())), 1 => Just(Some("path".to_string())), 1 => ".{0,8}".prop_map(Some)]
 }
 
 fn path() -> impl Strategy<Value = Art> {

@@ -125,7 +125,7 @@ pub(crate) fn shrunk(area: &PathData, by: f64) -> Result<PathData, String> {
 pub(crate) fn area(d: &Document, ids: &[NodeId]) -> Result<PathData, String> {
     let mut items = crate::select::art_under(d, ids);
     for item in &mut items {
-        item.stroke_edge = crate::edge::resolve(d, item.id).is_some_and(|(e, _)| e == crate::edge::Edge::Stroke);
+        item.edge = crate::edge::resolve(d, item.id).map(|(e, _)| e).unwrap_or_default();
     }
     let (outlines, _) = crate::geometry::outlines(d, &items);
     if outlines.len() > MAX_OUTLINES {

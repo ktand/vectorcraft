@@ -114,7 +114,7 @@ fn painted(d: &Document, radius_mm: f64) -> Result<Vec<Source>, String> {
         }
         let Some(n) = d.node(item.id) else { continue };
         let Some(paint) = outer_paint(d, n, min_stroke) else { continue };
-        let edge = crate::select::Item { stroke_edge: true, ..item };
+        let edge = crate::select::Item { edge: crate::edge::Edge::Stroke, ..item };
         let (outlines, _) = crate::geometry::outlines(d, std::slice::from_ref(&edge));
         let mut subpaths = vec![];
         for o in outlines {

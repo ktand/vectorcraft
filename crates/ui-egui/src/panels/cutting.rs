@@ -283,9 +283,10 @@ fn selection_row(app: &mut VectorcraftApp, ui: &mut Ui) {
             let _ = app.run("cutting.op.set", json!({ "op": ids.get(i).copied().unwrap_or("inherit") }));
         }
     });
-    // What they are cut along (C11.4): the path, or round the edge of what they paint.
-    let labels = ["Path", "Stroke Edge"];
-    let edges = ["path", "stroke"];
+    // What they are cut along (C11.4, C11.6): the path, round the edge of what they paint, or
+    // round their strokes alone.
+    let labels = ["Path", "Stroke Edge", "Stroke Outline"];
+    let edges = ["path", "stroke", "strokeOutline"];
     let shown = edges.iter().position(|e| all(&|o| o["edge"] == *e)).and_then(|i| labels.get(i)).copied().unwrap_or("Mixed");
     widgets::label_row(ui, tl!("Cut Along"), LABEL_W, |ui| {
         if let Some(i) = widgets::dropdown(ui, ("cutting", "selection-edge"), shown, &labels, CHOICE_W) {
@@ -1411,6 +1412,8 @@ mod tests {
         assert!(texts.iter().any(|t| t == "Cut Along") && texts.iter().any(|t| t == "Path"), "{texts:?}");
         app.run("cutting.edge.set", json!({"edge": "stroke"})).unwrap();
         assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Stroke Edge"));
+        app.run("cutting.edge.set", json!({"edge": "strokeOutline"})).unwrap();
+        assert!(panel_texts(&mut app, &ctx).iter().any(|t| t == "Stroke Outline"), "C11.6");
     }
 
     /// Every cutting panel is on the Window menu; of them, only Cut Settings is in the default icon

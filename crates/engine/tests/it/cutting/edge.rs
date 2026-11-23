@@ -63,3 +63,34 @@ fn a_layers_edge_is_inherited_and_kept_through_svg() {
     s.execute("document.open", &json!({"name": "again.svg", "dataBase64": vectorcraft_format::base64_encode(svg.as_bytes())})).unwrap();
     assert_eq!(paths(&mut s)[0]["closed"].as_bool(), Some(true), "still round the stroke");
 }
+
+/// C11.6: a filled ellipse with a 4 mm stroke set to its stroke's outline cuts both sides of the
+/// stroke (two closed paths) where its stroke's edge cuts the outside alone; kept through SVG.
+#[test]
+fn a_strokes_outline_cuts_both_sides() {
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="200mm" height="100mm" viewBox="0 0 200 100">
+        <ellipse cx="80" cy="50" rx="40" ry="25" stroke="black" stroke-width="4" fill="#ffaf80"/></svg>"##;
+    let mut s = Session::new();
+    s.execute("document.open", &json!({"name": "ring.svg", "dataBase64": vectorcraft_format::base64_encode(svg.as_bytes())})).unwrap();
+    let mut id = 0;
+    s.active().unwrap().doc.walk(|n| {
+        if !n.is_layer() {
+            id = n.id.0;
+        }
+    });
+    s.execute("cutting.edge.set", &json!({"ids": [id], "edge": "stroke"})).unwrap();
+    assert_eq!(paths(&mut s).len(), 1, "the stroke's edge: the outside alone");
+    s.execute("cutting.edge.set", &json!({"ids": [id], "edge": "strokeOutline"})).unwrap();
+    let ring = paths(&mut s);
+    assert_eq!(ring.len(), 2, "{ring:?}");
+    assert!(ring.iter().all(|p| p["closed"].as_bool() == Some(true)));
+    let mut h: Vec<f64> = ring.iter().map(height).collect();
+    h.sort_by(f64::total_cmp);
+    assert!((h[0] - 46.0).abs() < 0.1 && (h[1] - 54.0).abs() < 0.1, "2 mm in and out of the 50 mm ellipse: {h:?}");
+    let got = s.execute("cutting.op.get", &json!({"ids": [id]})).unwrap();
+    assert_eq!(got["objects"][0]["edge"].as_str(), Some("strokeOutline"));
+    let svg = s.execute("document.serialize", &json!({"format": "svg"})).unwrap()["text"].as_str().unwrap().to_string();
+    assert!(svg.contains(r#"cut:edge="strokeOutline""#), "{svg}");
+    s.execute("document.open", &json!({"name": "again.svg", "dataBase64": vectorcraft_format::base64_encode(svg.as_bytes())})).unwrap();
+    assert_eq!(paths(&mut s).len(), 2, "still both sides");
+}

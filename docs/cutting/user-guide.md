@@ -158,6 +158,9 @@ stroke's width. **Cut Along** (under Cut As) changes that for the selected objec
 - **Stroke Edge:** round the edge of what the object paints, its stroke as wide as it is drawn (with its caps,
   corners and dashes) and its fill. A 3 mm line becomes a 3 mm strip, and outlined lettering is cut as it looks.
   An object with no stroke is cut along its path still.
+- **Stroke Outline:** round the stroke alone, on both sides, whatever the fill. A filled circle with a thick
+  border cuts as a ring, as Stroke Edge cuts it with no fill, but the fill stays (it still prints for Print &
+  Cut). An object with no stroke is cut along its path.
 
 Set it on a layer (select the layer's objects) to change everything on it. It's kept in the document and in SVG
 (`cut:edge`).
