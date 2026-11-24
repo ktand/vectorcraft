@@ -7,6 +7,7 @@
 //! - [`settings`] and [`set_settings`]: the document's [`CuttingSettings`], under
 //!   `Document::unknown["cutting"]`.
 //! - [`placement`]: where the settings' artboard lies on the mat, document points to mat mm.
+//! - [`job_corner`]: the job moved against a corner of the mat, a margin in (C18.32).
 //! - [`select`]: which objects a job cuts, and with which operation.
 //! - [`geometry`]: the outlines each of them cuts along, as drawn.
 //! - [`clip`]: those outlines cut to the clipping masks around them.
@@ -35,6 +36,7 @@ pub mod edge;
 pub mod geometry;
 pub mod group;
 pub mod hatch;
+pub mod job_corner;
 pub mod jobsheet;
 pub mod knockout;
 pub mod layered;
@@ -190,6 +192,22 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     if s.mirror && s.print_and_cut {
         warnings.push(vectorcraft_cutjob::JobWarning { source: None, message: MIRROR_PRINT_WARNING.into() });
     }
+    // C18.32: against a corner of the mat, by what is cut of the groups that aren't switched off.
+    // Those groups are left out here: moved with the rest they could land off the mat, and they
+    // aren't cut anyway.
+    let (cut_on, outlines) = if s.job_corner == vectorcraft_cutjob::JobCorner::Artboard {
+        (cut_on, outlines)
+    } else {
+        let off: std::collections::HashSet<u64> = if s.grouping == vectorcraft_cutjob::Grouping::None {
+            Default::default()
+        } else {
+            items.iter().filter(|i| s.group_options(&group::group_of(d, i.id, s.grouping)).off).map(|i| i.id.0).collect()
+        };
+        let outlines: Vec<_> = outlines.into_iter().filter(|o| !off.contains(&o.source.node)).collect();
+        let (moved, said) = job_corner::moved(&s, &cut_on, &outlines);
+        warnings.extend(said);
+        (moved, outlines)
+    };
     let (polylines, more) = prepare::prepare(&outlines, &cut_on, s.tolerance_mm, s.clip_to_mat).map_err(BuildError::Prepare)?;
     warnings.extend(more);
     let polylines = perforated(d, &s, &items, polylines, s.send_curves);

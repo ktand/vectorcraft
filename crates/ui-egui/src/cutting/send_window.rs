@@ -298,6 +298,9 @@ pub(crate) fn show(app: &mut VectorcraftApp, ctx: &egui::Context) {
                         job_rows(app, ui);
                         sheet_rows(app, ui, &status);
                         widgets::divider(ui);
+                        widgets::section_header(ui, tl!("Placement"));
+                        placement_rows(app, ui, &status);
+                        widgets::divider(ui);
                         widgets::section_header(ui, tl!("Cutter"));
                         cutter_rows(app, ui, &status);
                         widgets::divider(ui);
@@ -821,6 +824,40 @@ fn origin_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, note: &mut Option<(b
 
 /// With more than one artboard, which sheet is on the mat (C8.6), and the next one once this is
 /// cut: each sheet is a send of its own, with the mat changed in between.
+/// C18.32: where the job goes on the mat: where the artboard puts it, or against a corner, the
+/// margin in from its two edges (for a small piece of material pushed into that corner). Kept with
+/// the document; not changed while a job is being sent, which was laid out before.
+fn placement_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
+    use crate::panels::cutting::{CHOICE_W, LABEL_W, mm_field, set};
+    use vectorcraft_cutjob::{CuttingSettings, JobCorner};
+    let Some(st) = app.session.active() else { return };
+    let s = vectorcraft_cutting::settings(&st.doc);
+    let labels = ["As on Artboard", "Top Left", "Top Right", "Bottom Left", "Bottom Right"];
+    let shown = JobCorner::ALL.iter().position(|c| *c == s.job_corner).unwrap_or(0);
+    let sending = status["sending"].as_bool() == Some(true);
+    ui.add_enabled_ui(!sending && !s.print_and_cut, |ui| {
+        widgets::label_row(ui, tl!("Position"), LABEL_W, |ui| {
+            if let Some(i) = widgets::dropdown(ui, ("cutting", "send", "corner"), labels.get(shown).copied().unwrap_or(labels[0]), &labels, CHOICE_W)
+                && let Some(c) = JobCorner::ALL.get(i)
+            {
+                set(app, json!({ "jobCorner": c.id() }));
+            }
+        });
+        if s.job_corner != JobCorner::Artboard {
+            widgets::label_row(ui, tl!("Margin"), LABEL_W, |ui| {
+                if let Some(v) = mm_field(ui, "send-corner-margin", s.job_margin_mm, CuttingSettings::JOB_MARGIN_MM.0) {
+                    set(app, json!({ "jobMarginMm": v.clamp(CuttingSettings::JOB_MARGIN_MM.0, CuttingSettings::JOB_MARGIN_MM.1) }));
+                }
+            });
+        }
+    })
+    .response
+    .on_hover_text(tl!("Move the cut into a corner of the mat, for a small piece of material pushed into that corner. Only the cut moves: the document stays as it is."));
+    if s.print_and_cut {
+        widgets::dim_label(ui, tl!("Print & Cut is cut where the registration marks are."));
+    }
+}
+
 fn sheet_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui, status: &Value) {
     let Some(st) = app.session.active() else { return };
     let names: Vec<String> = st.doc.artboards.iter().map(|a| a.name.clone()).collect();
@@ -1197,6 +1234,29 @@ mod tests {
         let texts = window_texts(&mut app, &ctx);
         assert!(!texts.iter().any(|t| t.starts_with("Paths")), "no job: {texts:?}");
         assert!(texts.iter().any(|t| t == "Send"), "{texts:?}");
+    }
+
+    /// C18.32: the Placement section: where the artboard puts the cut at first; set against a
+    /// corner, the margin too; with Print & Cut, why it can't be moved.
+    #[test]
+    fn the_window_sets_where_the_cut_goes() {
+        let _serial = serial();
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 300, "height": 300})).unwrap();
+        app.run("shape.rectangle", json!({"x": 100, "y": 100, "width": 50, "height": 50})).unwrap();
+        set_open(&ctx, true);
+        let texts = window_texts(&mut app, &ctx);
+        let at = |texts: &[String], label: &str| texts.iter().position(|t| t == label);
+        assert!(at(&texts, "Placement") < at(&texts, "Cutter"), "{texts:?}");
+        assert!(at(&texts, "As on Artboard").is_some() && at(&texts, "Margin").is_none(), "{texts:?}");
+        app.run("cutting.settings.set", json!({"jobCorner": "topRight"})).unwrap();
+        let texts = window_texts(&mut app, &ctx);
+        assert!(at(&texts, "Top Right").is_some() && at(&texts, "Margin").is_some(), "{texts:?}");
+        assert!(texts.iter().any(|t| t.starts_with("5")), "the usual margin: {texts:?}");
+        app.run("cutting.settings.set", json!({"printAndCut": true})).unwrap();
+        let texts = window_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Print & Cut is cut where the registration marks are."), "{texts:?}");
     }
 
     /// C12.5: a Print & Cut job says so, with how far apart the marks it looks for are.

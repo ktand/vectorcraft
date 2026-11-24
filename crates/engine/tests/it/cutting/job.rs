@@ -74,6 +74,73 @@ fn the_job_gives_the_size_of_the_cut() {
     assert!((b[2] - b[0] - 50.0).abs() < 1e-6, "{b:?}");
 }
 
+fn bounds(j: &Value) -> Vec<f64> {
+    j["stats"]["boundsMm"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect()
+}
+
+fn cut_area(s: &mut Session) -> Vec<f64> {
+    let got = s.execute("cutting.settings.get", &json!({})).unwrap();
+    got["mat"]["cutAreaMm"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect()
+}
+
+fn near(got: f64, want: f64) -> bool {
+    (got - want).abs() < 1e-6
+}
+
+/// C18.32: set against a corner, the job lies the margin in from it; the document doesn't move,
+/// and the setting is kept with it and undone in one step.
+#[test]
+fn the_job_goes_into_a_corner() {
+    let mut s = new_doc();
+    square(&mut s, 60.0, 70.0, 10.0);
+    square(&mut s, 90.0, 75.0, 10.0);
+    let a = cut_area(&mut s);
+    let before = s.execute("cutting.job", &json!({})).unwrap();
+    s.execute("cutting.settings.set", &json!({"jobCorner": "topLeft"})).unwrap();
+    let b = bounds(&job(&mut s));
+    assert!(near(b[0], a[0] + 5.0) && near(b[1], a[1] + 5.0), "{b:?} in {a:?}");
+    assert!(near(b[2] - b[0], 40.0) && near(b[3] - b[1], 15.0), "the pieces keep their places: {b:?}");
+    s.execute("cutting.settings.set", &json!({"jobCorner": "bottomRight", "jobMarginMm": 12})).unwrap();
+    let b = bounds(&job(&mut s));
+    assert!(near(b[2], a[2] - 12.0) && near(b[3], a[3] - 12.0), "{b:?} in {a:?}");
+    let kept = s.execute("cutting.settings.get", &json!({})).unwrap();
+    assert_eq!((kept["settings"]["jobCorner"].clone(), kept["settings"]["jobMarginMm"].clone()), (json!("bottomRight"), json!(12.0)));
+    // Mirrored, the corner is the mat's, after the flip.
+    s.execute("cutting.settings.set", &json!({"jobCorner": "topRight", "jobMarginMm": 5, "mirror": true})).unwrap();
+    let b = bounds(&job(&mut s));
+    assert!(near(b[2], a[2] - 5.0) && near(b[1], a[1] + 5.0), "{b:?}");
+    for _ in 0..3 {
+        s.execute("edit.undo", &json!({})).unwrap();
+    }
+    assert_eq!(job(&mut s)["stats"], before["stats"], "back where the artboard puts it");
+    assert!(s.execute("cutting.settings.set", &json!({"jobCorner": "middle"})).is_err());
+    assert!(s.execute("cutting.settings.set", &json!({"jobMarginMm": 500})).is_err());
+}
+
+/// C18.32: cut one layer at a time, each goes into the corner by its own size; Print & Cut doesn't
+/// move, and says why.
+#[test]
+fn each_layer_goes_into_the_corner_and_print_and_cut_stays() {
+    let mut s = new_doc();
+    square(&mut s, 20.0, 20.0, 40.0);
+    s.execute("layer.new", &json!({"name": "Small"})).unwrap();
+    square(&mut s, 120.0, 150.0, 8.0);
+    let a = cut_area(&mut s);
+    s.execute("cutting.settings.set", &json!({"grouping": "layer", "jobCorner": "topLeft"})).unwrap();
+    let groups = s.execute("cutting.groups", &json!({})).unwrap();
+    let first = groups["groups"][0]["name"].as_str().unwrap().to_string();
+    assert_ne!(first, "Small");
+    s.execute("cutting.group.set", &json!({"group": first, "on": false})).unwrap();
+    let b = bounds(&job(&mut s));
+    assert!(near(b[0], a[0] + 5.0) && near(b[1], a[1] + 5.0) && near(b[2] - b[0], 8.0), "the small layer alone: {b:?}");
+    s.execute("cutting.group.set", &json!({"group": first, "on": true})).unwrap();
+    s.execute("cutting.settings.set", &json!({"grouping": "none", "printAndCut": true})).unwrap();
+    s.execute("cutting.marks.add", &json!({})).unwrap();
+    let j = s.execute("cutting.job", &json!({})).unwrap();
+    let said: Vec<&str> = j["job"]["warnings"].as_array().unwrap().iter().filter_map(|w| w["message"].as_str()).collect();
+    assert!(said.iter().any(|w| w.contains("isn't moved to the corner")), "{said:?}");
+}
+
 /// C3.7: the blade's run through the job, from the cut area's origin.
 #[test]
 fn the_simulation_follows_the_job() {

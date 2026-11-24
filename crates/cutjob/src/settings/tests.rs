@@ -50,6 +50,8 @@ fn the_defaults_round_trip_as_documented() {
             "detailSizeMm": 10.0,
             "alignMarks": false,
             "sendCurves": true,
+            "jobCorner": "artboard",
+            "jobMarginMm": 5.0,
             "weedLines": false,
             "weedLineSpacingMm": 0.0,
             "weedLinesSmart": true,
@@ -112,6 +114,8 @@ fn every_setting_round_trips() {
         detail_size_mm: 8.0,
         align_marks: true,
         send_curves: false,
+        job_corner: JobCorner::BottomRight,
+        job_margin_mm: 12.5,
         extra: Map::new(),
     };
     assert_eq!(read(s.to_value()), s);
@@ -124,7 +128,7 @@ fn damaged_values_are_defaults_and_numbers_are_clamped() {
         "mat": 7, "customMatMm": [1, 99999], "orientation": "sideways", "artboard": -2,
         "offsetMm": "here", "defaultOp": "etch", "toleranceMm": 0,
         "operations": {"cut": {"force": 3, "speedMmS": "fast", "passes": 40, "overcutMm": -1}, "score": 5},
-        "ordering": null
+        "ordering": null, "jobCorner": "middle", "jobMarginMm": 500
     }));
     let d = CuttingSettings::default();
     assert_eq!(s.mat, d.mat);
@@ -138,6 +142,7 @@ fn damaged_values_are_defaults_and_numbers_are_clamped() {
     assert_eq!((cut.force, cut.speed_mm_s, cut.passes, cut.overcut_mm), (1.0, d.operations.cut.speed_mm_s, 10, 0.0));
     assert_eq!(s.operations.score, d.operations.score);
     assert_eq!(s.ordering, d.ordering);
+    assert_eq!((s.job_corner, s.job_margin_mm), (d.job_corner, CuttingSettings::JOB_MARGIN_MM.1));
     let long = "m".repeat(MAX_MAT_ID + 1);
     assert_eq!(read(json!({"mat": long})).mat, d.mat);
     assert_eq!(read(json!({"mat": ""})).mat, d.mat);
@@ -186,8 +191,15 @@ fn json_value() -> impl Strategy<Value = Value> {
         any::<bool>().prop_map(Value::from),
         any::<i64>().prop_map(Value::from),
         any::<f64>().prop_map(|f| serde_json::Number::from_f64(f).map_or(Value::Null, Value::Number)),
-        prop_oneof![Just("cut".to_string()), Just("custom".to_string()), Just("landscape".to_string()), Just("document".to_string()), ".{0,80}"]
-            .prop_map(Value::from),
+        prop_oneof![
+            Just("cut".to_string()),
+            Just("custom".to_string()),
+            Just("landscape".to_string()),
+            Just("document".to_string()),
+            Just("topLeft".to_string()),
+            ".{0,80}"
+        ]
+        .prop_map(Value::from),
     ];
     let key = prop_oneof![
         Just("version"),
@@ -207,6 +219,8 @@ fn json_value() -> impl Strategy<Value = Value> {
         Just("passes"),
         Just("overcutMm"),
         Just("other"),
+        Just("jobCorner"),
+        Just("jobMarginMm"),
     ];
     leaf.prop_recursive(4, 64, 8, move |inner| {
         prop_oneof![
@@ -229,6 +243,7 @@ proptest! {
             prop_assert_eq!(t.problem(), None, "{:?}", t);
         }
         prop_assert!(s.version >= SETTINGS_VERSION);
+        prop_assert!((CuttingSettings::JOB_MARGIN_MM.0..=CuttingSettings::JOB_MARGIN_MM.1).contains(&s.job_margin_mm));
         let again = CuttingSettings::from_value(Some(&s.to_value()));
         prop_assert_eq!(again, s);
     }

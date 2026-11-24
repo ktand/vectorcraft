@@ -84,6 +84,41 @@ impl Orientation {
     const CHOICES: [(&'static str, Orientation); 2] = [("portrait", Orientation::Portrait), ("landscape", Orientation::Landscape)];
 }
 
+/// Where the job goes on the mat (C18.32): where the artboard puts it, or with what it cuts
+/// against a corner of the cut area, the margin in from both edges, for a small piece of material
+/// pushed into that corner of the mat.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum JobCorner {
+    /// Where the art lies on the artboard, the artboard where the offset puts it.
+    #[default]
+    Artboard,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+impl JobCorner {
+    pub fn id(self) -> &'static str {
+        match self {
+            JobCorner::Artboard => "artboard",
+            JobCorner::TopLeft => "topLeft",
+            JobCorner::TopRight => "topRight",
+            JobCorner::BottomLeft => "bottomLeft",
+            JobCorner::BottomRight => "bottomRight",
+        }
+    }
+
+    pub const ALL: [JobCorner; 5] = [JobCorner::Artboard, JobCorner::TopLeft, JobCorner::TopRight, JobCorner::BottomLeft, JobCorner::BottomRight];
+    const CHOICES: [(&'static str, JobCorner); 5] = [
+        ("artboard", JobCorner::Artboard),
+        ("topLeft", JobCorner::TopLeft),
+        ("topRight", JobCorner::TopRight),
+        ("bottomLeft", JobCorner::BottomLeft),
+        ("bottomRight", JobCorner::BottomRight),
+    ];
+}
+
 /// The order paths are cut in.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Ordering {
@@ -442,6 +477,9 @@ pub struct CuttingSettings {
     /// Curves sent as curves (C4.14): a machine that cuts its own curves gets a path's Béziers
     /// rather than the short straight moves they flatten to, where the path is left whole.
     pub send_curves: bool,
+    /// Where the job goes on the mat (C18.32), and how far in from the corner's two edges, mm.
+    pub job_corner: JobCorner,
+    pub job_margin_mm: f64,
     /// Keys this version doesn't know, kept.
     pub extra: Map<String, Value>,
 }
@@ -487,6 +525,8 @@ impl Default for CuttingSettings {
             detail_size_mm: 10.0,
             align_marks: false,
             send_curves: true,
+            job_corner: JobCorner::Artboard,
+            job_margin_mm: Self::DEFAULT_JOB_MARGIN_MM,
             extra: Map::new(),
         }
     }
@@ -498,7 +538,7 @@ fn default_mat() -> &'static MatGeometry {
 }
 
 impl CuttingSettings {
-    const KEYS: [&'static str; 38] = [
+    const KEYS: [&'static str; 40] = [
         "version",
         "mat",
         "customMatMm",
@@ -537,6 +577,8 @@ impl CuttingSettings {
         "detailSizeMm",
         "alignMarks",
         "sendCurves",
+        "jobCorner",
+        "jobMarginMm",
     ];
 
     /// The weed box's margin and the weed lines' spacing (0: one from each side's middle), mm.
@@ -551,6 +593,9 @@ impl CuttingSettings {
     pub const DEFAULT_BLEED_MM: f64 = 1.27;
     /// A perforation's cut and gap lengths, mm: the range (C14.4).
     pub const PERFORATE_MM: (f64, f64) = (0.2, 50.0);
+    /// How far in from the corner a job set against one goes, mm: the range, and the usual (C18.32).
+    pub const JOB_MARGIN_MM: (f64, f64) = (0.0, 100.0);
+    pub const DEFAULT_JOB_MARGIN_MM: f64 = 5.0;
 
     /// The settings in `v` (a document's `unknown["cutting"]`, from a file): anything that isn't an
     /// object gives the defaults. Never fails.
@@ -623,6 +668,8 @@ impl CuttingSettings {
             detail_size_mm: num(m, "detailSizeMm", Self::DETAIL_SIZE_MM.0, Self::DETAIL_SIZE_MM.1, d.detail_size_mm),
             align_marks: flag(m, "alignMarks", d.align_marks),
             send_curves: flag(m, "sendCurves", d.send_curves),
+            job_corner: choice(m, "jobCorner", &JobCorner::CHOICES, d.job_corner),
+            job_margin_mm: num(m, "jobMarginMm", Self::JOB_MARGIN_MM.0, Self::JOB_MARGIN_MM.1, d.job_margin_mm),
             extra: unknown(m, &Self::KEYS),
         }
     }
@@ -673,6 +720,8 @@ impl CuttingSettings {
         m.insert("detailSizeMm".into(), json!(self.detail_size_mm));
         m.insert("alignMarks".into(), json!(self.align_marks));
         m.insert("sendCurves".into(), json!(self.send_curves));
+        m.insert("jobCorner".into(), json!(self.job_corner.id()));
+        m.insert("jobMarginMm".into(), json!(self.job_margin_mm));
         if !self.group_options.is_empty() {
             let g: Map<String, Value> = self.group_options.iter().map(|(k, o)| (k.clone(), json!({"off": o.off, "pause": o.pause}))).collect();
             m.insert("groupOptions".into(), Value::Object(g));

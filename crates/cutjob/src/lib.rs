@@ -35,7 +35,7 @@ pub use material::{
 };
 pub use native::{Native, Piece};
 pub use settings::{
-    CuttingSettings, DOCUMENT_KEY, GroupOptions, Grouping, MAX_GROUP_NAME, MAX_GROUP_SETUPS, Op, Operations, Ordering, Orientation, SETTINGS_VERSION,
-    ToolSettings,
+    CuttingSettings, DOCUMENT_KEY, GroupOptions, Grouping, JobCorner, MAX_GROUP_NAME, MAX_GROUP_SETUPS, Op, Operations, Ordering, Orientation,
+    SETTINGS_VERSION, ToolSettings,
 };
 pub use simulate::{BladeAt, Move, Simulation, TRAVEL_MM_S};

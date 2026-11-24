@@ -96,6 +96,8 @@ In the **Cutting Mat** panel:
 - **Orientation:** Portrait or Landscape, as the mat goes into the machine.
 - **Artboard:** with more than one artboard, which one goes on the mat.
 - **Offset:** moves the artboard on the mat, in mm from the cut area's top-left corner: **X** across, **Y** down.
+  To cut into a corner of the mat whatever the artboard says, use **Placement** in the Send window
+  ([section 9](#9-sending-the-job)).
 - **Clip to Mat:** lines that run off the cut area are cut up to its edge. Without it, a job that runs off the
   mat isn't sent.
 
@@ -740,6 +742,16 @@ load the mat with the machine's load button.
     Sheet…**, **Weeding Map…** and any warnings; which sheet, when there are several. **Size** is how wide and
     tall the cut is, weeding and alignment cross included: the least material to have ready. The mat on the left
     shows it as a dashed box round the cut;
+  - **Placement:** where the cut goes on the mat. **As on Artboard** (the usual) cuts each line where it lies on
+    the artboard. **Top Left**, **Top Right**, **Bottom Left** or **Bottom Right** moves the whole cut into that
+    corner of the cut area, **Margin** in from both edges (5 mm unless you change it). Use it for a small piece of
+    material, such as one layer of a layered design or an offcut: push the material into that corner of the mat,
+    and the cut lands on it. Only the cut moves; your document stays as it is, and the setting is saved with it.
+    - The pieces keep their places relative to one another. With weeding on, the weed box goes into the corner.
+    - Cutting in groups with some switched off, only what is cut is measured, so each layer you cut on its own
+      goes into the corner by its own size.
+    - A cut too large for the margin goes as near the corner as it fits, with a warning.
+    - Print & Cut is always cut where the registration marks are, so Placement is greyed out for it;
   - **Cutter:** the machine, with **Find Cutters** beside it to look again after you plug it in; what is in each
     holder, as the machine reports it ("Holder 1: AutoBlade · Holder 2: empty"), with **Check Tools**. The window
     warns when the job needs a tool that isn't fitted;

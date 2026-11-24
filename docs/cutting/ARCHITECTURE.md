@@ -265,6 +265,8 @@ Document + CuttingSettings
   3. clip       clip groups and layer clips: closed paths clipped with pathops, open paths split; v1 may warn
                 and cut unclipped (the task decides)
   4. transform  document pt → mm (× 25.4 / 72), artboard top-left → mat origin + offsetMm, orientation
+                (mirrored if set); with jobCorner, what is cut moved against that corner of the cut area,
+                jobMarginMm in (C18.32)
   5. flatten    to toleranceMm; drop zero-length paths; merge collinear points
   6. bounds     paths outside cut_area_mm are an error by default (clipping to the mat is an option)
   7. order      a containment-aware order (insideFirst: a path inside another closed path is cut before it, so
