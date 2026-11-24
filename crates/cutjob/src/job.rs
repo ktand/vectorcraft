@@ -227,6 +227,10 @@ pub struct JobStats {
     /// What the blade travels up, mm: from the cut area's origin to the first path, and from each
     /// path's end to the next one's start.
     pub travel_mm: f64,
+    /// What the blade cuts, from its leftmost and topmost point to its rightmost and lowest, mat
+    /// mm (C18.31): the least material the job needs, the weeding and the alignment cross
+    /// included. `None` for a job with no finite point.
+    pub bounds_mm: Option<RectMm>,
 }
 
 fn dist(a: [f64; 2], b: [f64; 2]) -> f64 {
@@ -328,6 +332,12 @@ impl CutJob {
             s.path_mm += len;
             let passes = self.operations.get(p.op).map_or(1, |o| o.tool.passes);
             s.blade_mm += len * f64::from(passes);
+            for &[x, y] in p.points.iter().filter(|q| q[0].is_finite() && q[1].is_finite()) {
+                s.bounds_mm = Some(match s.bounds_mm {
+                    None => RectMm { x0: x, y0: y, x1: x, y1: y },
+                    Some(b) => RectMm { x0: b.x0.min(x), y0: b.y0.min(y), x1: b.x1.max(x), y1: b.y1.max(y) },
+                });
+            }
             if let (Some(start), Some(end)) = (p.points.first(), p.end()) {
                 s.travel_mm += dist(at, *start);
                 at = end;
@@ -380,6 +390,8 @@ impl JobStats {
             "pathMm": self.path_mm,
             "bladeMm": self.blade_mm,
             "travelMm": self.travel_mm,
+            "boundsMm": self.bounds_mm.map(|b| [b.x0, b.y0, b.x1, b.y1]),
+            "sizeMm": self.bounds_mm.map(|b| [b.width(), b.height()]),
         })
     }
 }

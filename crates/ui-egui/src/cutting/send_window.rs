@@ -355,6 +355,8 @@ fn job_rows(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
             // C18.18: the numbers in two columns, each name beside its value.
             let mut rows = vec![
                 (tl!("Paths"), s.path_count.to_string()),
+                // C18.31: the material to have ready, as wide and as tall as the cut.
+                (tl!("Size"), s.bounds_mm.map_or_else(|| "—".to_string(), |b| format!("{:.1} × {:.1} mm", b.width(), b.height()))),
                 (tl!("Cut length"), format!("{:.0} mm", s.blade_mm)),
                 (tl!("Travel"), format!("{:.0} mm", s.travel_mm)),
                 (tl!("Estimated time"), duration(made.sim.total_seconds)),
@@ -1158,6 +1160,8 @@ mod tests {
         // C18.18: the numbers in two columns, the playback under the preview.
         let at = |label: &str| texts.iter().position(|t| t == label).unwrap();
         assert_eq!(texts.get(at("Paths") + 1).map(String::as_str), Some("1"), "the job: {texts:?}");
+        // C18.31: the material it needs: the 50 pt square, 17.6 mm each way.
+        assert_eq!(texts.get(at("Size") + 1).map(String::as_str), Some("17.6 × 17.6 mm"), "the job: {texts:?}");
         assert!(at("Play") < at("Job"), "under the preview, before the column: {texts:?}");
         assert!(texts.iter().any(|t| t == "Play"), "the playback: {texts:?}");
         // C18.27: Esc closes it.

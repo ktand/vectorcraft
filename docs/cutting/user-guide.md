@@ -736,8 +736,10 @@ load the mat with the machine's load button.
   40 times), drag to move, double-click (or **Fit**) for the whole mat again; **−** and **+** in its corner zoom
   too. Zoomed in, **Follow** keeps the blade in view while the run plays or is stepped.
 - **Right, from the top** (this part scrolls when the window is short):
-  - **Job:** the job's numbers (paths, cut length, travel, estimated time, material and cost), **Job Sheet…**,
-    **Weeding Map…** and any warnings; which sheet, when there are several;
+  - **Job:** the job's numbers (paths, size, cut length, travel, estimated time, material and cost), **Job
+    Sheet…**, **Weeding Map…** and any warnings; which sheet, when there are several. **Size** is how wide and
+    tall the cut is, weeding and alignment cross included: the least material to have ready. The mat on the left
+    shows it as a dashed box round the cut;
   - **Cutter:** the machine, with **Find Cutters** beside it to look again after you plug it in; what is in each
     holder, as the machine reports it ("Holder 1: AutoBlade · Holder 2: empty"), with **Check Tools**. The window
     warns when the job needs a tool that isn't fitted;

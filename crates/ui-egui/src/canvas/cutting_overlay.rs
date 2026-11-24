@@ -352,6 +352,13 @@ pub(crate) fn preview_zoomed(app: &VectorcraftApp, p: &egui::Painter, rect: egui
         if let Some(r) = &made.job.registration {
             print_and_cut_sheet(&p, pl.artboard_mm, r, &screen, &t);
         }
+        // C18.31: the material the cut needs, dashed round it (its size is in the job's numbers).
+        if let Some(b) = made.stats.bounds_mm {
+            let q = [screen(b.x0, b.y0), screen(b.x1, b.y0), screen(b.x1, b.y1), screen(b.x0, b.y1)];
+            let ring: Vec<Pos2> = q.iter().chain(q.first()).copied().collect();
+            // Dark, as the mat's own markings: the plate is grey in either theme.
+            p.extend(Shape::dashed_line(&ring, Stroke::new(1.0, Color32::from_gray(45)), 3.0, 3.0));
+        }
         toolpaths(&p, &made.job, &screen, &t);
         if let Some(mm) = crate::cutting::tick(p.ctx(), &made.sim).mm {
             playback(&p, &made.sim, mm, &screen, &t);

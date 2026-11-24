@@ -60,6 +60,20 @@ fn art_off_the_mat_is_an_error_unless_clipped_to_it() {
     assert!(s.execute("cutting.settings.set", &json!({"clipToMat": "yes"})).is_err());
 }
 
+/// C18.31: the job says how much material it needs: from the first square's left to the
+/// second's right, one square high.
+#[test]
+fn the_job_gives_the_size_of_the_cut() {
+    let mut s = new_doc();
+    square(&mut s, 10.0, 10.0, 10.0);
+    square(&mut s, 50.0, 30.0, 10.0);
+    let stats = job(&mut s)["stats"].clone();
+    let size = stats["sizeMm"].as_array().unwrap();
+    assert!((size[0].as_f64().unwrap() - 50.0).abs() < 1e-6 && (size[1].as_f64().unwrap() - 30.0).abs() < 1e-6, "{stats}");
+    let b: Vec<f64> = stats["boundsMm"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+    assert!((b[2] - b[0] - 50.0).abs() < 1e-6, "{b:?}");
+}
+
 /// C3.7: the blade's run through the job, from the cut area's origin.
 #[test]
 fn the_simulation_follows_the_job() {

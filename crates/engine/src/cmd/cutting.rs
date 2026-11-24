@@ -142,7 +142,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Cutting Job",
             [],
             None,
-            "{} the cut job the document makes with its cutting settings, in cutting order (the document isn't changed) → {job: {version, mat: {id, sizeMm, cutAreaMm}, operations: [{kind: score|cut, force, speedMmS, passes, overcutMm}], paths: [{op: index into operations, source: {node: object id, subpath}, closed, points: [[x, y] mm on the mat]}], warnings: [{source, message}]}, stats: {pathCount, pointCount, pathMm, bladeMm, travelMm}, quote: {seconds: the cut's time, groups: [{name, material, sheets, metres: of a roll, cost: null when its material has no price}], cost: the whole job's, or null} (C18.3)}; an error when art leaves the cut area (unless clipToMat) or the settings' artboard is missing",
+            "{} the cut job the document makes with its cutting settings, in cutting order (the document isn't changed) → {job: {version, mat: {id, sizeMm, cutAreaMm}, operations: [{kind: score|cut, force, speedMmS, passes, overcutMm}], paths: [{op: index into operations, source: {node: object id, subpath}, closed, points: [[x, y] mm on the mat]}], warnings: [{source, message}]}, stats: {pathCount, pointCount, pathMm, bladeMm, travelMm, boundsMm: [x0, y0, x1, y1] mm on the mat round everything cut or null, sizeMm: [width, height] of it or null (C18.31: the material the cut needs)}, quote: {seconds: the cut's time, groups: [{name, material, sheets, metres: of a roll, cost: null when its material has no price}], cost: the whole job's, or null} (C18.3)}; an error when art leaves the cut area (unless clipToMat) or the settings' artboard is missing",
             has_doc,
             job
         ),

@@ -46,6 +46,21 @@ fn stats_add_up() {
     assert!((s.travel_mm - want).abs() < 1e-9, "{s:?}");
 }
 
+/// C18.31: the job's extent is every point it cuts: the square's top-left to the line's end.
+#[test]
+fn stats_give_the_size_of_what_is_cut() {
+    let s = job().stats();
+    assert_eq!(s.bounds_mm, Some(RectMm { x0: 10.0, y0: 10.0, x1: 70.0, y1: 20.0 }));
+    let v = s.to_value();
+    assert_eq!(v["sizeMm"], serde_json::json!([60.0, 10.0]));
+    assert_eq!(v["boundsMm"], serde_json::json!([10.0, 10.0, 70.0, 20.0]));
+    // A point that isn't a number doesn't stretch it (validate refuses the job anyway).
+    let mut j = job();
+    j.paths[1].points.push([f64::NAN, 500.0]);
+    assert_eq!(j.stats().bounds_mm, s.bounds_mm);
+    assert_eq!(CutJob { paths: vec![], ..job() }.stats().to_value()["sizeMm"], serde_json::Value::Null);
+}
+
 #[test]
 fn an_empty_job_is_valid_and_adds_up_to_nothing() {
     let j = CutJob { paths: vec![], ..job() };
