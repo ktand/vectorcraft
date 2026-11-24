@@ -171,13 +171,20 @@ fn perforated(d: &Document, s: &CuttingSettings, items: &[select::Item], polylin
     out
 }
 
-/// The cut job `d` makes with its cutting settings: what [`select`] picks, cut along its
-/// [`geometry`], laid on the mat by [`prepare`] and put in [`order`], validated. The same document
-/// and settings always make the same job.
 /// Why a Print & Cut job set to mirror isn't (C14.7).
 pub const MIRROR_PRINT_WARNING: &str = "Print & Cut isn't cut mirrored: print the art mirrored instead";
 
+/// The cut job `d` makes with its cutting settings: what [`select`] picks, cut along its
+/// [`geometry`], laid on the mat by [`prepare`] and put in [`order`], validated. The same document
+/// and settings always make the same job.
 pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
+    build_job_placed(d).map(|(job, _)| job)
+}
+
+/// [`build_job`], and how far (mm, across and down the mat) the job was moved from where the
+/// artboard puts it to lie against a corner (C18.32; `[0, 0]` when it wasn't), so the canvas can
+/// draw its toolpaths back over the art.
+pub fn build_job_placed(d: &Document) -> Result<(CutJob, [f64; 2]), BuildError> {
     let s = settings(d);
     let placement = placement::place(&s, d).ok_or(BuildError::NoArtboard(s.artboard))?;
     let items = select::select(d, &s);
@@ -208,6 +215,7 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
         warnings.extend(said);
         (moved, outlines)
     };
+    let moved_mm = [cut_on.artboard_mm.x0 - placement.artboard_mm.x0, cut_on.artboard_mm.y0 - placement.artboard_mm.y0];
     let (polylines, more) = prepare::prepare(&outlines, &cut_on, s.tolerance_mm, s.clip_to_mat).map_err(BuildError::Prepare)?;
     warnings.extend(more);
     let polylines = perforated(d, &s, &items, polylines, s.send_curves);
@@ -378,7 +386,7 @@ pub fn build_job(d: &Document) -> Result<CutJob, BuildError> {
     // Nor a dashed line one of whose dashes it added to.
     job.dashes.retain(|m| (m.start..m.start + m.count).all(|i| before.get(i) == job.paths.get(i).map(|p| p.points.len()).as_ref()));
     job.validate().map_err(BuildError::Invalid)?;
-    Ok(job)
+    Ok((job, moved_mm))
 }
 
 #[cfg(test)]

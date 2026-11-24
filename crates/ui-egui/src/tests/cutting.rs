@@ -197,24 +197,55 @@ fn the_cut_border_shows_what_can_be_cut() {
     assert_eq!(crate::menus::checked(&app, crate::cutting::CUT_BORDER_COMMAND, &json!({})), Some(false));
 }
 
-/// A mirrored job (heat transfer vinyl) shows its toolpaths over the art on the canvas, not
-/// flipped across the artboard: only what is sent is mirrored.
+/// C18.33: with the cut moved into a corner, the cutting view says so (its toolpaths stay over the
+/// art); not for Print & Cut, which isn't moved.
 #[test]
-fn a_mirrored_jobs_toolpaths_lie_on_the_art() {
+fn the_cutting_view_says_the_cut_goes_into_a_corner() {
+    let mut app = app();
+    let ctx = egui::Context::default();
+    app.run("view.cutting", json!({})).unwrap();
+    app.run("view.setZoom", json!({"zoom": 100})).unwrap();
+    let note = "Cut into the top right corner: see Send to Cutter";
+    assert!(!frame_texts(&mut app, &ctx).iter().any(|t| t.starts_with("Cut into")));
+    app.run("cutting.settings.set", json!({"jobCorner": "topRight"})).unwrap();
+    let texts = frame_texts(&mut app, &ctx);
+    assert!(texts.iter().any(|t| t == note), "{texts:?}");
+    app.run("cutting.settings.set", json!({"printAndCut": true})).unwrap();
+    assert!(!frame_texts(&mut app, &ctx).iter().any(|t| t.starts_with("Cut into")));
+}
+
+/// A mirrored job (heat transfer vinyl) shows its toolpaths over the art on the canvas, not
+/// flipped across the artboard: only what is sent is mirrored. So does a job moved into a corner of
+/// the mat (C18.33): only what is sent is moved, mirrored or not.
+#[test]
+fn a_mirrored_or_moved_jobs_toolpaths_lie_on_the_art() {
     let mut app = app();
     app.run("shape.rectangle", json!({"x": 20, "y": 30, "width": 40, "height": 40})).unwrap();
     let first = |app: &mut VectorcraftApp| {
-        let job = app.run("cutting.job", json!({})).unwrap()["job"].clone();
-        let p = job["paths"][0]["points"].as_array().unwrap().iter().map(|q| (q[0].as_f64().unwrap(), q[1].as_f64().unwrap())).collect::<Vec<_>>();
+        let made = app.run("cutting.job", json!({})).unwrap();
+        let p = made["job"]["paths"][0]["points"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|q| (q[0].as_f64().unwrap(), q[1].as_f64().unwrap()))
+            .collect::<Vec<_>>();
+        let moved = [made["movedMm"][0].as_f64().unwrap(), made["movedMm"][1].as_f64().unwrap()];
         let st = app.session.active().unwrap();
         let pl = vectorcraft_cutting::placement::place(&vectorcraft_cutting::settings(&st.doc), &st.doc).unwrap();
-        let to_doc = crate::canvas::cutting_overlay::toolpaths_to_doc(app, &pl);
-        p.into_iter().map(|(x, y)| to_doc * vectorcraft_geom::Point::new(x, y)).collect::<Vec<_>>()
+        let to_doc = crate::canvas::cutting_overlay::toolpaths_to_doc(app, &pl, moved);
+        (moved, p.into_iter().map(|(x, y)| to_doc * vectorcraft_geom::Point::new(x, y)).collect::<Vec<_>>())
     };
     let inside = |q: &vectorcraft_geom::Point| q.x > 19.0 && q.x < 61.0 && q.y > 29.0 && q.y < 71.0;
-    let plain = first(&mut app);
+    let (moved, plain) = first(&mut app);
+    assert_eq!(moved, [0.0, 0.0]);
     assert!(plain.iter().all(inside), "{plain:?}");
     app.run("cutting.settings.set", json!({"mirror": true})).unwrap();
-    let mirrored = first(&mut app);
+    let (_, mirrored) = first(&mut app);
     assert!(mirrored.iter().all(inside), "over the art: {mirrored:?}");
+    for mirror in [true, false] {
+        app.run("cutting.settings.set", json!({"mirror": mirror, "jobCorner": "bottomRight"})).unwrap();
+        let (moved, cornered) = first(&mut app);
+        assert!(moved[0] > 100.0 && moved[1] > 100.0, "the job did move: {moved:?}");
+        assert!(cornered.iter().all(inside), "over the art, mirrored {mirror}: {cornered:?}");
+    }
 }

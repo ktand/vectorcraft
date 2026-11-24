@@ -87,13 +87,29 @@ fn placed(app: &VectorcraftApp) -> Option<Placement> {
 
 /// Where the canvas draws the job's toolpaths: mat mm back to the document over the art they cut.
 /// A mirrored job (C14.7: Print & Cut never is) goes back through the mirrored placement it was
-/// laid on the mat with, so its lines lie on the art rather than flipped across the artboard.
-pub(crate) fn toolpaths_to_doc(app: &VectorcraftApp, pl: &Placement) -> vectorcraft_geom::Affine {
+/// laid on the mat with, so its lines lie on the art rather than flipped across the artboard; a job
+/// moved `moved_mm` into a corner of the mat (C18.32) is moved back first (C18.33). The Send
+/// window's preview shows both as the material lies.
+pub(crate) fn toolpaths_to_doc(app: &VectorcraftApp, pl: &Placement, moved_mm: [f64; 2]) -> vectorcraft_geom::Affine {
     let mirrored = app.session.active().is_some_and(|st| {
         let s = vectorcraft_cutting::settings(&st.doc);
         s.mirror && !s.print_and_cut
     });
-    if mirrored { pl.mirrored().mat_to_doc() } else { pl.mat_to_doc() }
+    let to_doc = if mirrored { pl.mirrored().mat_to_doc() } else { pl.mat_to_doc() };
+    let [dx, dy] = moved_mm;
+    if dx.is_finite() && dy.is_finite() { to_doc * vectorcraft_geom::Affine::translate((-dx, -dy)) } else { to_doc }
+}
+
+/// The canvas's note of the corner a job is moved into; none where the artboard decides.
+fn corner_note(c: vectorcraft_cutjob::JobCorner) -> Option<&'static str> {
+    use vectorcraft_cutjob::JobCorner;
+    match c {
+        JobCorner::Artboard => None,
+        JobCorner::TopLeft => Some("Cut into the top left corner: see Send to Cutter"),
+        JobCorner::TopRight => Some("Cut into the top right corner: see Send to Cutter"),
+        JobCorner::BottomLeft => Some("Cut into the bottom left corner: see Send to Cutter"),
+        JobCorner::BottomRight => Some("Cut into the bottom right corner: see Send to Cutter"),
+    }
 }
 
 /// `n` mm in the mat's own unit, as printed on it.
@@ -214,7 +230,7 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
         // Over the art they cut: a mirrored job (C14.7) is mapped back through the mirrored
         // placement, so the canvas shows the toolpaths where the art is, not flipped. The Send
         // window's preview shows them as the material lies.
-        let art_to_doc = toolpaths_to_doc(app, &pl);
+        let art_to_doc = toolpaths_to_doc(app, &pl, made.moved_mm);
         let on_art = |x: f64, y: f64| xf.to_screen(art_to_doc * Point::new(x, y));
         toolpaths(p, &made.job, &on_art, &t);
         if let Some(mm) = crate::cutting::tick(p.ctx(), &made.sim).mm {
@@ -231,6 +247,14 @@ pub(super) fn cutting_overlay(app: &VectorcraftApp, p: &egui::Painter, xf: &Xf) 
     let unit = if pl.mat.inch_grid { "in" } else { "mm" };
     p.text(o + d * LABEL_OUT_PX, egui::Align2::RIGHT_BOTTOM, unit, font.clone(), t.accent);
 
+    // C18.33: the toolpaths are drawn over the art, so say where the cut really goes.
+    if let Some(corner) = app.session.active().map(|st| vectorcraft_cutting::settings(&st.doc)).filter(|s| !s.print_and_cut).map(|s| s.job_corner)
+        && let Some(name) = corner_note(corner)
+    {
+        let a = pl.artboard_mm;
+        let at = screen(a.x0, a.y1);
+        p.text(at + vec2(4.0, -4.0), egui::Align2::LEFT_BOTTOM, crate::i18n::t(name), font.clone(), t.accent);
+    }
     if !pl.fits() {
         let a = ring(pl.artboard_mm);
         p.add(Shape::line(a.clone(), Stroke::new(2.0, t.bleed)));

@@ -751,6 +751,9 @@ load the mat with the machine's load button.
     - Cutting in groups with some switched off, only what is cut is measured, so each layer you cut on its own
       goes into the corner by its own size.
     - A cut too large for the margin goes as near the corner as it fits, with a warning.
+    - On the canvas, **Show Toolpaths** still draws the lines over your art, to check them against the design.
+      The Cutting View says **Cut into the … corner: see Send to Cutter**, and the Send window's mat shows where
+      the cut really goes.
     - Print & Cut is always cut where the registration marks are, so Placement is greyed out for it;
   - **Cutter:** the machine, with **Find Cutters** beside it to look again after you plug it in; what is in each
     holder, as the machine reports it ("Holder 1: AutoBlade · Holder 2: empty"), with **Check Tools**. The window

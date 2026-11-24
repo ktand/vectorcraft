@@ -103,6 +103,8 @@ fn the_job_goes_into_a_corner() {
     s.execute("cutting.settings.set", &json!({"jobCorner": "bottomRight", "jobMarginMm": 12})).unwrap();
     let b = bounds(&job(&mut s));
     assert!(near(b[2], a[2] - 12.0) && near(b[3], a[3] - 12.0), "{b:?} in {a:?}");
+    let moved = job(&mut s)["movedMm"].clone();
+    assert!(moved[0].as_f64().unwrap() > 100.0 && moved[1].as_f64().unwrap() > 100.0, "C18.33: how far it moved: {moved}");
     let kept = s.execute("cutting.settings.get", &json!({})).unwrap();
     assert_eq!((kept["settings"]["jobCorner"].clone(), kept["settings"]["jobMarginMm"].clone()), (json!("bottomRight"), json!(12.0)));
     // Mirrored, the corner is the mat's, after the flip.
@@ -187,9 +189,11 @@ fn the_preview_exports_as_svg_and_json() {
     s.execute("document.activate", &json!({"index": 0})).unwrap();
     let as_json = s.execute("cutting.preview.export", &json!({"format": "json"})).unwrap();
     let v: Value = serde_json::from_str(as_json["text"].as_str().unwrap()).unwrap();
-    // The export is the job and its numbers; cutting.job also answers with the quote (C18.3).
+    // The export is the job and its numbers; cutting.job also answers with the quote (C18.3) and
+    // how far a corner moved it (C18.33).
     let mut want = job(&mut s);
     want.as_object_mut().unwrap().remove("quote");
+    assert_eq!(want.as_object_mut().unwrap().remove("movedMm"), Some(json!([0.0, 0.0])));
     assert_eq!(v, want);
     assert!(s.execute("cutting.preview.export", &json!({"format": "pdf"})).is_err());
 }

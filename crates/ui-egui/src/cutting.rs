@@ -35,6 +35,9 @@ pub(crate) struct Made {
     pub job: CutJob,
     pub stats: JobStats,
     pub sim: Simulation,
+    /// How far the job was moved to lie against a corner of the mat (C18.32), mm; the canvas
+    /// takes it back off to draw the toolpaths over the art (C18.33).
+    pub moved_mm: [f64; 2],
 }
 
 /// The job, or why the document makes none.
@@ -101,11 +104,11 @@ pub(crate) fn job(app: &VectorcraftApp, ctx: &egui::Context) -> Option<Arc<JobRe
         return Some(c.job);
     }
     let job = Arc::new(
-        vectorcraft_cutting::build_job(&st.doc)
-            .map(|job| {
+        vectorcraft_cutting::build_job_placed(&st.doc)
+            .map(|(job, moved_mm)| {
                 let stats = job.stats();
                 let sim = Simulation::new(&job);
-                Made { job, stats, sim }
+                Made { job, stats, sim, moved_mm }
             })
             .map_err(|e| e.to_string()),
     );
