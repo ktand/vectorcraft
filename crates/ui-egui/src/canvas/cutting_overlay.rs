@@ -341,6 +341,39 @@ pub(crate) fn preview_xf(app: &VectorcraftApp, rect: egui::Rect, view: &PreviewV
     (xf.zoom.is_finite() && xf.zoom > 0.0).then_some(xf)
 }
 
+/// How much room, px, a fitted cut leaves on each side of the preview: clear of the corner's
+/// buttons (22 px tall, 6 px down).
+const FIT_PAD: f64 = 32.0;
+
+/// C18.34: the view that fits `b` (mat mm, the job's bounds) into the preview in `rect`, with
+/// [`FIT_PAD`] round it, at 1 to [`PREVIEW_MAX_ZOOM`] times the whole mat; none without a mat or
+/// for bounds that aren't finite. A cut as large as the mat fits at 1: the whole mat. The preview
+/// draws the mat upright, so the bounds' sides lie along the screen's.
+pub(crate) fn preview_fit(app: &VectorcraftApp, rect: egui::Rect, b: RectMm) -> Option<PreviewView> {
+    let pl = placed(app)?;
+    if ![b.x0, b.y0, b.x1, b.y1].iter().all(|v| v.is_finite()) || b.x1 < b.x0 || b.y1 < b.y0 {
+        return None;
+    }
+    // At zoom 1, px a mm (as `preview_xf`).
+    let [w, h] = pl.mat.size_mm;
+    let [ml, mt, mr, mb] = pl.mat.plate_margin_mm;
+    let (full_w, full_h) = (w + ml + mr, h + mt + mb);
+    if !(full_w > 0.0 && full_h > 0.0) {
+        return None;
+    }
+    let (rw, rh) = (f64::from(rect.width()), f64::from(rect.height()));
+    let px_per_mm = (rw / full_w).min(rh / full_h);
+    // Each side the cut has limits the zoom; a line (no width or no height) only along it, a dot
+    // not at all.
+    let room = |avail: f64, mm: f64| if mm > 1e-9 { (avail - 2.0 * FIT_PAD).max(1.0) / (mm * px_per_mm) } else { PREVIEW_MAX_ZOOM };
+    let zoom = room(rw, b.width()).min(room(rh, b.height()));
+    if !zoom.is_finite() || zoom <= 1.0 {
+        return Some(PreviewView::default());
+    }
+    let center = pl.mat_to_doc() * Point::new((b.x0 + b.x1) / 2.0, (b.y0 + b.y1) / 2.0);
+    Some(PreviewView { zoom: zoom.min(PREVIEW_MAX_ZOOM), center: Some(center) })
+}
+
 /// Where the blade is in the document while the run plays or is stepped; none when it isn't.
 pub(crate) fn blade_at(app: &VectorcraftApp, ctx: &egui::Context) -> Option<Point> {
     let pl = placed(app)?;
@@ -570,13 +603,13 @@ fn playback(p: &egui::Painter, sim: &vectorcraft_cutjob::Simulation, mm: f64, sc
 #[cfg(test)]
 mod tests {
     use super::{RectMm, hatch, ticks};
+    use vectorcraft_geom::Point;
 
     /// C18.28: the preview zoomed: twice the scale at 2, round the point asked for; at 1 or less
     /// (or not finite) the whole mat round its middle, whatever centre is given.
     #[test]
     fn the_preview_zooms_round_its_centre() {
         use super::{PREVIEW_MAX_ZOOM, PreviewView, preview_xf};
-        use vectorcraft_geom::Point;
         let mut app = crate::VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
         app.run("file.new", serde_json::json!({"width": 200, "height": 200})).unwrap();
         let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 400.0));
@@ -591,6 +624,35 @@ mod tests {
         }
         let most = preview_xf(&app, rect, &PreviewView { zoom: 1e6, center: Some(at) }).unwrap();
         assert!((most.zoom - PREVIEW_MAX_ZOOM * fit.zoom).abs() < 1e-6, "capped");
+    }
+
+    /// C18.34: Fit puts the cut in the middle of the preview, as large as fits with room round it;
+    /// a cut too large for that is the whole mat, a dot the most zoom, and bad bounds no view.
+    #[test]
+    fn fit_fills_the_preview_with_the_cut() {
+        use super::{FIT_PAD, PREVIEW_MAX_ZOOM, PreviewView, preview_fit, preview_xf};
+        let mut app = crate::VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        app.run("file.new", serde_json::json!({"width": 200, "height": 200})).unwrap();
+        let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 500.0));
+        let b = RectMm { x0: 20.0, y0: 30.0, x1: 60.0, y1: 50.0 };
+        let view = preview_fit(&app, rect, b).unwrap();
+        assert!(view.zoom > 1.0 && view.zoom <= PREVIEW_MAX_ZOOM, "{view:?}");
+        let xf = preview_xf(&app, rect, &view).unwrap();
+        let to_doc = super::placed(&app).unwrap().mat_to_doc();
+        let corners: Vec<egui::Pos2> =
+            [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]].iter().map(|[x, y]| xf.to_screen(to_doc * Point::new(*x, *y))).collect();
+        let (lo, hi) = (rect.shrink(FIT_PAD as f32 - 0.5), rect.shrink(FIT_PAD as f32 + 0.5));
+        assert!(corners.iter().all(|c| lo.contains(*c)), "inside the room: {corners:?}");
+        let (xs, ys): (Vec<f32>, Vec<f32>) = corners.iter().map(|c| (c.x, c.y)).unzip();
+        let span = |v: &[f32]| v.iter().copied().fold(f32::MIN, f32::max) - v.iter().copied().fold(f32::MAX, f32::min);
+        assert!((span(&xs) - hi.width()).abs() < 1.5 || (span(&ys) - hi.height()).abs() < 1.5, "as large as fits: {corners:?}");
+        let mid = egui::pos2(xs.iter().sum::<f32>() / 4.0, ys.iter().sum::<f32>() / 4.0);
+        assert!((mid - rect.center()).length() < 1e-2, "in the middle: {mid:?}");
+        let mat = super::placed(&app).unwrap().mat.size_mm;
+        assert_eq!(preview_fit(&app, rect, RectMm { x0: 0.0, y0: 0.0, x1: mat[0], y1: mat[1] }), Some(PreviewView::default()));
+        assert_eq!(preview_fit(&app, rect, RectMm { x0: 5.0, y0: 5.0, x1: 5.0, y1: 5.0 }).map(|v| v.zoom), Some(PREVIEW_MAX_ZOOM));
+        assert_eq!(preview_fit(&app, rect, RectMm { x0: f64::NAN, y0: 0.0, x1: 1.0, y1: 1.0 }), None);
+        assert_eq!(preview_fit(&app, rect, RectMm { x0: 5.0, y0: 0.0, x1: 1.0, y1: 1.0 }), None);
     }
 
     /// The hatching stays inside its area, both ways, on a grid fixed to the mat.

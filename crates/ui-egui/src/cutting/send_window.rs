@@ -648,9 +648,10 @@ struct Zoom {
 }
 
 /// The preview `size` large, zoomed with the wheel round the pointer, moved by dragging, back to
-/// the whole mat on a double-click or Fit; −, + and Fit in its corner, and Follow while zoomed.
+/// the whole mat on a double-click or Mat; −, +, Fit (the cut, C18.34) and Mat in its corner, and
+/// Follow while zoomed.
 fn zoomable_preview(app: &mut VectorcraftApp, ui: &mut egui::Ui, size: egui::Vec2) {
-    use crate::canvas::cutting_overlay::{PREVIEW_MAX_ZOOM, PreviewView, blade_at, preview_xf, preview_zoomed};
+    use crate::canvas::cutting_overlay::{PREVIEW_MAX_ZOOM, PreviewView, blade_at, preview_fit, preview_xf, preview_zoomed};
     let ctx = ui.ctx().clone();
     let t = Tokens::get(&ctx);
     let mut z: Zoom = crate::panels::pstate(&ctx, "cutting-preview-zoom");
@@ -712,8 +713,16 @@ fn zoomable_preview(app: &mut VectorcraftApp, ui: &mut egui::Ui, size: egui::Vec
         let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
         child.add_enabled(enabled, egui::Button::new(label).small()).on_hover_text(hint).clicked()
     };
-    if corner(ui, tl!("Fit"), 34.0, zoom > 1.0, tl!("The whole mat")) {
+    if corner(ui, tl!("Mat"), 34.0, zoom > 1.0, tl!("The whole mat")) {
         z.view = PreviewView::default();
+    }
+    // C18.34: the cut as large as the preview takes it; off with nothing to cut or when it is so.
+    let bounds = crate::cutting::job(app, &ctx).and_then(|job| (*job).as_ref().ok().and_then(|made| made.stats.bounds_mm));
+    let fit = bounds.and_then(|b| preview_fit(app, rect, b));
+    if corner(ui, tl!("Fit"), 34.0, fit.is_some_and(|f| f != z.view), tl!("The cut, as large as it fits"))
+        && let Some(f) = fit
+    {
+        z.view = f;
     }
     if corner(ui, "+", 22.0, zoom < PREVIEW_MAX_ZOOM, tl!("Zoom in")) {
         zoom_by(app, &mut z, 2.0, rect.center());
@@ -1098,13 +1107,70 @@ mod tests {
         app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
         set_open(&ctx, true);
         let whole = window_texts(&mut app, &ctx);
-        assert!(whole.iter().any(|t| t == "Fit") && !whole.iter().any(|t| t == "Follow"), "{whole:?}");
+        assert!(whole.iter().any(|t| t == "Fit") && whole.iter().any(|t| t == "Mat") && !whole.iter().any(|t| t == "Follow"), "{whole:?}");
         let view = crate::canvas::cutting_overlay::PreviewView { zoom: 4.0, center: Some(vectorcraft_geom::Point::new(30.0, 30.0)) };
         crate::panels::set_pstate(&ctx, "cutting-preview-zoom", Zoom { view, follow: false });
         let zoomed = window_texts(&mut app, &ctx);
         crate::panels::set_pstate(&ctx, "cutting-preview-zoom", Zoom::default());
         set_open(&ctx, false);
         assert!(zoomed.iter().any(|t| t == "400 %") && zoomed.iter().any(|t| t == "Follow"), "{zoomed:?}");
+    }
+
+    /// Where the window draws `label`, the middle of its text; none when it isn't drawn.
+    fn text_at(app: &mut VectorcraftApp, ctx: &egui::Context, label: &str) -> Option<egui::Pos2> {
+        let mut at = None;
+        for _ in 0..2 {
+            let raw =
+                egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 1600.0))), ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| show(app, ui.ctx()));
+            out.textures_delta.clear();
+            at = out.shapes.iter().find_map(|c| match &c.shape {
+                egui::Shape::Text(t) if t.galley.text() == label => Some(t.pos + t.galley.rect.center().to_vec2()),
+                _ => None,
+            });
+        }
+        at
+    }
+
+    /// A click at `at`: the pointer there, pressed, then let go, a frame each.
+    fn click_at(app: &mut VectorcraftApp, ctx: &egui::Context, at: egui::Pos2) {
+        let button = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() };
+        for events in [vec![egui::Event::PointerMoved(at)], vec![button(true)], vec![button(false)], vec![]] {
+            let raw = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 1600.0))),
+                events,
+                ..Default::default()
+            };
+            ctx.run_ui(raw, |ui| show(app, ui.ctx())).textures_delta.clear();
+        }
+    }
+
+    /// C18.34: Fit zooms the preview onto the cut; Mat goes back to the whole mat; with nothing to
+    /// cut Fit does nothing.
+    #[test]
+    fn fit_shows_the_cut_and_mat_the_whole_mat() {
+        let _serial = serial();
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        let ctx = egui::Context::default();
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        set_open(&ctx, true);
+        crate::panels::set_pstate(&ctx, "cutting-preview-zoom", Zoom::default());
+        let view = |ctx: &egui::Context| crate::panels::pstate::<Zoom>(ctx, "cutting-preview-zoom").view;
+        let fit = text_at(&mut app, &ctx, "Fit").expect("Fit drawn");
+        click_at(&mut app, &ctx, fit);
+        assert_eq!(view(&ctx), crate::canvas::cutting_overlay::PreviewView::default(), "nothing to cut");
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 50, "height": 50})).unwrap();
+        let fit = text_at(&mut app, &ctx, "Fit").expect("Fit drawn");
+        click_at(&mut app, &ctx, fit);
+        let fitted = view(&ctx);
+        assert!(fitted.zoom > 1.0 && fitted.center.is_some(), "{fitted:?}");
+        let texts = window_texts(&mut app, &ctx);
+        assert!(texts.iter().any(|t| t == "Mat") && texts.iter().any(|t| t == "Follow"), "zoomed: {texts:?}");
+        let mat = text_at(&mut app, &ctx, "Mat").expect("Mat drawn");
+        click_at(&mut app, &ctx, mat);
+        assert_eq!(view(&ctx), crate::canvas::cutting_overlay::PreviewView::default(), "the whole mat");
+        crate::panels::set_pstate(&ctx, "cutting-preview-zoom", Zoom::default());
+        set_open(&ctx, false);
     }
 
     /// C9.2: the window opens three quarters of the app's height (the preview with it), not the
